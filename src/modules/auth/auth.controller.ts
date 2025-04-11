@@ -4,14 +4,14 @@ import { Public, ResponseMessage } from 'src/decorator/custom';
 import { LocalAuthGuard } from './passport/local-auth.guard';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
-import { UserRoles } from 'src/constants/user.enum';
-
+import { User } from '../users/entities/user.entity';
+import { Role } from '../roles/entities/role.entity';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
-  @Post('login')
   @Public()
+  @Post('login')
   @UseGuards(LocalAuthGuard)
   @ResponseMessage('Login success')
   handleLogin(
@@ -25,9 +25,6 @@ export class AuthController {
   @Post('register')
   @Public()
   async register(@Body() registerDto: CreateAuthDto) {
-    if (registerDto.role === UserRoles.ADMIN) {
-      throw new BadRequestException('Cannot register as ADMIN');
-    }
-    // return this.authService.handleRegister(registerDto);
+    return this.authService.handleRegister(registerDto);
   }
 }

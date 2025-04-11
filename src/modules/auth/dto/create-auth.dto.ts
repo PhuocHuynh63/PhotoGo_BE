@@ -1,29 +1,41 @@
-import { IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
-import { UserRoles } from 'src/constants/user.enum';
-
+import { IsNotEmpty, IsOptional, IsString, IsEmail, Length } from 'class-validator';
 
 export class CreateAuthDto {
-  @IsNotEmpty({ message: 'name is required' })
-  name: string;
+  @IsNotEmpty({ message: 'Full name is required' })
+  @IsString()
+  fullName: string;
 
-  avatar: string;
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
 
-  @IsNotEmpty({ message: 'email is required' })
+  @IsNotEmpty({ message: 'Email is required' })
+  @IsEmail()
   email: string;
 
-  @IsNotEmpty({ message: 'otp is required' })
-  otp: string;
+  @IsOptional()
+  @IsString()
+  otp?: string;
 
-  @IsNotEmpty({ message: 'password is required' })
-  password: string;
+  @IsNotEmpty({ message: 'Password is required' })
+  @IsString()
+  // @Length(6, 50, { message: 'Password must be between 6 and 50 characters' })
+  passwordHash: string;
 
-  @IsNotEmpty({ message: 'phone is required' })
-  phone: string;
-
+  @IsNotEmpty({ message: 'Phone number is required' })
+  @IsString()
+  phoneNumber: string;
 
   @IsOptional()
-  role: UserRoles;
+  @IsString()
+  roleId?: string;
 
   @IsOptional()
-  status: string;
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  auth?: string;
+  // 'local' | 'google' | 'facebook' | 'github' | 'twitter' | 'linkedin' | 'apple';
 }

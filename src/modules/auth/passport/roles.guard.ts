@@ -1,7 +1,8 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { UserRoles } from 'src/constants/user.enum';
+import { Role } from 'src/modules/roles/entities/role.entity';
+
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -17,7 +18,7 @@ export class RolesGuard implements CanActivate {
             return false;
         }
 
-        const roles = this.reflector.get<UserRoles[]>('roles', context.getHandler());
+        const roles = this.reflector.get<Role[]>('roles', context.getHandler());
         if (!roles) {
             return true;
         }

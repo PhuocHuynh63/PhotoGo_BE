@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { UserModule } from 'src/modules/user/user.module';
+import { UserModule } from 'src/modules/users/user.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
@@ -9,34 +9,35 @@ import { LocalStrategy } from './passport/local.strategy';
 import { JwtStrategy } from './passport/jwt.strategy';
 import { JwtAuthGuard } from './passport/jwt-auth.guard';
 import { RolesGuard } from './passport/roles.guard';
-// import { GoogleAuthService } from './google-auth.service';
-// import { GoogleAuthController } from './google-auth.controller';
-// import { User, UserSchema } from '@modules/user/entities/user.schema';
-// import { GoogleStrategy } from './passport/google.strategy';
-// import { UploadService } from 'src/upload/upload.service';
-// import { CloudinaryModule } from 'src/upload/cloudinary/cloudinary.module';
-// import { MailModule } from 'src/mail/mail.module';
+import { MailModule } from 'src/3rdService/mail/mail.module';
+import { CloudinaryModule } from 'src/3rdService/upload/cloudinary/cloudinary.module';
 
 @Module({
   imports: [
     UserModule,
-    // CloudinaryModule,
+    CloudinaryModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        global: true,
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: configService.get<string>('JWT_ACCESS_TOKEN_EXPIRED') },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          throw new Error('JWT_SECRET is not defined in the environment variables');
+        }
+        return {
+          global: true,
+          secret,
+          signOptions: {
+            expiresIn: configService.get<string>('JWT_ACCESS_TOKEN_EXPIRED'),
+          },
+        };
+      },
       inject: [ConfigService],
     }),
-    PassportModule,
-    // MailModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }), // Đặt chiến lược mặc định là 'jwt'
+    MailModule,
   ],
-  // controllers: [AuthController, GoogleAuthController],
   controllers: [AuthController],
-  // providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard, GoogleAuthService, GoogleStrategy],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard],
-  exports: [JwtAuthGuard, RolesGuard],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, JwtModule, PassportModule],
 })
 export class AuthModule { }

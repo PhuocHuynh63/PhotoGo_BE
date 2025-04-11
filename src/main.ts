@@ -8,7 +8,7 @@ import { RabbitmqConsumerService } from './3rdService/microservices/rabbitmq/rab
 
 async function bootstrap() {
 
-// const httpsOptions = {
+  // const httpsOptions = {
   //   // pfx: fs.readFileSync('src/config/keystore.p12'),
 
   //   pfx: fs.readFileSync('dist/config/keystore.p12'),
@@ -19,7 +19,7 @@ async function bootstrap() {
   //   httpsOptions,
   // });
 
-  
+
   const app = await NestFactory.create(AppModule);
 
 
@@ -53,8 +53,8 @@ async function bootstrap() {
   //#region Swagger
   //ConfigSwagger
   const config = new DocumentBuilder()
-    .setTitle('API PoolScoring')
-    .setDescription('NestJS API PoolScoring')
+    .setTitle('API PhotoGO')
+    .setDescription('NestJS API PhotoGO')
     .setVersion('1.0')
     .addBearerAuth(
       {

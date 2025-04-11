@@ -9,6 +9,7 @@ export class MailController {
         private readonly mailService: MailService,
     ) { }
 
+    @Public()
     @Get('send-otp')
     @Public()
     @ApiQuery({ name: 'email', required: true, type: String })

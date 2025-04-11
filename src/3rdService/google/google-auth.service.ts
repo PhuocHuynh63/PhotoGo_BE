@@ -2,12 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-
-import { GoogleAuthDto } from './dto/google-auth.dto';
-import { UserRoles } from 'src/constants/user.enum';
-import { User } from '../../modules/user/entities/user.entity';
+import { UserService } from '../../modules/users/user.service';
+import { Role } from '../../modules/roles/entities/role.entity';
+import { RoleService } from 'src/modules/roles/role.service';
 
 @Injectable()
 export class GoogleAuthService {
@@ -16,8 +13,7 @@ export class GoogleAuthService {
   constructor(
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>, // Inject TypeORM repository
+    private readonly userService: UserService,
   ) {
     this.client = new OAuth2Client(
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
@@ -26,35 +22,37 @@ export class GoogleAuthService {
     );
   }
 
-  async loginOrSignup(user: any): Promise<{ user: User; access_token_jwt: string }> {
-    const googleAuthDto: GoogleAuthDto = {
+  async loginOrSignup(user: any): Promise<{ user: any; access_token_jwt: string }> {
+    const googleAuthDto = {
       name: user.name,
       email: user.email,
       avatar: user.avatar,
     };
 
-    // Tìm người dùng trong cơ sở dữ liệu
-    let existingUser = await this.userRepository.findOneBy({ email: googleAuthDto.email });
+    // Tìm người dùng trong cơ sở dữ liệu thông qua UserService
+    let existingUser = await this.userService.findOneByEmail(googleAuthDto.email);
+
     if (!existingUser) {
       // Nếu không tồn tại, tạo mới
-      existingUser = this.userRepository.create({
-        name: googleAuthDto.name,
-        email: googleAuthDto.email,
-        avatar: googleAuthDto.avatar,
-        password: '', // Dummy empty password
-        phone: '',
-        role: UserRoles.USER,
-        status: 'active',
-        authProvider: 'google', // Explicitly set as google
-      });
-      await this.userRepository.save(existingUser);
+
+      const createAuthDto = {
+        fullName: googleAuthDto.name, 
+        email: googleAuthDto.email, 
+        avatarUrl: googleAuthDto.avatar, 
+        passwordHash: '',
+        phoneNumber: '', 
+        status: 'active', 
+        auth: 'google', 
+      };
+
+      existingUser = await this.userService.create(createAuthDto); 
     }
 
     // Tạo JWT token
     const accessToken = this.jwtService.sign({
       email: existingUser.email,
       sub: existingUser.id,
-      role: existingUser.role,
+      role: existingUser.role.name, // Include role name in the token
     });
 
     return { user: existingUser, access_token_jwt: accessToken };
