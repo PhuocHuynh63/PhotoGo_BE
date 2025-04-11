@@ -5,15 +5,23 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { RoleService } from '../roles/role.service';
-import { UpdateAuthDto } from '../auth/dto/update-auth.dto';
+
 import { hashPasswordHelper } from 'src/utils/utils';
 import { CreateAuthDto } from '../auth/dto/create-auth.dto';
+
+import * as bcrypt from 'bcrypt';
+import { UploadService } from 'src/3rdService/upload/upload.service';
+import { ResetPasswordDto } from './dto/rest-password.dto';
+import { MailService } from 'src/3rdService/mail/mail.service';
+
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User) private readonly userRepository: Repository<User>, // Inject UserRepository
     private readonly roleService: RoleService, // Inject RoleService
+    private readonly uploadService: UploadService, // Inject UploadService
+    private readonly MailService: MailService, // Inject MailService
   ) { }
 
   //#region create 
@@ -40,11 +48,40 @@ export class UserService {
 
   //#region update
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
+    const user = await this.findOne(id); // Tìm user theo ID
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    // Nếu có trường passwordHash, kiểm tra mật khẩu cũ trước khi cập nhật
+    if (updateUserDto.passwordHash && updateUserDto.oldPasswordHash) {
+      const isMatch = await bcrypt.compare(updateUserDto.oldPasswordHash, user.passwordHash);
+      if (!isMatch) {
+        throw new BadRequestException('Old password is incorrect');
+      }
+      // Mã hóa mật khẩu mới
+      updateUserDto.passwordHash = await hashPasswordHelper(updateUserDto.passwordHash);
+    }
+
+    // Cập nhật thông tin user
     Object.assign(user, updateUserDto);
+
+    // Lưu thay đổi vào cơ sở dữ liệu
     return this.userRepository.save(user);
   }
   //#endregion update
+
+  //#region uploadImage
+  async uploadImage(id: string, file: Express.Multer.File): Promise<User> {
+    const user = await this.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    const imageUrl = await this.uploadService.uploadImage(file, 'avatar', user.avatarUrl);
+    user.avatarUrl = imageUrl;
+    return this.userRepository.save(user);
+  }
+  //#endregion uploadImage
 
   //#region remove
   async remove(id: string): Promise<void> {
@@ -70,14 +107,13 @@ export class UserService {
   //#endregion
 
   //#region resetPassword
-  async resetPassword(data: UpdateAuthDto): Promise<any> {
-    const { email, passwordHash } = data; // Ensure email is declared
-    const user = await this.userRepository.findOne({ where: { email } });
-    if (!user) {
-      throw new NotFoundException('User not found');
+  async resetPassword(user: User, data: ResetPasswordDto): Promise<any> {
+    const isMatch = await bcrypt.compare(data.passwordHash, user.passwordHash);
+    if (isMatch) {
+      throw new BadRequestException('New password cannot be the same as the old password');
     }
-    const hashedPassword = await hashPasswordHelper(passwordHash);
-    user.passwordHash = hashedPassword;
+    user.oldPasswordHash = user.passwordHash;
+    user.passwordHash = await hashPasswordHelper(data.passwordHash);
     await this.userRepository.save(user);
     return { message: 'Password reset successful' };
   }

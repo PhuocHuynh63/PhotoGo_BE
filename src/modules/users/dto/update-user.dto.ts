@@ -1,4 +1,71 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
 
+export class UpdateUserDto {
+    @IsOptional()
+    @IsEmail()
+    @ApiProperty({
+        example: 'user@example.com',
+        description: 'User email address',
+    })
+    email?: string;
 
-export class UpdateUserDto {}
+    @IsOptional()
+    @IsString()
+    @Length(6, 50)
+    @ApiProperty({
+        example: 'newpassword123',
+        description: 'New password for the user',
+        minLength: 6,
+        maxLength: 50,
+    })
+    passwordHash?: string; // Mật khẩu mới
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({
+        example: 'oldpassword123',
+        description: 'Old password for verification',
+    })
+    oldPasswordHash?: string; // Mật khẩu cũ để so sánh
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({
+        example: 'John Doe',
+        description: 'Full name of the user',
+    })
+    fullName?: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({
+        example: '0986056438',
+        description: 'User phone number',
+    })
+    phoneNumber?: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({
+        example: 'active',
+        description: 'Status of the user (e.g., active, inactive)',
+    })
+    status?: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({
+        example: 'Gold',
+        description: 'Rank of the user (e.g., Gold, Silver, Bronze)',
+    })
+    rank?: string;
+
+    @IsOptional()
+    @IsString()
+    @ApiProperty({
+        example: 'local',
+        description: 'Authentication method (e.g., local, google, facebook)',
+    })
+    auth?: string;
+}

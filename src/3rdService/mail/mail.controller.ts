@@ -14,7 +14,8 @@ export class MailController {
     @Public()
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtp(@Query('email') email: string) {
-        return await this.mailService.generateAndSendOtp(email);
+        const emailLower = email.toLowerCase();
+        return await this.mailService.generateAndSendOtp(emailLower);
     }
 
 }

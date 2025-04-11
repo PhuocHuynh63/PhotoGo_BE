@@ -2,9 +2,11 @@ import { Injectable, BadRequestException, UnauthorizedException, ConflictExcepti
 import { comparePasswordHelper } from 'src/utils/utils';
 import { JwtService } from '@nestjs/jwt';
 import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+
 import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
+import { UpdateUserDto } from '../users/dto/update-user.dto';
+import { ResetPasswordDto } from '../users/dto/rest-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -73,7 +75,17 @@ export class AuthService {
     return await this.userService.activeAccount(body);
   }
 
-  async resetPassword(data: UpdateAuthDto) {
-    return await this.userService.resetPassword(data);
+  async resetPassword(email: string, data: ResetPasswordDto) {
+    const emailLower = email.toLowerCase();
+    const user = await this.userService.findOneByEmail(emailLower);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    // Verify OTP
+    const isOtpValid = await this.mailService.verifyOtp(emailLower, data.otp);
+    if (!isOtpValid) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    return await this.userService.resetPassword(user, data);
   }
 }

@@ -39,7 +39,7 @@ export class MailService {
   async generateAndSendOtp(email: string): Promise<void> {
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Tạo OTP 6 chữ số
     try {
-      await this.redisClient.set(email, otp, { EX: 300 }); // Lưu OTP vào Redis với thời gian hết hạn 5 phút
+      await this.redisClient.set(email, otp, { EX: 60 }); // Lưu OTP vào Redis với thời gian hết hạn 1 phút
       await this.sendOtpMail(email, otp);
       this.logger.log(`OTP sent to ${email}: ${otp}`);
     } catch (error) {
