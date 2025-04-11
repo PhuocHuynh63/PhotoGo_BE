@@ -15,18 +15,18 @@ export class AuthService {
   ) { }
 
   async validateUser(email: string, password: string): Promise<any> {
-    const emailLower = email.toLowerCase();
-    const user = await this.userService.findEmailAndPassword(emailLower, password);
-    if (!user) {
-      return null;
-    }
+    // const emailLower = email.toLowerCase();
+    // const user = await this.userService.findEmailAndPassword(emailLower, password);
+    // if (!user) {
+    //   return null;
+    // }
 
-    const isMatch = await comparePasswordHelper(password, user.password);
-    if (!isMatch) {
-      return undefined;
-    }
+    // const isMatch = await comparePasswordHelper(password, user.password);
+    // if (!isMatch) {
+    //   return undefined;
+    // }
 
-    return user;
+    // return user;
   }
 
   async login(user: any) {
