@@ -5,8 +5,8 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      "mail/templates/**/*"
+      "3rdService/mail/templates/**/*"
     ],
-    "watchAssets": true
+    "watchAssets": false
   }
 }

@@ -1,7 +1,7 @@
-import { Controller, Get, Query } from "@nestjs/common";
+import { Controller, Get, Post, Query } from "@nestjs/common";
 import { MailService } from "./mail.service";
 import { ApiQuery } from "@nestjs/swagger";
-import { Public } from "src/decorator/custom";
+import { Public, ResponseMessage } from "src/decorator/custom";
 
 @Controller('mail')
 export class MailController {
@@ -10,13 +10,32 @@ export class MailController {
     ) { }
 
     @Public()
-    @Get('send-otp')
-    @Public()
+    @Post('send-otp')
+    @ResponseMessage('Send otp successful')
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtp(@Query('email') email: string) {
         const emailLower = email.toLowerCase();
-        return await this.mailService.generateAndSendOtp(emailLower);
+        const template = 'register.hbs';
+        return await this.mailService.generateAndSendOtp(emailLower, template);
     }
 
+    @Public()
+    @Post('verify-otp')
+    @ResponseMessage('Verify successful')
+    @ApiQuery({ name: 'otp', required: true, type: String })
+    @ApiQuery({ name: 'email', required: true, type: String })
+    async verifyOtpController(@Query('email') email: string, @Query('otp') otp: string) {
+        return await this.mailService.verifyOtp(email, otp);
+    }
+
+    @Public()
+    @Post('send-otp-reset-password')
+    @ResponseMessage('Send otp reset successful')
+    @ApiQuery({ name: 'email', required: true, type: String })
+    async sendOtpResetPassword(@Query('email') email: string) {
+        const emailLower = email.toLowerCase();
+        const template = 'reset-password.hbs';
+        return await this.mailService.generateAndSendOtp(emailLower, template);
+    }
 }
 

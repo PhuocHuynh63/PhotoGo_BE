@@ -12,11 +12,12 @@ import { User } from './modules/users/entities/user.entity';
 import { Role } from './modules/roles/entities/role.entity';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { MailerModule,  } from '@nestjs-modules/mailer';
+import { MailerModule, } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 
 import * as Handlebars from 'handlebars';
 import * as moment from 'moment';
+import { join } from 'path';
 
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
   return moment(date).format(format);
@@ -33,6 +34,11 @@ Handlebars.registerHelper('split', function (value: string) {
   return [];
 });
 
+// Determine if the environment is production
+const isProduction = process.env.NODE_ENV === 'production';
+console.log('Template directory:', isProduction
+  ? join(__dirname, '3rdService/mail/templates')
+  : join(process.cwd(), 'src/3rdService/mail/templates'));
 
 @Module({
   imports: [
@@ -67,12 +73,15 @@ Handlebars.registerHelper('split', function (value: string) {
           from: '"No Reply" <no-reply@example.com>',
         },
         template: {
-          dir: './src/3rdService/mail/templates',
+          dir: isProduction
+            ? join(__dirname, '3rdService/mail/templates') // Đường dẫn tương đối từ `dist`
+            : join(process.cwd(), 'src/3rdService/mail/templates'), // Local
           adapter: new HandlebarsAdapter(),
           options: {
             strict: true,
           },
         },
+
       }),
       inject: [ConfigService],
     }),
@@ -80,7 +89,7 @@ Handlebars.registerHelper('split', function (value: string) {
     RoleModule,
     GoogleAuthModule,
     AuthModule,
- 
+
   ],
   controllers: [AppController],
   providers: [

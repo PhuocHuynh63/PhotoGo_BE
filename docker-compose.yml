@@ -1,0 +1,41 @@
+version: '2.2'
+services:
+  # Backend Service (NestJS)
+  backend:
+    container_name: backend
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env.production
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - photogo-network
+
+  # PostgreSQL Service
+  postgres:
+    image: postgres:17
+    container_name: pgsql_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234554321
+      POSTGRES_DB: test
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - photogo-network
+
+# Define the network
+networks:
+  photogo-network:
+    driver: bridge
+
+# Volumes
+volumes:
+  pgdata:

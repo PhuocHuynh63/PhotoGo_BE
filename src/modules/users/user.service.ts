@@ -11,7 +11,6 @@ import { CreateAuthDto } from '../auth/dto/create-auth.dto';
 
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
-import { ResetPasswordDto } from './dto/rest-password.dto';
 import { MailService } from 'src/3rdService/mail/mail.service';
 
 
@@ -107,13 +106,13 @@ export class UserService {
   //#endregion
 
   //#region resetPassword
-  async resetPassword(user: User, data: ResetPasswordDto): Promise<any> {
-    const isMatch = await bcrypt.compare(data.passwordHash, user.passwordHash);
+  async resetPassword(user: User, passwordHash: string): Promise<any> {
+    const isMatch = await bcrypt.compare(passwordHash, user.passwordHash);
     if (isMatch) {
       throw new BadRequestException('New password cannot be the same as the old password');
     }
     user.oldPasswordHash = user.passwordHash;
-    user.passwordHash = await hashPasswordHelper(data.passwordHash);
+    user.passwordHash = await hashPasswordHelper(passwordHash);
     await this.userRepository.save(user);
     return { message: 'Password reset successful' };
   }

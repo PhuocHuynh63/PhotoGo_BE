@@ -6,7 +6,7 @@ import { CreateAuthDto } from './dto/create-auth.dto';
 import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
-import { ResetPasswordDto } from '../users/dto/rest-password.dto';
+
 
 @Injectable()
 export class AuthService {
@@ -16,6 +16,7 @@ export class AuthService {
     private readonly mailService: MailService,
   ) { }
 
+  //#region Validate User
   async validateUser(email: string, password: string): Promise<any> {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
@@ -30,7 +31,9 @@ export class AuthService {
 
     return user;
   }
+  //#endregion
 
+  //#region Login
   async login(user: any) {
     const payload = { email: user.email, sub: user._id, fullname: user.fullname, role: user.role, image: user.image };
     return {
@@ -44,7 +47,9 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
     };
   }
+  //#endregion
 
+  //#region Register
   async handleRegister(registerDto: CreateAuthDto) {
     try {
       const registerEmailLowerCase = registerDto.email.toLowerCase();
@@ -70,22 +75,22 @@ export class AuthService {
       throw new BadRequestException(error.message || 'Registration failed');
     }
   }
+  //#endregion
 
+  //#region activeAccount
   async activeAccount(body: { email: string }) {
     return await this.userService.activeAccount(body);
   }
+  //#endregion
 
-  async resetPassword(email: string, data: ResetPasswordDto) {
+  //#region forgotPassword
+  async forgotPassword(email: string, passwordHash: string) {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    // Verify OTP
-    const isOtpValid = await this.mailService.verifyOtp(emailLower, data.otp);
-    if (!isOtpValid) {
-      throw new UnauthorizedException('Invalid OTP');
-    }
-    return await this.userService.resetPassword(user, data);
+    return await this.userService.resetPassword(user, passwordHash);
   }
+  //#endregion
 }
