@@ -12,13 +12,15 @@ import { User } from './modules/users/entities/user.entity';
 import { Role } from './modules/roles/entities/role.entity';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { MailerModule, } from '@nestjs-modules/mailer';
+import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 
 import * as Handlebars from 'handlebars';
 import * as moment from 'moment';
 import { join } from 'path';
+import * as fs from 'fs';
 
+// Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
   return moment(date).format(format);
 });
@@ -34,11 +36,17 @@ Handlebars.registerHelper('split', function (value: string) {
   return [];
 });
 
-// Determine if the environment is production
-const isProduction = process.env.NODE_ENV === 'production';
-console.log('Template directory:', isProduction
-  ? join(__dirname, '3rdService/mail/templates')
-  : join(process.cwd(), 'src/3rdService/mail/templates'));
+const isProduction = process.env.NODE_ENV === 'Production';
+
+const templateDir = isProduction
+  ? './dist/3rdService/mail/templates'// Absolute path
+  : join(process.cwd(), 'src/3rdService/mail/templates');
+
+console.log('Current working directory:', process.cwd());
+
+if (!fs.existsSync(templateDir)) {
+  console.error(`Template directory does not exist: ${templateDir}`);
+}
 
 @Module({
   imports: [
@@ -73,15 +81,12 @@ console.log('Template directory:', isProduction
           from: '"No Reply" <no-reply@example.com>',
         },
         template: {
-          dir: isProduction
-            ? join(__dirname, '3rdService/mail/templates') // Đường dẫn tương đối từ `dist`
-            : join(process.cwd(), 'src/3rdService/mail/templates'), // Local
+          dir: templateDir,
           adapter: new HandlebarsAdapter(),
           options: {
             strict: true,
           },
         },
-
       }),
       inject: [ConfigService],
     }),
@@ -89,12 +94,10 @@ console.log('Template directory:', isProduction
     RoleModule,
     GoogleAuthModule,
     AuthModule,
-
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    // RabbitmqConsumerService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
