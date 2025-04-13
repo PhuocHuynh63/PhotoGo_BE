@@ -3,8 +3,10 @@ import { GoogleAuthService } from './google-auth.service';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('auth/google')
+@ApiBearerAuth('access-token')
 export class GoogleAuthController {
   constructor(private readonly googleAuthService: GoogleAuthService) { }
 

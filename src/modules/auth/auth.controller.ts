@@ -4,8 +4,9 @@ import { Public, ResponseMessage } from 'src/decorator/custom';
 import { LocalAuthGuard } from './passport/local-auth.guard';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
-import { ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 @Controller('auth')
+@ApiBearerAuth('access-token')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 

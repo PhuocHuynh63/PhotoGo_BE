@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Query } from "@nestjs/common";
 import { MailService } from "./mail.service";
-import { ApiQuery } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiQuery } from "@nestjs/swagger";
 import { Public, ResponseMessage } from "src/decorator/custom";
 
 @Controller('mail')
+@ApiBearerAuth('access-token')
 export class MailController {
     constructor(
         private readonly mailService: MailService,
