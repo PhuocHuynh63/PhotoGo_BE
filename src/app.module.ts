@@ -11,7 +11,12 @@ import { RoleModule } from './modules/roles/role.module';
 import { User } from './modules/users/entities/user.entity';
 import { Role } from './modules/roles/entities/role.entity';
 import { VendorModule } from './modules/vendors/vendor.module';
+import { TeamMemberModule } from './modules/team-members/team-member.module';
 import { CategoryModule } from './modules/categories/category.module';
+import { NotificationModule } from './modules/notifications/notification.module';
+import { LocationModule } from './modules/locations/location.module';
+import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
+import { CommentModule } from './modules/comments/comment.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -100,6 +105,11 @@ if (!fs.existsSync(templateDir)) {
     UploadModule,
     VendorModule,
     CategoryModule,
+    NotificationModule,
+    LocationModule,
+    CommentModule,
+    TeamMemberModule,
+    SubscriptionPlanModule,
   ],
   controllers: [AppController],
   providers: [

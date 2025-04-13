@@ -1,27 +1,27 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vendor } from './entities/vendor.entity';
-import { CreateVendorDto } from './dto/vendor.dto';
-import { FindVendorDto } from './dto/find-vendor.dto';
+import { Location } from './entities/location.entity';
+import { CreateLocationDto } from './dto/create-location.dto';
+import { FindLocationDto } from './dto/find-location.dto';
 
 @Injectable()
-export class VendorService {
+export class LocationService {
   constructor(
-    @InjectRepository(Vendor)
-    private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
   ) {}
 
   //#region create
-  async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
-    const vendor = this.vendorRepository.create(createVendorDto);
-    return this.vendorRepository.save(vendor);
+  async create(createLocationDto: CreateLocationDto): Promise<Location> {
+    const location = this.locationRepository.create(createLocationDto);
+    return this.locationRepository.save(location);
   }
   //#endregion create
 
   //#region findAll
-  async findAll(query: FindVendorDto): Promise<{
-    data: Vendor[];
+  async findAll(query: FindLocationDto): Promise<{
+    data: Location[];
     pagination: {
       current: number;
       pageSize: number;
@@ -36,29 +36,24 @@ export class VendorService {
     //#endregion
 
     //#region Filter
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
+    const queryBuilder = this.locationRepository.createQueryBuilder('location');
 
-    // Thêm join để lấy thông tin từ các bảng liên quan
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-    
+    queryBuilder.leftJoinAndSelect('location.vendor', 'vendor');
+
     if (query.term) {
       queryBuilder.andWhere(
-        '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
+        '(location.address ILIKE :term OR location.city ILIKE :term OR location.province ILIKE :term)',
         { term: `%${query.term}%` },
       );
-    }
-
-    if (query.status) {
-      queryBuilder.andWhere('vendor.status = :status', { status: query.status });
     }
     //#endregion
 
     //#region Sort
-    const allowedSortFields = ['created_at', 'updated_at', 'name', 'slug'];
+    const allowedSortFields = ['created_at', 'updated_at', 'address', 'city', 'province'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`vendor.${sortField}`, sortDirection);
+    queryBuilder.orderBy(`location.${sortField}`, sortDirection);
     //#endregion
 
     //#region Pagination
@@ -81,15 +76,15 @@ export class VendorService {
   //#endregion findAll
 
   //#region findOne
-  async findOne(id: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
+  async findOne(id: string): Promise<Location> {
+    const location = await this.locationRepository.findOne({
       where: { id },
-      relations: ['category'], // Bao gồm quan hệ với Category
+      relations: ['vendor'],
     });
-    if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    if (!location) {
+      throw new NotFoundException(`Location with ID ${id} not found`);
     }
-    return vendor;
+    return location;
   }
   //#endregion findOne
 }

@@ -1,10 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
-
-export enum VendorStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-}
+import { VendorStatus } from 'src/constants/vendor.enum';
 
 @Entity('vendors')
 export class Vendor {
