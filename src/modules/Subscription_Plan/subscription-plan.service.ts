@@ -77,7 +77,7 @@ export class SubscriptionPlanService {
   async findOne(id: string): Promise<SubscriptionPlan> {
     const subscriptionPlan = await this.subscriptionPlanRepository.findOne({ where: { id } });
     if (!subscriptionPlan) {
-      throw new NotFoundException(`Subscription Plan with ID ${id} not found`);
+      throw new NotFoundException(`Gói đăng ký với ID ${id} không tồn tại`);
     }
     return subscriptionPlan;
   }

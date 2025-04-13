@@ -13,7 +13,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @UseGuards(LocalAuthGuard)
-  @ResponseMessage('Login success')
+  @ResponseMessage('Đăng nhập thành công')
   handleLogin(@Body() loginDto: LoginAuthDto, @Request() req) {
     console.log('Login payload:', loginDto);
     return this.authService.login(req.user);
@@ -22,7 +22,7 @@ export class AuthController {
   @Public()
   @Post('register')
   @ApiQuery({ name: 'email', required: true, type: String })
-  @ResponseMessage('Register success')
+  @ResponseMessage('Đăng ký thành công')
   async register(@Body() registerDto: CreateAuthDto) {
     return this.authService.handleRegister(registerDto);
   }
@@ -31,7 +31,7 @@ export class AuthController {
   @Post('reset-password')
   @ApiQuery({ name: 'email', required: true, type: String })
   @ApiQuery({ name: 'passwordHash', required: true, type: String })
-  @ResponseMessage('Reset password success')
+  @ResponseMessage('Đặt lại mật khẩu thành công')
   async resetPassword(@Query('email') email: string, @Query('email') passwordHash: string) {
     return this.authService.forgotPassword(email, passwordHash);
   }

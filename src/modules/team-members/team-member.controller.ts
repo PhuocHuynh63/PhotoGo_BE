@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Res } from '@nestjs/common';
 import { TeamMemberService } from './team-member.service';
 import { CreateTeamMemberDto } from './dto/create-team-member.dto';
 import { TeamMember } from './entities/team-member.entity';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindTeamMemberDto } from './dto/find-team-member.dto';
 
@@ -16,6 +16,7 @@ export class TeamMemberController {
   @ApiOperation({ summary: 'Create a new team member (Protected)' })
   @ApiResponse({ status: 201, description: 'Team Member created successfully', type: TeamMember })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Tạo thành viên nhóm thành công')
   async create(@Body() createTeamMemberDto: CreateTeamMemberDto): Promise<TeamMember> {
     return this.teamMemberService.create(createTeamMemberDto);
   }
@@ -28,6 +29,7 @@ export class TeamMemberController {
     description: 'List of team members with pagination',
     type: [TeamMember],
   })
+  @ResponseMessage('Lấy danh sách thành viên nhóm thành công')
   async findAll(@Query() query: FindTeamMemberDto): Promise<{
     data: TeamMember[];
     pagination: {

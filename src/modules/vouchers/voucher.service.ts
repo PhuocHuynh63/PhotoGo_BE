@@ -77,7 +77,7 @@ export class VoucherService {
   async findOne(id: string): Promise<Voucher> {
     const voucher = await this.voucherRepository.findOne({ where: { id } });
     if (!voucher) {
-      throw new NotFoundException(`Voucher with ID ${id} not found`);
+      throw new NotFoundException(`Voucher với` + {id} + `không tồn tại`);
     }
     return voucher;
   }

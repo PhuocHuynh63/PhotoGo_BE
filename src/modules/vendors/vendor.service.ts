@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
-import { CreateVendorDto } from './dto/vendor.dto';
+import { CreateVendorDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class VendorService {
   constructor(
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
@@ -40,7 +40,7 @@ export class VendorService {
 
     // Thêm join để lấy thông tin từ các bảng liên quan
     queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-    
+
     if (query.term) {
       queryBuilder.andWhere(
         '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
@@ -87,7 +87,7 @@ export class VendorService {
       relations: ['category'], // Bao gồm quan hệ với Category
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Vendor với ID ${id} không tồn tại`);
     }
     return vendor;
   }

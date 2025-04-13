@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
 import { SubscriptionPlanService } from './subscription-plan.service';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindSubscriptionPlanDto } from './dto/find-subscription-plan.dto';
 
@@ -16,6 +16,7 @@ export class SubscriptionPlanController {
   @ApiOperation({ summary: 'Create a new subscription plan (Protected)' })
   @ApiResponse({ status: 201, description: 'Subscription Plan created successfully', type: SubscriptionPlan })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Tạo gói đăng ký thành công')
   async create(@Body() createSubscriptionPlanDto: CreateSubscriptionPlanDto): Promise<SubscriptionPlan> {
     return this.subscriptionPlanService.create(createSubscriptionPlanDto);
   }
@@ -28,6 +29,7 @@ export class SubscriptionPlanController {
     description: 'List of subscription plans with pagination',
     type: [SubscriptionPlan],
   })
+  @ResponseMessage('Lấy danh sách gói đăng ký thành công')
   async findAll(@Query() query: FindSubscriptionPlanDto): Promise<{
     data: SubscriptionPlan[];
     pagination: {
@@ -45,6 +47,7 @@ export class SubscriptionPlanController {
   @ApiOperation({ summary: 'Get a subscription plan by ID (Public)' })
   @ApiResponse({ status: 200, description: 'Subscription Plan found', type: SubscriptionPlan })
   @ApiResponse({ status: 404, description: 'Subscription Plan not found' })
+  @ResponseMessage('Lấy thông tin gói đăng ký thành công')
   async findOne(@Param('id') id: string): Promise<SubscriptionPlan> {
     return this.subscriptionPlanService.findOne(id);
   }

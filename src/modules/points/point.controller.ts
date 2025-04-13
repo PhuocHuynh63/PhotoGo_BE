@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Res } from '@nestjs/common';
 import { PointService } from './point.service';
 import { CreatePointDto } from './dto/create-point.dto';
 import { Point } from './entities/point.entity';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindPointDto } from './dto/find-point.dto';
 
@@ -16,6 +16,7 @@ export class PointController {
   @ApiOperation({ summary: 'Create a new point entry (Protected)' })
   @ApiResponse({ status: 201, description: 'Point created successfully', type: Point })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Tạo điểm thành công')
   async create(@Body() createPointDto: CreatePointDto): Promise<Point> {
     return this.pointService.create(createPointDto);
   }
@@ -28,6 +29,7 @@ export class PointController {
     description: 'List of points with pagination',
     type: [Point],
   })
+  @ResponseMessage('Lấy danh sách điểm thành công')
   async findAll(@Query() query: FindPointDto): Promise<{
     data: Point[];
     pagination: {
@@ -45,6 +47,7 @@ export class PointController {
   @ApiOperation({ summary: 'Get a point entry by ID (Public)' })
   @ApiResponse({ status: 200, description: 'Point found', type: Point })
   @ApiResponse({ status: 404, description: 'Point not found' })
+  @ResponseMessage('Lấy thông tin điểm thành công')
   async findOne(@Param('id') id: string): Promise<Point> {
     return this.pointService.findOne(id);
   }

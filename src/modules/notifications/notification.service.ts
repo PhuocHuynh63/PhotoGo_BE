@@ -91,7 +91,7 @@ export class NotificationService {
       relations: ['user'],
     });
     if (!notification) {
-      throw new NotFoundException(`Notification with ID ${id} not found`);
+      throw new NotFoundException(`Thông báo với ID ${id} không tồn tại`);
     }
     return notification;
   }

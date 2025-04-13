@@ -82,7 +82,7 @@ export class TeamMemberService {
       relations: ['vendor'],
     });
     if (!teamMember) {
-      throw new NotFoundException(`Team Member with ID ${id} not found`);
+      throw new NotFoundException(`TeamMember với ID ${id} không tồn tại`);
     }
     return teamMember;
   }

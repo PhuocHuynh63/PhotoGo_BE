@@ -82,7 +82,7 @@ export class PointService {
       relations: ['user'],
     });
     if (!point) {
-      throw new NotFoundException(`Point with ID ${id} not found`);
+      throw new NotFoundException(`Điểm thưởng với id ${id} không tồn tại`);
     }
     return point;
   }

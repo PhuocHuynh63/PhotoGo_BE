@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -129,14 +129,14 @@ export class UserService {
     const { email } = body; // Ensure email is declared
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('Người dùng không tồn tại');
     }
     if (user.status === 'active') {
-      throw new BadRequestException('User is already active');
+      throw new BadRequestException('Tài khoản đã được kích hoạt');
     }
     user.status = 'active';
     await this.userRepository.save(user);
-    return { message: 'Account activated' };
+    return { message: 'Tài khoảng đã được kích hoạt' };
   }
   //#endregion
 
@@ -144,12 +144,12 @@ export class UserService {
   async resetPassword(user: User, passwordHash: string): Promise<any> {
     const isMatch = await bcrypt.compare(passwordHash, user.passwordHash);
     if (isMatch) {
-      throw new BadRequestException('New password cannot be the same as the old password');
+      throw new BadRequestException('Mật khẩu mới không được giống với mật khẩu cũ');
     }
     user.oldPasswordHash = user.passwordHash;
     user.passwordHash = await hashPasswordHelper(passwordHash);
     await this.userRepository.save(user);
-    return { message: 'Password reset successful' };
+    return { message: 'Thiết lập lại mật khẩu thành công' };
   }
   //#endregion
 
@@ -226,7 +226,7 @@ export class UserService {
   async findOne(id: string): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id }, relations: ['role'] });
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new NotFoundException(`Người dùng với ID ${id} không tồn tại`);
     }
     return user;
   }
@@ -238,7 +238,7 @@ export class UserService {
   }
   //#endregion findOneByEmail
 
-  //region Count user by rank
+  //#region Count user by rank
   async countUserByRank(rank: string): Promise<number> {
     const count = await this.userRepository.count({ where: { rank } });
     return count;

@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Res } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { Comment } from './entities/comment.entity';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindCommentDto } from './dto/find-comment.dto';
 
@@ -16,6 +16,7 @@ export class CommentController {
   @ApiOperation({ summary: 'Create a new comment (Protected)' })
   @ApiResponse({ status: 201, description: 'Comment created successfully', type: Comment })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Tạo bình luận thành công')
   async create(@Body() createCommentDto: CreateCommentDto): Promise<Comment> {
     return this.commentService.create(createCommentDto);
   }
@@ -28,6 +29,7 @@ export class CommentController {
     description: 'List of comments with pagination',
     type: [Comment],
   })
+  @ResponseMessage('Lấy danh sách bình luận thành công')
   async findAll(@Query() query: FindCommentDto): Promise<{
     data: Comment[];
     pagination: {
@@ -45,6 +47,7 @@ export class CommentController {
   @ApiOperation({ summary: 'Get a comment by ID (Public)' })
   @ApiResponse({ status: 200, description: 'Comment found', type: Comment })
   @ApiResponse({ status: 404, description: 'Comment not found' })
+  @ResponseMessage('Lấy thông tin bình luận thành công') 
   async findOne(@Param('id') id: string): Promise<Comment> {
     return this.commentService.findOne(id);
   }
