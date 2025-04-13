@@ -5,6 +5,8 @@ import { Category } from './entities/category.entity';
 import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindCategoryDto } from './dto/find-category.dto';
+import { Param } from '@nestjs/common/decorators/http/route-params.decorator';
+import { ApiOkResponse } from '@nestjs/swagger/dist/decorators/api-response.decorator';
 
 @ApiTags('categories')
 @Controller('categories')
@@ -38,5 +40,16 @@ export class CategoryController {
     };
   }> {
     return this.categoryService.findAll(query);
+  }
+
+  // Thêm phương thức findOne
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a category by ID (Protected)' })
+  @ApiResponse({ status: 200, description: 'Category found', type: Category })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findOne(@Param('id') id: string): Promise<Category> {
+    return this.categoryService.findOne(id);
   }
 }

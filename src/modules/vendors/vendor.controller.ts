@@ -5,6 +5,8 @@ import { Vendor } from './entities/vendor.entity';
 import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
+import { Param } from '@nestjs/common/decorators/http/route-params.decorator';
+
 
 @ApiTags('vendors')
 @Controller('vendors')
@@ -38,5 +40,16 @@ export class VendorController {
     };
   }> {
     return this.vendorService.findAll(query);
+  }
+
+  // Thêm phương thức findOne
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a vendor by ID (Protected)' })
+  @ApiResponse({ status: 200, description: 'Vendor found', type: Vendor })
+  @ApiResponse({ status: 404, description: 'Vendor not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findOne(@Param('id') id: string): Promise<Vendor> {
+    return this.vendorService.findOne(id);
   }
 }

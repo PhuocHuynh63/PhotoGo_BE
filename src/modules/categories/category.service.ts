@@ -72,4 +72,18 @@ export class CategoryService {
     };
   }
   //#endregion findAll
+
+  //#region findOne
+  async findOne(id: string): Promise<Category> {
+    const category = await this.categoryRepository.findOne({
+      where: { id },
+    });
+
+    if (!category) {
+      throw new Error('Category not found');
+    }
+
+    return category;
+  }
+  //#endregion findOne
 }

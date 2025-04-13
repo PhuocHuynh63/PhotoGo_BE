@@ -76,4 +76,17 @@ export class VendorService {
     };
   }
   //#endregion findAll
+
+  //#region findOne
+  async findOne(id: string): Promise<Vendor> {
+    const vendor = await this.vendorRepository.findOne({
+      where: { id },
+      relations: ['category'], // Bao gồm quan hệ với Category
+    });
+    if (!vendor) {
+      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    }
+    return vendor;
+  }
+  //#endregion findOne
 }
