@@ -17,9 +17,6 @@ export class Vendor {
   @Column({ type: 'varchar', length: 100, nullable: false, unique: true })
   slug: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: false })
-  category_id: string;
-
   @ManyToOne(() => Category, (category) => category.vendors, { nullable: false })
   @JoinColumn({ name: 'category_id' })
   category: Category;

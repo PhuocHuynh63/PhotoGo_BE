@@ -172,6 +172,9 @@ export class UserService {
     //#region Filter
     const queryBuilder = this.userRepository.createQueryBuilder('user');
 
+    // Thêm join để lấy thông tin role
+    queryBuilder.leftJoinAndSelect('user.role', 'role');
+
     if (query.term) {
       queryBuilder.andWhere(
         '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',

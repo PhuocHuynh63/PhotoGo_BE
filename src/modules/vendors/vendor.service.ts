@@ -38,6 +38,9 @@ export class VendorService {
     //#region Filter
     const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
 
+    // Thêm join để lấy thông tin category
+    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
+    
     if (query.term) {
       queryBuilder.andWhere(
         '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
