@@ -10,6 +10,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoleModule } from './modules/roles/role.module';
 import { User } from './modules/users/entities/user.entity';
 import { Role } from './modules/roles/entities/role.entity';
+import { VendorModule } from './modules/vendors/vendor.module';
+import { CategoryModule } from './modules/categories/category.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -96,6 +98,8 @@ if (!fs.existsSync(templateDir)) {
     GoogleAuthModule,
     AuthModule,
     UploadModule,
+    VendorModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [
