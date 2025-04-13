@@ -238,4 +238,28 @@ export class UserService {
   }
   //#endregion findOneByEmail
 
+  //region Count user by rank
+  async countUserByRank(rank: string): Promise<number> {
+    const count = await this.userRepository.count({ where: { rank } });
+    return count;
+  }
+  //#endregion Count user by rank
+
+//#region Get all ranks with count
+async getAllRank(): Promise<{ rank: string; count: number }[]> {
+  const rankCounts = await this.userRepository
+    .createQueryBuilder('user')
+    .select('user.rank', 'rank') // Chọn cột rank
+    .addSelect('COUNT(user.id)', 'count') // Đếm số lượng user theo rank
+    .groupBy('user.rank') // Nhóm theo rank
+    .getRawMany();
+
+  // Định dạng kết quả trả về
+  return rankCounts.map((item) => ({
+    rank: item.rank,
+    count: Number(item.count), // Chuyển count từ string sang number
+  }));
+}
+//#endregion Get all ranks with count
+
 }
