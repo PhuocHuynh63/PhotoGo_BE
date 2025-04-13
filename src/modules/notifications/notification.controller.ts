@@ -6,7 +6,7 @@ import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindNotificationDto } from './dto/find-notification.dto';
 
-@ApiTags('notifications')
+@ApiTags('Notifications')
 @Controller('notifications')
 @ApiBearerAuth('access-token')
 export class NotificationController {

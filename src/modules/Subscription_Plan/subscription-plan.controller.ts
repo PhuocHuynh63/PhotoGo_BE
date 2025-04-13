@@ -6,7 +6,7 @@ import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindSubscriptionPlanDto } from './dto/find-subscription-plan.dto';
 
-@ApiTags('subscription-plans')
+@ApiTags('Subscription-plans')
 @Controller('subscription-plans')
 @ApiBearerAuth('access-token')
 export class SubscriptionPlanController {

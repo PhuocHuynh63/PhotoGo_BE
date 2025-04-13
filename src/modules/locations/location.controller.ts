@@ -6,7 +6,7 @@ import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindLocationDto } from './dto/find-location.dto';
 
-@ApiTags('locations')
+@ApiTags('Locations')
 @Controller('locations')
 @ApiBearerAuth('access-token')
 export class LocationController {

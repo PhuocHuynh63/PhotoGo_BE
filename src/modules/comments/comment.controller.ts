@@ -6,7 +6,7 @@ import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindCommentDto } from './dto/find-comment.dto';
 
-@ApiTags('comments')
+@ApiTags('Comments')
 @Controller('comments')
 @ApiBearerAuth('access-token')
 export class CommentController {

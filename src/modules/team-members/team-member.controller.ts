@@ -6,7 +6,7 @@ import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindTeamMemberDto } from './dto/find-team-member.dto';
 
-@ApiTags('team-members')
+@ApiTags('Team-members')
 @Controller('team-members')
 @ApiBearerAuth('access-token')
 export class TeamMemberController {

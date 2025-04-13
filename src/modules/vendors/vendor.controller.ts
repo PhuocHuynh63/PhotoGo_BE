@@ -8,7 +8,7 @@ import { FindVendorDto } from './dto/find-vendor.dto';
 import { Param } from '@nestjs/common/decorators/http/route-params.decorator';
 
 
-@ApiTags('vendors')
+@ApiTags('Vendors')
 @Controller('vendors')
 @ApiBearerAuth('access-token')
 export class VendorController {

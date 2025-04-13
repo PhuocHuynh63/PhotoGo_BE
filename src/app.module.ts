@@ -16,6 +16,7 @@ import { CategoryModule } from './modules/categories/category.module';
 import { NotificationModule } from './modules/notifications/notification.module';
 import { LocationModule } from './modules/locations/location.module';
 import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
+import { VoucherModule } from './modules/vouchers/voucher.module';
 import { CommentModule } from './modules/comments/comment.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -110,6 +111,7 @@ if (!fs.existsSync(templateDir)) {
     CommentModule,
     TeamMemberModule,
     SubscriptionPlanModule,
+    VoucherModule,
   ],
   controllers: [AppController],
   providers: [
