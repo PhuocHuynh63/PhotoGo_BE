@@ -3,9 +3,10 @@ import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common'
 import { Role } from './entities/role.entity';
 import { RoleService } from './role.service';
 import { Public } from 'src/decorator/custom';
-
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('roles')
+@ApiBearerAuth('access-token')
 export class RoleController {
   constructor(private readonly roleService: RoleService) { }
 
@@ -25,7 +26,6 @@ export class RoleController {
   async findOne(@Param('id') id: string): Promise<Role> {
     return this.roleService.findOne(id);
   }
-
 
   @Post()
   async create(@Body() roleData: Partial<Role>): Promise<Role> {

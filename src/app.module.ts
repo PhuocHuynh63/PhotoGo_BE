@@ -19,6 +19,7 @@ import * as Handlebars from 'handlebars';
 import * as moment from 'moment';
 import { join } from 'path';
 import * as fs from 'fs';
+import { UploadModule } from './3rdService/upload/upload.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -94,6 +95,7 @@ if (!fs.existsSync(templateDir)) {
     RoleModule,
     GoogleAuthModule,
     AuthModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [

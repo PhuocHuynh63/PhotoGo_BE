@@ -47,18 +47,18 @@ export class CreateAuthDto {
   })
   passwordHash: string;
 
-  @IsNotEmpty({ message: 'Phone number is required' })
+  @IsOptional()
   @IsString()
   @ApiProperty({
     example: '0987654321',
     description: 'Phone number of the user',
   })
-  phoneNumber: string;
+  phoneNumber?: string;
 
   @IsOptional()
   @IsString()
   @ApiProperty({
-    example: '12345',
+    example: 'R001',
     description: 'Role ID of the user',
     required: false,
   })

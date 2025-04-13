@@ -55,10 +55,10 @@ export class AuthService {
       const registerEmailLowerCase = registerDto.email.toLowerCase();
 
       // Verify OTP
-      const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
-      if (!isOtpValid) {
-        throw new UnauthorizedException('Invalid OTP');
-      }
+      // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
+      // if (!isOtpValid) {
+      //   throw new UnauthorizedException('Invalid OTP');
+      // }
 
       // Create user
       return await this.userService.create({

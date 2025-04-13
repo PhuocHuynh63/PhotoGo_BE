@@ -23,6 +23,17 @@ export class UpdateUserDto {
 
     @IsOptional()
     @IsString()
+    @Length(6, 50)
+    @ApiProperty({
+        example: 'newpassword123',
+        description: 'Confirm New password for the user',
+        minLength: 6,
+        maxLength: 50,
+    })
+    confirmPassword?: string; // confirm mật khẩu mới
+
+    @IsOptional()
+    @IsString()
     @ApiProperty({
         example: 'oldpassword123',
         description: 'Old password for verification',
@@ -45,27 +56,4 @@ export class UpdateUserDto {
     })
     phoneNumber?: string;
 
-    @IsOptional()
-    @IsString()
-    @ApiProperty({
-        example: 'active',
-        description: 'Status of the user (e.g., active, inactive)',
-    })
-    status?: string;
-
-    @IsOptional()
-    @IsString()
-    @ApiProperty({
-        example: 'Gold',
-        description: 'Rank of the user (e.g., Gold, Silver, Bronze)',
-    })
-    rank?: string;
-
-    @IsOptional()
-    @IsString()
-    @ApiProperty({
-        example: 'local',
-        description: 'Authentication method (e.g., local, google, facebook)',
-    })
-    auth?: string;
 }

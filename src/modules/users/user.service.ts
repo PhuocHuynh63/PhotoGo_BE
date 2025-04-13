@@ -12,6 +12,8 @@ import { CreateAuthDto } from '../auth/dto/create-auth.dto';
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
+import { FindUserDto } from './dto/admin/find-user.dto';
+import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
 
 
 @Injectable()
@@ -45,19 +47,35 @@ export class UserService {
   }
   //#endregion create
 
+  //#region uploadImage
+  async uploadImage(id: string, file: Express.Multer.File): Promise<User> {
+    const user = await this.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    const imageUrl = await this.uploadService.uploadImage(file, 'avatar', user.avatarUrl);
+    user.avatarUrl = imageUrl;
+    return this.userRepository.save(user);
+  }
+  //#endregion uploadImage
+
   //#region update
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id); // Tìm user theo ID
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy người dùng với ID ${id}`);
     }
 
     // Nếu có trường passwordHash, kiểm tra mật khẩu cũ trước khi cập nhật
-    if (updateUserDto.passwordHash && updateUserDto.oldPasswordHash) {
+    if (updateUserDto.passwordHash && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
       const isMatch = await bcrypt.compare(updateUserDto.oldPasswordHash, user.passwordHash);
       if (!isMatch) {
-        throw new BadRequestException('Old password is incorrect');
+        throw new BadRequestException('Mật khẩu cũ không đúng');
       }
+      if (updateUserDto.passwordHash !== updateUserDto.confirmPassword) {
+        throw new BadRequestException('Mật khẩu xác nhận không khớp');
+      }
+      updateUserDto.oldPasswordHash = user.passwordHash; // Lưu mật khẩu cũ để so sánh
       // Mã hóa mật khẩu mới
       updateUserDto.passwordHash = await hashPasswordHelper(updateUserDto.passwordHash);
     }
@@ -70,17 +88,34 @@ export class UserService {
   }
   //#endregion update
 
-  //#region uploadImage
-  async uploadImage(id: string, file: Express.Multer.File): Promise<User> {
-    const user = await this.findOne(id);
+  //#region updateUserByAdmin
+  async updateUserByAdmin(id: string, update: UpdateUserForAdminDto): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    const imageUrl = await this.uploadService.uploadImage(file, 'avatar', user.avatarUrl);
-    user.avatarUrl = imageUrl;
+
+    if (update.password) {
+      const passwordHash = await hashPasswordHelper(update.password);
+      user.oldPasswordHash = user.passwordHash; // Lưu mật khẩu cũ để so sánh
+      user.passwordHash = passwordHash; // Cập nhật mật khẩu mới
+    }
+
+    // Cập nhật thông tin từ DTO
+    Object.assign(user, update);
+
+    // Nếu có roleId, tìm role và gán vào user
+    if (update.roleId) {
+      const role = await this.roleService.findOne(update.roleId);
+      if (!role) {
+        throw new NotFoundException(`Role with ID ${update.roleId} not found`);
+      }
+      user.role = role;
+    }
+
     return this.userRepository.save(user);
   }
-  //#endregion uploadImage
+  //#endregion updateUserByAdmin
 
   //#region remove
   async remove(id: string): Promise<void> {
@@ -119,8 +154,68 @@ export class UserService {
   //#endregion
 
   //#region findAll
-  async findAll(): Promise<User[]> {
-    return this.userRepository.find({ relations: ['role'] });
+  async findAll(query: FindUserDto): Promise<{
+    data: User[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    //#region Pagination
+    const currentPage = query.current ? Number(query.current) : 1;
+    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+    //#endregion
+
+    //#region Filter
+    const queryBuilder = this.userRepository.createQueryBuilder('user');
+
+    if (query.term) {
+      queryBuilder.andWhere(
+        '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
+        { term: `%${query.term}%` },
+      );
+    }
+
+    if (query.status) {
+      queryBuilder.andWhere('user.status = :status', { status: query.status });
+    }
+
+    if (query.rank) {
+      queryBuilder.andWhere('user.rank = :rank', { rank: query.rank });
+    }
+
+    if (query.auth) {
+      queryBuilder.andWhere('user.auth = :auth', { auth: query.auth });
+    }
+    //#endregion
+
+    //#region Sort
+    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank'];
+    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
+    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+
+    queryBuilder.orderBy(`user.${sortField}`, sortDirection);
+    //#endregion
+
+    //#region Pagination
+    queryBuilder.skip(skip).take(pageSize);
+    //#endregion
+
+    const [data, totalItem] = await queryBuilder.getManyAndCount();
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
+    };
   }
   //#endregion findAll
 
@@ -139,6 +234,5 @@ export class UserService {
     return this.userRepository.findOne({ where: { email }, relations: ['role'] });
   }
   //#endregion findOneByEmail
-
 
 }
