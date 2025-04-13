@@ -1,27 +1,27 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vendor } from './entities/vendor.entity';
-import { CreateVendorDto } from './dto/vendor.dto';
-import { FindVendorDto } from './dto/find-vendor.dto';
+import { TeamMember } from './entities/team-member.entity';
+import { CreateTeamMemberDto } from './dto/create-team-member.dto';
+import { FindTeamMemberDto } from './dto/find-team-member.dto';
 
 @Injectable()
-export class VendorService {
+export class TeamMemberService {
   constructor(
-    @InjectRepository(Vendor)
-    private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(TeamMember)
+    private readonly teamMemberRepository: Repository<TeamMember>,
   ) {}
 
   //#region create
-  async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
-    const vendor = this.vendorRepository.create(createVendorDto);
-    return this.vendorRepository.save(vendor);
+  async create(createTeamMemberDto: CreateTeamMemberDto): Promise<TeamMember> {
+    const teamMember = this.teamMemberRepository.create(createTeamMemberDto);
+    return this.teamMemberRepository.save(teamMember);
   }
   //#endregion create
 
   //#region findAll
-  async findAll(query: FindVendorDto): Promise<{
-    data: Vendor[];
+  async findAll(query: FindTeamMemberDto): Promise<{
+    data: TeamMember[];
     pagination: {
       current: number;
       pageSize: number;
@@ -36,29 +36,24 @@ export class VendorService {
     //#endregion
 
     //#region Filter
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
+    const queryBuilder = this.teamMemberRepository.createQueryBuilder('teamMember');
 
-    // Thêm join để lấy thông tin từ các bảng liên quan
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-    
+    queryBuilder.leftJoinAndSelect('teamMember.vendor', 'vendor');
+
     if (query.term) {
       queryBuilder.andWhere(
-        '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
+        '(teamMember.full_name ILIKE :term OR teamMember.role ILIKE :term)',
         { term: `%${query.term}%` },
       );
-    }
-
-    if (query.status) {
-      queryBuilder.andWhere('vendor.status = :status', { status: query.status });
     }
     //#endregion
 
     //#region Sort
-    const allowedSortFields = ['created_at', 'updated_at', 'name', 'slug'];
+    const allowedSortFields = ['created_at', 'updated_at', 'full_name', 'role'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`vendor.${sortField}`, sortDirection);
+    queryBuilder.orderBy(`teamMember.${sortField}`, sortDirection);
     //#endregion
 
     //#region Pagination
@@ -81,15 +76,15 @@ export class VendorService {
   //#endregion findAll
 
   //#region findOne
-  async findOne(id: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
+  async findOne(id: string): Promise<TeamMember> {
+    const teamMember = await this.teamMemberRepository.findOne({
       where: { id },
-      relations: ['category'], // Bao gồm quan hệ với Category
+      relations: ['vendor'],
     });
-    if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    if (!teamMember) {
+      throw new NotFoundException(`Team Member with ID ${id} not found`);
     }
-    return vendor;
+    return teamMember;
   }
   //#endregion findOne
 }

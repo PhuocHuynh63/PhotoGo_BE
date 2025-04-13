@@ -1,27 +1,27 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vendor } from './entities/vendor.entity';
-import { CreateVendorDto } from './dto/vendor.dto';
-import { FindVendorDto } from './dto/find-vendor.dto';
+import { Voucher } from './entities/voucher.entity';
+import { CreateVoucherDto } from './dto/create-voucher.dto';
+import { FindVoucherDto } from './dto/find-voucher.dto';
 
 @Injectable()
-export class VendorService {
+export class VoucherService {
   constructor(
-    @InjectRepository(Vendor)
-    private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(Voucher)
+    private readonly voucherRepository: Repository<Voucher>,
   ) {}
 
   //#region create
-  async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
-    const vendor = this.vendorRepository.create(createVendorDto);
-    return this.vendorRepository.save(vendor);
+  async create(createVoucherDto: CreateVoucherDto): Promise<Voucher> {
+    const voucher = this.voucherRepository.create(createVoucherDto);
+    return this.voucherRepository.save(voucher);
   }
   //#endregion create
 
   //#region findAll
-  async findAll(query: FindVendorDto): Promise<{
-    data: Vendor[];
+  async findAll(query: FindVoucherDto): Promise<{
+    data: Voucher[];
     pagination: {
       current: number;
       pageSize: number;
@@ -36,29 +36,22 @@ export class VendorService {
     //#endregion
 
     //#region Filter
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
+    const queryBuilder = this.voucherRepository.createQueryBuilder('voucher');
 
-    // Thêm join để lấy thông tin từ các bảng liên quan
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-    
     if (query.term) {
       queryBuilder.andWhere(
-        '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
+        '(voucher.code ILIKE :term OR voucher.discount_type ILIKE :term OR voucher.status ILIKE :term)',
         { term: `%${query.term}%` },
       );
-    }
-
-    if (query.status) {
-      queryBuilder.andWhere('vendor.status = :status', { status: query.status });
     }
     //#endregion
 
     //#region Sort
-    const allowedSortFields = ['created_at', 'updated_at', 'name', 'slug'];
+    const allowedSortFields = ['created_at', 'updated_at', 'code', 'discount_value', 'status'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`vendor.${sortField}`, sortDirection);
+    queryBuilder.orderBy(`voucher.${sortField}`, sortDirection);
     //#endregion
 
     //#region Pagination
@@ -81,15 +74,12 @@ export class VendorService {
   //#endregion findAll
 
   //#region findOne
-  async findOne(id: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
-      where: { id },
-      relations: ['category'], // Bao gồm quan hệ với Category
-    });
-    if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+  async findOne(id: string): Promise<Voucher> {
+    const voucher = await this.voucherRepository.findOne({ where: { id } });
+    if (!voucher) {
+      throw new NotFoundException(`Voucher with ID ${id} not found`);
     }
-    return vendor;
+    return voucher;
   }
   //#endregion findOne
 }

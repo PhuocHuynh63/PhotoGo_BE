@@ -1,27 +1,27 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vendor } from './entities/vendor.entity';
-import { CreateVendorDto } from './dto/vendor.dto';
-import { FindVendorDto } from './dto/find-vendor.dto';
+import { Comment } from './entities/comment.entity';
+import { CreateCommentDto } from './dto/create-comment.dto';
+import { FindCommentDto } from './dto/find-comment.dto';
 
 @Injectable()
-export class VendorService {
+export class CommentService {
   constructor(
-    @InjectRepository(Vendor)
-    private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(Comment)
+    private readonly commentRepository: Repository<Comment>,
   ) {}
 
   //#region create
-  async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
-    const vendor = this.vendorRepository.create(createVendorDto);
-    return this.vendorRepository.save(vendor);
+  async create(createCommentDto: CreateCommentDto): Promise<Comment> {
+    const comment = this.commentRepository.create(createCommentDto);
+    return this.commentRepository.save(comment);
   }
   //#endregion create
 
   //#region findAll
-  async findAll(query: FindVendorDto): Promise<{
-    data: Vendor[];
+  async findAll(query: FindCommentDto): Promise<{
+    data: Comment[];
     pagination: {
       current: number;
       pageSize: number;
@@ -36,29 +36,25 @@ export class VendorService {
     //#endregion
 
     //#region Filter
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
+    const queryBuilder = this.commentRepository.createQueryBuilder('comment');
 
-    // Thêm join để lấy thông tin từ các bảng liên quan
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-    
+    queryBuilder.leftJoinAndSelect('comment.user', 'user');
+    queryBuilder.leftJoinAndSelect('comment.vendor', 'vendor');
+
     if (query.term) {
       queryBuilder.andWhere(
-        '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
+        '(comment.content ILIKE :term)',
         { term: `%${query.term}%` },
       );
-    }
-
-    if (query.status) {
-      queryBuilder.andWhere('vendor.status = :status', { status: query.status });
     }
     //#endregion
 
     //#region Sort
-    const allowedSortFields = ['created_at', 'updated_at', 'name', 'slug'];
+    const allowedSortFields = ['created_at', 'updated_at'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`vendor.${sortField}`, sortDirection);
+    queryBuilder.orderBy(`comment.${sortField}`, sortDirection);
     //#endregion
 
     //#region Pagination
@@ -81,15 +77,15 @@ export class VendorService {
   //#endregion findAll
 
   //#region findOne
-  async findOne(id: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
+  async findOne(id: string): Promise<Comment> {
+    const comment = await this.commentRepository.findOne({
       where: { id },
-      relations: ['category'], // Bao gồm quan hệ với Category
+      relations: ['user', 'vendor'],
     });
-    if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    if (!comment) {
+      throw new NotFoundException(`Comment with ID ${id} not found`);
     }
-    return vendor;
+    return comment;
   }
   //#endregion findOne
 }

@@ -8,7 +8,7 @@ import { FindCategoryDto } from './dto/find-category.dto';
 import { Param } from '@nestjs/common/decorators/http/route-params.decorator';
 import { ApiOkResponse } from '@nestjs/swagger/dist/decorators/api-response.decorator';
 
-@ApiTags('categories')
+@ApiTags('Categories')
 @Controller('categories')
 @ApiBearerAuth('access-token')
 export class CategoryController {

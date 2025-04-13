@@ -1,7 +1,6 @@
-import { IsString, IsOptional, IsEnum, IsNumberString } from 'class-validator';
-import { VendorStatus } from 'src/constants/vendor.enum';
+import { IsString, IsOptional, IsNumberString } from 'class-validator';
 
-export class FindVendorDto {
+export class FindCommentDto {
   @IsNumberString()
   @IsOptional()
   current?: string;
@@ -13,10 +12,6 @@ export class FindVendorDto {
   @IsString()
   @IsOptional()
   term?: string;
-
-  @IsEnum(VendorStatus)
-  @IsOptional()
-  status?: VendorStatus;
 
   @IsString()
   @IsOptional()

@@ -1,5 +1,5 @@
 import { IsString, IsNotEmpty, IsEnum, IsOptional, Length } from 'class-validator';
-import { VendorStatus } from '../entities/vendor.entity';
+import { VendorStatus } from 'src/constants/vendor.enum';
 
 export class CreateVendorDto {
   @IsString()
