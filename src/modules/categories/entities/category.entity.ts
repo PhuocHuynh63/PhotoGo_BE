@@ -1,4 +1,5 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Vendor } from 'src/modules/vendors/entities/vendor.entity';
+import { Column, Entity, OneToMany, PrimaryColumn } from 'typeorm';
 
 @Entity('category')
 export class Category {
@@ -10,4 +11,7 @@ export class Category {
 
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @OneToMany(() => Vendor, (vendor) => vendor.category, { nullable: false })
+  vendors: Vendor[];
 }

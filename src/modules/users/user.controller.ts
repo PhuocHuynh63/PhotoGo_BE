@@ -28,6 +28,7 @@ export class UserController {
     return this.userService.findAll(query);
   }
 
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<User> {
     return this.userService.findOne(id);
