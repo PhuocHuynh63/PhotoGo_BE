@@ -9,3 +9,12 @@ export enum UserStatus {
     INACTIVE = 'inactive',
     BANNED = 'banned',
 }
+
+export enum UserRank {
+    BRONZE = 'Đồng',
+    SILVER = 'Bạc',
+    GOLD = 'Vàng',
+    PLATINUM = 'Bạch Kim',
+    DIAMOND = 'Kim Cương',
+    UNRANK = 'Chưa xếp hạng',
+}

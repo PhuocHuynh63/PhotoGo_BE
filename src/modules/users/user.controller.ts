@@ -54,4 +54,16 @@ export class UserController {
   async remove(@Param('id') id: string): Promise<void> {
     return this.userService.remove(id);
   }
+
+  @Public()
+  @Get('/admin/count/:rank')
+  async countUserByRank(@Param('rank') rank: string): Promise<number> {
+    return this.userService.countUserByRank(rank);
+  }
+
+  @Public()
+  @Get('/admin/ranks')
+  async getAllRanks(): Promise<{ rank: string; count: number }[]> {
+    return this.userService.getAllRank();
+  }
 }
