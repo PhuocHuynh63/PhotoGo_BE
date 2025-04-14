@@ -82,7 +82,7 @@ export class LocationService {
       relations: ['vendor'],
     });
     if (!location) {
-      throw new NotFoundException(`Location with ID ${id} not found`);
+      throw new NotFoundException(`Địa điểm với id ${id} không tồn tại`);
     }
     return location;
   }

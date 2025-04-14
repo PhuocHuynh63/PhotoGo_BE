@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { VendorService } from './vendor.service';
-import { CreateVendorDto } from './dto/vendor.dto';
+import { CreateVendorDto } from './dto/create-vendor.dto';
 import { Vendor } from './entities/vendor.entity';
 import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -12,7 +12,7 @@ import { Param } from '@nestjs/common/decorators/http/route-params.decorator';
 @Controller('vendors')
 @ApiBearerAuth('access-token')
 export class VendorController {
-  constructor(private readonly vendorService: VendorService) {}
+  constructor(private readonly vendorService: VendorService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new vendor (Protected)' })

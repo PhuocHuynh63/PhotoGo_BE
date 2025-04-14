@@ -12,8 +12,8 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     async validate(email: string, password: string): Promise<any> {
         const user = await this.authService.validateUser(email, password);
 
-        if (user.status !== 'active') {
-            throw new BadRequestException('Your account is not active');
+        if (user.status != 'hoạt động') {
+            throw new BadRequestException('Tài khoản đã bị chặn không hoạt động');
         }
         return user;
     }

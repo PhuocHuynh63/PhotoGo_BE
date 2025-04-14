@@ -2,10 +2,10 @@ import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/category.dto';
 import { Category } from './entities/category.entity';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindCategoryDto } from './dto/find-category.dto';
-import { Param } from '@nestjs/common/decorators/http/route-params.decorator';
+import { Param, Res } from '@nestjs/common/decorators/http/route-params.decorator';
 import { ApiOkResponse } from '@nestjs/swagger/dist/decorators/api-response.decorator';
 
 @ApiTags('Categories')
@@ -18,6 +18,7 @@ export class CategoryController {
   @ApiOperation({ summary: 'Create a new category (Protected)' })
   @ApiResponse({ status: 201, description: 'Category created successfully', type: Category })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Tạo danh mục thành công')
   async create(@Body() createCategoryDto: CreateCategoryDto): Promise<Category> {
     return this.categoryService.create(createCategoryDto);
   }
@@ -30,6 +31,7 @@ export class CategoryController {
     description: 'List of categories with pagination',
     type: [Category],
   })
+  @ResponseMessage('Lấy danh sách danh mục thành công')
   async findAll(@Query() query: FindCategoryDto): Promise<{
     data: Category[];
     pagination: {
@@ -49,6 +51,7 @@ export class CategoryController {
   @ApiResponse({ status: 200, description: 'Category found', type: Category })
   @ApiResponse({ status: 404, description: 'Category not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Lấy thông tin danh mục thành công')
   async findOne(@Param('id') id: string): Promise<Category> {
     return this.categoryService.findOne(id);
   }

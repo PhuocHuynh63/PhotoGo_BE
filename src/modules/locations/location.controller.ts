@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Res } from '@nestjs/common';
 import { LocationService } from './location.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { Location } from './entities/location.entity';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindLocationDto } from './dto/find-location.dto';
 
@@ -16,6 +16,7 @@ export class LocationController {
   @ApiOperation({ summary: 'Create a new location (Protected)' })
   @ApiResponse({ status: 201, description: 'Location created successfully', type: Location })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ResponseMessage('Tạo địa điểm thành công') 
   async create(@Body() createLocationDto: CreateLocationDto): Promise<Location> {
     return this.locationService.create(createLocationDto);
   }
@@ -28,6 +29,7 @@ export class LocationController {
     description: 'List of locations with pagination',
     type: [Location],
   })
+  @ResponseMessage('Lấy danh sách địa điểm thành công')
   async findAll(@Query() query: FindLocationDto): Promise<{
     data: Location[];
     pagination: {
@@ -45,6 +47,7 @@ export class LocationController {
   @ApiOperation({ summary: 'Get a location by ID (Public)' })
   @ApiResponse({ status: 200, description: 'Location found', type: Location })
   @ApiResponse({ status: 404, description: 'Location not found' })
+  @ResponseMessage('Lấy thông tin địa điểm thành công')
   async findOne(@Param('id') id: string): Promise<Location> {
     return this.locationService.findOne(id);
   }

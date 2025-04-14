@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from './entities/category.entity';
@@ -80,7 +80,7 @@ export class CategoryService {
     });
 
     if (!category) {
-      throw new Error('Category not found');
+      throw new NotFoundException('Tiêu đề không tồn tại');
     }
 
     return category;

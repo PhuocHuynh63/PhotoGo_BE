@@ -83,7 +83,7 @@ export class CommentService {
       relations: ['user', 'vendor'],
     });
     if (!comment) {
-      throw new NotFoundException(`Comment with ID ${id} not found`);
+      throw new NotFoundException(`Bình luận với id ${id} không tồn tại`);
     }
     return comment;
   }

@@ -21,12 +21,12 @@ export class AuthService {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('');
     }
 
     const isMatch = await comparePasswordHelper(password, user.passwordHash);
     if (!isMatch) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Xac thực không thành công');
     }
 
     return user;
@@ -55,10 +55,10 @@ export class AuthService {
       const registerEmailLowerCase = registerDto.email.toLowerCase();
 
       // Verify OTP
-      // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
-      // if (!isOtpValid) {
-      //   throw new UnauthorizedException('Invalid OTP');
-      // }
+      const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
+      if (!isOtpValid) {
+        throw new UnauthorizedException('Sai mã xác thực');
+      }
 
       // Create user
       return await this.userService.create({
@@ -70,9 +70,9 @@ export class AuthService {
       });
     } catch (error) {
       if (error.code === 11000) {
-        throw new ConflictException('Email already exists');
+        throw new ConflictException('Email đã tồn tại');
       }
-      throw new BadRequestException(error.message || 'Registration failed');
+      throw new BadRequestException(error.message || 'Đăng ký không thành công');
     }
   }
   //#endregion
@@ -88,7 +88,7 @@ export class AuthService {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('Ngươi dùng không tồn tại');
     }
     return await this.userService.resetPassword(user, passwordHash);
   }
