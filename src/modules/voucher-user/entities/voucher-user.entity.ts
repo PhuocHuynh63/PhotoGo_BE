@@ -5,7 +5,7 @@ import { VoucherUserStatusEnum } from '../../../constants/voucher.enum';
 
 @Entity('voucher_user')
 export class VoucherUser {
-  @PrimaryColumn({ type: 'varchar', length: 10 })
+  @PrimaryColumn({ type: 'uuid' })
   voucher_id: string;
 
   @PrimaryColumn({ type: 'uuid' })

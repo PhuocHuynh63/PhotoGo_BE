@@ -5,6 +5,7 @@ import { VoucherUser } from './entities/voucher-user.entity';
 import { CreateVoucherUserDto } from './dto/create-voucher-user.dto';
 import { FindVoucherUserDto } from './dto/find-voucher-user.dto';
 import { Voucher } from '../vouchers/entities/voucher.entity';
+import { VoucherUserStatusEnum } from 'src/constants/voucher.enum';
 
 @Injectable()
 export class VoucherUserService {
@@ -13,7 +14,7 @@ export class VoucherUserService {
     private readonly voucherUserRepository: Repository<VoucherUser>,
     @InjectRepository(Voucher)
     private readonly voucherRepository: Repository<Voucher>,
-  ) {}
+  ) { }
 
   async create(createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
     const voucher = await this.voucherRepository.findOne({ where: { id: createVoucherUserDto.voucher_id } });
@@ -108,16 +109,16 @@ export class VoucherUserService {
 
     const currentDate = new Date();
     const voucher = voucherUser.voucher;
-    if (
-      voucher.status === 'active' &&
-      currentDate >= new Date(voucher.start_date) &&
-      currentDate <= new Date(voucher.end_date) &&
-      voucherUser.status === 'available'
-    ) {
-      voucherUser['is_valid'] = true;
-    } else {
-      voucherUser['is_valid'] = false;
-    }
+    // if (
+    //   voucher.status === 'active' &&
+    //   currentDate >= new Date(voucher.start_date) &&
+    //   currentDate <= new Date(voucher.end_date) &&
+    //   voucherUser.status === 
+    // ) {
+    //   voucherUser['is_valid'] = true;
+    // } else {
+    //   voucherUser['is_valid'] = false;
+    // }
 
     return voucherUser;
   }
@@ -125,9 +126,9 @@ export class VoucherUserService {
   async useVoucher(voucherId: string, userId: string): Promise<VoucherUser> {
     const voucherUser = await this.findOne(voucherId, userId);
 
-    if (voucherUser.status === 'used') {
-      throw new BadRequestException('Voucher has already been used');
-    }
+    // if (voucherUser.status == VoucherUserStatusEnum.ACTIVE) {
+    //   throw new BadRequestException('Voucher has already been used');
+    // }
 
     if (!voucherUser['is_valid']) {
       throw new BadRequestException('Voucher is not valid or has expired');

@@ -1,4 +1,4 @@
 export enum VendorStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
+  ACTIVE = 'hoạt động',
+  INACTIVE = 'không hoạt động',
 }

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, Length } from 'class-validator';
+import { UserRank, UserStatus } from 'src/constants/user.enum';
 
 export class UpdateUserForAdminDto {
   @IsOptional()
@@ -45,18 +46,20 @@ export class UpdateUserForAdminDto {
   })
   avatarUrl?: string;
 
+  @IsEnum(UserStatus)
   @IsOptional()
   @IsString()
   @ApiProperty({
-    example: 'active',
-    description: 'Status of the user (e.g., active, inactive)',
+    example: UserStatus.ACTIVE,
+    description: 'Trạng thái của người dùng (hoạt động, không hoạt động)',
   })
   status?: string;
 
+  @IsEnum(UserRank)
   @IsOptional()
   @IsString()
   @ApiProperty({
-    example: 'Unrank',
+    example: UserRank.UNRANK,
     description: 'Rank of the user (e.g., Unrank, Bronze, Silver)',
   })
   rank?: string;
