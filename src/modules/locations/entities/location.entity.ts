@@ -6,10 +6,10 @@ export class Location {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Vendor, { nullable: false })
+  @ManyToOne(() => Vendor, (vendor) => vendor.locations, { nullable: false })
   @JoinColumn({ name: 'vendor_id' })
   vendor: Vendor;
-
+  
   @Column({ type: 'text', nullable: false })
   address: string;
 
