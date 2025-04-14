@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UploadedFile, UseInterceptors, Query , Res} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UploadedFile, UseInterceptors, Query, Res } from '@nestjs/common';
 import { UserService } from './user.service';
 
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -156,6 +156,5 @@ export class UserController {
     return this.userService.getAllRank();
   }
 
-  
 }
 

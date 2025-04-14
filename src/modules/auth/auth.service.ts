@@ -26,8 +26,9 @@ export class AuthService {
 
     const isMatch = await comparePasswordHelper(password, user.passwordHash);
     if (!isMatch) {
-      throw new UnauthorizedException('Xac thực không thành công');
+      throw new UnauthorizedException('Xác thực không thành công');
     }
+    await this.userService.updateLoginAt(user);
 
     return user;
   }
@@ -55,10 +56,10 @@ export class AuthService {
       const registerEmailLowerCase = registerDto.email.toLowerCase();
 
       // Verify OTP
-      const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
-      if (!isOtpValid) {
-        throw new UnauthorizedException('Sai mã xác thực');
-      }
+      // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
+      // if (!isOtpValid) {
+      //   throw new UnauthorizedException('Sai mã xác thực');
+      // }
 
       // Create user
       return await this.userService.create({

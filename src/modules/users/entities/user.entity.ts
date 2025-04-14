@@ -30,8 +30,14 @@ export class User {
   @Column({ default: 'Unrank' })
   rank: string;
 
+  @Column()
+  note: string;
+
   @Column({ default: 'local' })
   auth: string;
+
+  @CreateDateColumn({ name: 'last_login_at', type: 'timestamptz' })
+  lastLoginAt: Date;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
