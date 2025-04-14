@@ -14,6 +14,7 @@ import { VendorModule } from './modules/vendors/vendor.module';
 import { TeamMemberModule } from './modules/team-members/team-member.module';
 import { CategoryModule } from './modules/categories/category.module';
 import { NotificationModule } from './modules/notifications/notification.module';
+import { VoucherUserModule } from './modules/voucher-user/voucher-user.module';
 import { LocationModule } from './modules/locations/location.module';
 import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
 import { PointModule } from './modules/points/point.module';
@@ -114,6 +115,7 @@ if (!fs.existsSync(templateDir)) {
     SubscriptionPlanModule,
     VoucherModule,
     PointModule,
+    VoucherUserModule,
   ],
   controllers: [AppController],
   providers: [

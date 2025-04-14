@@ -262,4 +262,43 @@ async getAllRank(): Promise<{ rank: string; count: number }[]> {
 }
 //#endregion Get all ranks with count
 
+//#region exportUsers
+async exportUsers(query: FindUserDto): Promise<User[]> {
+  const queryBuilder = this.userRepository.createQueryBuilder('user');
+
+  // Thêm join để lấy thông tin role
+  queryBuilder.leftJoinAndSelect('user.role', 'role');
+
+  // Áp dụng bộ lọc tương tự như findAll
+  if (query.term) {
+    queryBuilder.andWhere(
+      '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
+      { term: `%${query.term}%` },
+    );
+  }
+
+  if (query.status) {
+    queryBuilder.andWhere('user.status = :status', { status: query.status });
+  }
+
+  if (query.rank) {
+    queryBuilder.andWhere('user.rank = :rank', { rank: query.rank });
+  }
+
+  if (query.auth) {
+    queryBuilder.andWhere('user.auth = :auth', { auth: query.auth });
+  }
+
+  // Sắp xếp
+  const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank'];
+  const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
+  const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+
+  queryBuilder.orderBy(`user.${sortField}`, sortDirection);
+
+  // Lấy tất cả dữ liệu (không phân trang)
+  const users = await queryBuilder.getMany();
+  return users;
+}
+//#endregion exportUsers
 }
