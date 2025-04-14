@@ -1,5 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
+import { Location } from '../../locations/entities/location.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 
 @Entity('vendors')
@@ -28,4 +29,7 @@ export class Vendor {
 
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'NOW()', onUpdate: 'NOW()' })
   updated_at: Date;
+
+  @OneToMany(() => Location, (location) => location.vendor)
+  locations: Location[];
 }
