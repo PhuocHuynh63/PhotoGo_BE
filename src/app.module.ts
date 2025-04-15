@@ -20,9 +20,11 @@ import { LocationModule } from './modules/locations/location.module';
 import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
 import { PointModule } from './modules/points/point.module';
 import { VoucherModule } from './modules/vouchers/voucher.module';
+import { WalletModule } from './modules/wallets/wallet.module';
 import { CommentModule } from './modules/comments/comment.module';
 import { RefundModule } from './modules/refunds/refund.module';
 import { BookingModule } from './modules/bookings/booking.module';
+import { CartModule } from './modules/carts/cart.module';
 import { PaymentModule } from './modules/payments/payment.module';  
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -35,8 +37,7 @@ import { join } from 'path';
 import * as fs from 'fs';
 import { UploadModule } from './3rdService/upload/upload.module';
 import { InvoiceModule } from './modules/invoices/invoice.module';
-import { Payment } from './modules/payments/entities/payment.entity';
-import { Refund } from './modules/refunds/entities/refund.entity';
+import { WishlistModule } from './modules/wishlists/wishlist.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -128,6 +129,9 @@ if (!fs.existsSync(templateDir)) {
     InvoiceModule,
     PaymentModule,
     RefundModule,
+    WalletModule,
+    CartModule,
+    WishlistModule
   ],
   controllers: [AppController],
   providers: [
