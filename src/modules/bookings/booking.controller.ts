@@ -3,7 +3,7 @@ import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { Booking } from './entities/booking.entity';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 @Controller('bookings')
 @ApiTags('Booking')
@@ -15,6 +15,7 @@ export class BookingController {
   @ApiOperation({ summary: 'Create a new booking' })
   @ApiResponse({ status: 201, description: 'Booking created successfully', type: Booking })
   @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiBody({ type: CreateBookingDto })
   create(@Body() createBookingDto: CreateBookingDto): Promise<Booking> {
     return this.bookingService.create(createBookingDto);
   }

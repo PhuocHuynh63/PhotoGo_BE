@@ -21,12 +21,11 @@ export class CartItem {
   @Column({ type: 'uuid', nullable: false, name: 'service_package_id' })
   servicePackageId: string;
 
-  @Column({ type: 'integer', default: 1 })
-  quantity: number;
-
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
+
+
 }
