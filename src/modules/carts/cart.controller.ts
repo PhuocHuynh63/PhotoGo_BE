@@ -5,6 +5,7 @@ import { CreateCartDto } from './dto/create-cart.dto';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
+import { GetUser } from 'src/decorator/user.decorator';
 
 @ApiTags('Carts')
 @ApiBearerAuth('access-token')
@@ -15,15 +16,21 @@ export class CartController {
   @Post()
   @ApiOperation({ summary: 'Create a new cart' })
   @ApiResponse({ status: 201, description: 'Cart created successfully', type: Cart })
-  async createCart(@Body() createCartDto: CreateCartDto): Promise<Cart> {
+  async createCart(@Body() createCartDto: CreateCartDto,): Promise<Cart> {
     return await this.cartService.createCart(createCartDto);
   }
 
-  @Post('items')
+  @Post(':user_id/:cart_id/:service_package_id/items')
   @ApiOperation({ summary: 'Add an item to the cart' })
   @ApiResponse({ status: 201, description: 'Item added to cart successfully', type: CartItem })
-  async addCartItem(@Body() addCartItemDto: AddCartItemDto): Promise<CartItem> {
-    return await this.cartService.addCartItem(addCartItemDto);
+  @ApiResponse({ status: 404, description: 'Cart not found' })
+  async addCartItem(
+    @Param('service_package_id') servicePackageId: string,
+    @Param('cart_id') cartId: string,
+    @Param('user_id') userId: string,
+  ): Promise<CartItem> {
+    // Pass userId and cartId to the service along with the DTO
+    return await this.cartService.addCartItem({ servicePackageId, cartId, userId });
   }
 
   @Get(':id')
