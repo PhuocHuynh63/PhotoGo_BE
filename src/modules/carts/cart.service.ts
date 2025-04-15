@@ -46,17 +46,30 @@ export class CartService {
     return cart;
   }
 
-    async findAllCarts(): Promise<Cart[]> {
-        return await this.cartRepository.find({ relations: ['items', 'items.servicePackage'] });
+  async findAllCarts(): Promise<Cart[]> {
+    return await this.cartRepository.find({ relations: ['items', 'items.servicePackage'] });
+  }
+
+  async findCartItems(cartId: string): Promise<CartItem[]> {
+    const cart = await this.cartRepository.findOne({ where: { id: cartId }, relations: ['items'] });
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} not found`);
     }
 
-    async findCartItems(cartId: string): Promise<CartItem[]> {
-        const cart = await this.cartRepository.findOne({ where: { id: cartId }, relations: ['items'] });
+    return cart.items;
+  }
 
-        if (!cart) {
-            throw new NotFoundException(`Cart with ID ${cartId} not found`);
-        }
+  async findCartItemsByUserId(userId: string): Promise<CartItem[]> {
+    const cart = await this.cartRepository.findOne({
+      where: { userId },
+      relations: ['items', 'items.servicePackage'],
+    });
 
-        return cart.items;
+    if (!cart) {
+      throw new NotFoundException(`Cart with user ID ${userId} not found`);
     }
+
+    return cart.items;
+  }
 }

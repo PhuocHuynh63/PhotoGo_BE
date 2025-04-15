@@ -48,4 +48,12 @@ export class CartController {
   async findCartItems(@Param('cartId') cartId: string): Promise<CartItem[]> {
     return await this.cartService.findCartItems(cartId);
   }
+
+  @Get(':userId/items')
+  @ApiOperation({ summary: 'Retrieve all items in a cart by user ID' })
+  @ApiResponse({ status: 200, description: 'List of cart items', type: [CartItem] })
+  @ApiResponse({ status: 404, description: 'Cart not found' })
+  async findCartItemsByUserId(@Param('userId') userId: string): Promise<CartItem[]> {
+    return await this.cartService.findCartItemsByUserId(userId);
+  }
 }
