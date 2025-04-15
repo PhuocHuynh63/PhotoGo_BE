@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -20,6 +21,9 @@ import { SubscriptionPlanModule } from './modules/subscription_plan/subscription
 import { PointModule } from './modules/points/point.module';
 import { VoucherModule } from './modules/vouchers/voucher.module';
 import { CommentModule } from './modules/comments/comment.module';
+import { RefundModule } from './modules/refunds/refund.module';
+import { BookingModule } from './modules/bookings/booking.module';
+import { PaymentModule } from './modules/payments/payment.module';  
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -30,6 +34,9 @@ import * as moment from 'moment';
 import { join } from 'path';
 import * as fs from 'fs';
 import { UploadModule } from './3rdService/upload/upload.module';
+import { InvoiceModule } from './modules/invoices/invoice.module';
+import { Payment } from './modules/payments/entities/payment.entity';
+import { Refund } from './modules/refunds/entities/refund.entity';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -74,6 +81,7 @@ if (!fs.existsSync(templateDir)) {
       entities: [User, Role], // Đăng ký cả User và Role entity
       autoLoadEntities: true,
       synchronize: false, // Bật true chỉ khi đang dev local
+      namingStrategy:  new SnakeNamingStrategy(),
     }),
 
     MailerModule.forRootAsync({
@@ -116,6 +124,10 @@ if (!fs.existsSync(templateDir)) {
     VoucherModule,
     PointModule,
     VoucherUserModule,
+    BookingModule,
+    InvoiceModule,
+    PaymentModule,
+    RefundModule,
   ],
   controllers: [AppController],
   providers: [
