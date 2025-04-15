@@ -5,12 +5,11 @@ import { LocalAuthGuard } from './passport/local-auth.guard';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
 import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { UserService } from '../users/user.service';
+
 @Controller('auth')
 @ApiBearerAuth('access-token')
 export class AuthController {
   constructor(private readonly authService: AuthService,
-    private readonly userService: UserService
   ) { }
 
   @Public()
@@ -39,9 +38,5 @@ export class AuthController {
     return this.authService.forgotPassword(email, passwordHash);
   }
 
-  @Get(':id/last-login')
-  @ResponseMessage('Lấy thời gian kể từ lần đăng nhập cuối cùng thành công')
-  async getLastLogin(@Param('id') id: string): Promise<{ lastLoginAt: Date | null; duration: string }> {
-    return this.userService.getLastLoginDuration(id);
-  }
+
 }

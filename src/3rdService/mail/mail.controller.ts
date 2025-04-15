@@ -16,7 +16,7 @@ export class MailController {
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtp(@Query('email') email: string) {
         const emailLower = email.toLowerCase();
-        const template = 'register.hbs';
+        const template = 'register';
         return await this.mailService.generateAndSendOtp(emailLower, template);
     }
 
@@ -35,7 +35,7 @@ export class MailController {
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtpResetPassword(@Query('email') email: string) {
         const emailLower = email.toLowerCase();
-        const template = 'reset-password.hbs';
+        const template = 'reset-password';
         return await this.mailService.generateAndSendOtp(emailLower, template);
     }
 }

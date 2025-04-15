@@ -38,6 +38,7 @@ import * as fs from 'fs';
 import { UploadModule } from './3rdService/upload/upload.module';
 import { InvoiceModule } from './modules/invoices/invoice.module';
 import { WishlistModule } from './modules/wishlists/wishlist.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -72,6 +73,7 @@ if (!fs.existsSync(templateDir)) {
     ConfigModule.forRoot({
       isGlobal: true, // Cho phép dùng process.env ở mọi nơi
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST,

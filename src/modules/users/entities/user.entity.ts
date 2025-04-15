@@ -36,8 +36,11 @@ export class User {
   @Column({ default: 'local' })
   auth: string;
 
-  @CreateDateColumn({ name: 'last_login_at', type: 'timestamptz' })
+  @UpdateDateColumn({ name: 'last_login_at', type: 'timestamptz' })
   lastLoginAt: Date;
+
+  @UpdateDateColumn({ name: 'send_mail_voucher_at', type: 'timestamptz' })
+  sendMailVoucherAt: Date;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

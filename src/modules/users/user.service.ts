@@ -1,20 +1,20 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ConsoleLogger, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
-import { Role } from '../roles/entities/role.entity';
 import { RoleService } from '../roles/role.service';
-
 import { hashPasswordHelper } from 'src/utils/utils';
 import { CreateAuthDto } from '../auth/dto/create-auth.dto';
-
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { FindUserDto } from './dto/admin/find-user.dto';
 import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
+import { Cron } from '@nestjs/schedule';
+import { log } from 'console';
+import { logger } from 'handlebars';
 
 
 @Injectable()
@@ -146,27 +146,6 @@ export class UserService {
     return this.userRepository.save(user);
   }
   //#endregion update loginAt
-
-  //#region getLastLoginDuration
-  async getLastLoginDuration(id: string): Promise<{ lastLoginAt: Date | null; duration: string }> {
-    const user = await this.findOne(id);
-    if (!user.lastLoginAt) {
-      return { lastLoginAt: null, duration: 'Chưa từng đăng nhập' };
-    }
-  
-    const now = new Date();
-    const lastLoginAt = user.lastLoginAt;
-    const durationMs = now.getTime() - lastLoginAt.getTime();
-  
-    const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
-    const durationHours = Math.floor((durationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-  
-    const duration = `${durationDays} ngày, ${durationHours} giờ, ${durationMinutes} phút trước`;
-  
-    return { lastLoginAt, duration };
-  }
-  //#endregion getLastLoginDuration
 
   //#region remove
   async remove(id: string): Promise<void> {
@@ -352,4 +331,80 @@ export class UserService {
     return users;
   }
   //#endregion exportUsers
+
+
+  //#region auto send mail
+  /**
+   * Cron job để kiểm tra thời gian đăng nhập cuối cùng của tất cả người dùng
+   * và gửi email thông báo nếu thời gian lớn hơn 5 phút.
+  */
+  // @Cron('0 */5 * * * *') // Chạy mỗi 5 phút
+  // async checkLastLoginForAllUsers(): Promise<void> {
+  //   const now = new Date();
+  //   Logger.log('Cron job chạy lúc:', now.toLocaleString('vi-VN'));
+
+  //   // Lấy danh sách người dùng cần gửi email
+  //   const users = await this.userRepository
+  //     .createQueryBuilder('user')
+  //     .select(['user.id', 'user.email', 'user.fullName', 'user.lastLoginAt', 'user.sendMailVoucherAt'])
+  //     .where('user.lastLoginAt IS NOT NULL') // Chỉ lấy người dùng có lastLoginAt
+  //     .getMany();
+
+  //   for (const user of users) {
+  //     const durationMs = now.getTime() - user.lastLoginAt.getTime();
+
+  //     // Kiểm tra các mốc thời gian và gửi email nếu cần
+  //     if (this.shouldSendEmail(user, durationMs)) {
+  //       await this.sendLastLoginEmail(user, durationMs);
+
+  //       // Cập nhật sendMailVoucherAt sau khi gửi email
+  //       user.sendMailVoucherAt = now;
+  //       await this.userRepository.save(user);
+  //     }
+  //   }
+  // }
+
+  // // Hàm kiểm tra xem có nên gửi email hay không
+  // private shouldSendEmail(user: User, durationMs: number): boolean {
+  //   const now = new Date();
+  //   const lastSent = user.sendMailVoucherAt ? user.sendMailVoucherAt.getTime() : 0;
+
+  //   // Kiểm tra các mốc thời gian
+  //   if (durationMs > 5 * 60 * 1000 && durationMs <= 10 * 60 * 1000) {
+  //     return now.getTime() - lastSent > 5 * 60 * 1000; // Gửi email nếu đã qua 5 phút từ lần gửi trước
+  //   } else if (durationMs > 10 * 60 * 1000 && durationMs <= 15 * 60 * 1000) {
+  //     return now.getTime() - lastSent > 10 * 60 * 1000; // Gửi email nếu đã qua 10 phút từ lần gửi trước
+  //   } else if (durationMs > 15 * 60 * 1000) {
+  //     return now.getTime() - lastSent > 15 * 60 * 1000; // Gửi email nếu đã qua 15 phút từ lần gửi trước
+  //   }
+
+  //   return false;
+  // }
+
+  // // Hàm gửi email
+  // private async sendLastLoginEmail(user: User, durationMs: number): Promise<void> {
+  //   // Tính toán thời gian đã trôi qua
+  //   const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+  //   const durationHours = Math.floor((durationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  //   const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  //   const duration = `${durationDays} ngày, ${durationHours} giờ, ${durationMinutes} phút trước`;
+
+  //   // Gửi email thông báo
+  //   const emailSubject = 'Thông báo về lần đăng nhập cuối cùng của bạn';
+  //   const emailTemplate = 'last-login';
+  //   const emailContext = {
+  //     fullName: user.fullName,
+  //     lastLoginAt: user.lastLoginAt.toLocaleString('vi-VN'),
+  //     duration,
+  //   };
+
+  //   await this.MailService.sendMail(user.email, emailSubject, emailTemplate, emailContext);
+  // }
+  //#endregion checkLastLoginForAllUsers
+
+
+
+
+
 }
