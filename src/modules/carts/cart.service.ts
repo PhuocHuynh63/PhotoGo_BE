@@ -5,6 +5,7 @@ import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
+import { BadRequestException } from '@nestjs/common/exceptions';
 
 @Injectable()
 export class CartService {
@@ -20,16 +21,26 @@ export class CartService {
     return await this.cartRepository.save(cart);
   }
 
-  async addCartItem(addCartItemDto: AddCartItemDto): Promise<CartItem> {
-    const cart = await this.cartRepository.findOne({ where: { id: addCartItemDto.cartId } });
-
+  async addCartItem(data: { servicePackageId: string; cartId: string; userId: string }): Promise<CartItem> {
+    // Kiểm tra quyền sở hữu giỏ hàng
+    const cart = await this.cartRepository.findOne({ where: { id: data.cartId, userId: data.userId } });
     if (!cart) {
-      throw new NotFoundException(`Cart with ID ${addCartItemDto.cartId} not found`);
+      throw new NotFoundException('Cart not found or you do not have permission');
     }
-
-    const cartItem = this.cartItemRepository.create(addCartItemDto);
-    cartItem.cart = cart;
-
+  
+    // Kiểm tra trùng lặp service_package_id
+    const existingItem = await this.cartItemRepository.findOne({
+      where: { cartId: data.cartId, servicePackageId: data.servicePackageId },
+    });
+    if (existingItem) {
+      throw new BadRequestException('This service package is already in the cart');
+    }
+  
+    // Tạo cart item mới
+    const cartItem = this.cartItemRepository.create({
+      cartId: data.cartId,
+      servicePackageId: data.servicePackageId,
+    });
     return await this.cartItemRepository.save(cartItem);
   }
 
