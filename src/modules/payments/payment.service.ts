@@ -97,7 +97,9 @@ export class PaymentService {
         transactionId: orderCode.toString(),
       });
 
-      return paymentLinkRes.checkoutUrl;
+      return {
+        checkoutUrl: paymentLinkRes.checkoutUrl,
+      };
     } catch (error) {
       console.error('PayOS error:', error);
       throw new Error('Failed to create payment link');

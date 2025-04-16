@@ -39,9 +39,6 @@ export class User {
   @UpdateDateColumn({ name: 'last_login_at', type: 'timestamptz' })
   lastLoginAt: Date;
 
-  @UpdateDateColumn({ name: 'send_mail_voucher_at', type: 'timestamptz' })
-  sendMailVoucherAt: Date;
-
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
