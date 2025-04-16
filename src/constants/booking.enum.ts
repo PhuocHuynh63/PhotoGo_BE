@@ -29,6 +29,7 @@ export enum PaymentMethod {
   CARD = 'thẻ',
   BANK_TRANSFER = 'chuyển khoản ngân hàng',
   E_WALLET = 'ví điện tử',
+  PAYOS = 'PAYOS',
 }
 
 export enum PaymentStatus {
