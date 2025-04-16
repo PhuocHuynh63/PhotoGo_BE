@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Like } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { Location } from '../locations/entities/location.entity';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
+import { slugify } from 'src/utils/utils';
+
 
 @Injectable()
 export class VendorService {
@@ -14,55 +16,46 @@ export class VendorService {
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   //#region create
   async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
-    return await this.dataSource.transaction(async (manager) => {
-      // Check if the category exists
-      const category = await manager.getRepository(Category).findOne({
+    return this.dataSource.transaction(async (manager) => {
+      const categoryRepo = manager.getRepository(Category);
+      const vendorRepo = manager.getRepository(Vendor);
+      const locationRepo = manager.getRepository(Location);
+
+      const category = await categoryRepo.findOne({
         where: { id: createVendorDto.category_id },
       });
       if (!category) {
-        throw new NotFoundException(`Category with ID ${createVendorDto.category_id} not found`);
+        throw new NotFoundException(`Không tìm thấy danh mục với ID ${createVendorDto.category_id}`);
       }
 
-      // Check if the slug is already in use
-      const existingVendor = await manager.getRepository(Vendor).findOne({
-        where: { slug: createVendorDto.slug },
-      });
-      if (existingVendor) {
-        throw new BadRequestException(`Slug ${createVendorDto.slug} is already in use`);
-      }
+      // Sử dụng hàm generateUniqueSlug của chính class này
+      const uniqueSlug = await this.generateUniqueSlug(vendorRepo, createVendorDto.name);
 
-      // Create the vendor
-      const vendor = manager.getRepository(Vendor).create({
+      const vendor = vendorRepo.create({
         name: createVendorDto.name,
-        slug: createVendorDto.slug,
+        slug: uniqueSlug,
         category,
         description: createVendorDto.description,
         status: createVendorDto.status || VendorStatus.ACTIVE,
       });
 
-      const savedVendor = await manager.getRepository(Vendor).save(vendor);
+      const savedVendor = await vendorRepo.save(vendor);
 
-      // Create locations and associate them with the vendor
-      if (createVendorDto.locations && createVendorDto.locations.length > 0) {
+      if (createVendorDto.locations?.length) {
         const locations = createVendorDto.locations.map((locationDto) =>
-          manager.getRepository(Location).create({
-            address: locationDto.address,
-            city: locationDto.city,
-            province: locationDto.province,
-            latitude: locationDto.latitude,
-            longitude: locationDto.longitude,
+          locationRepo.create({
+            ...locationDto,
             vendor: savedVendor,
           }),
         );
-        await manager.getRepository(Location).save(locations);
+        await locationRepo.save(locations);
       }
 
-      // Reload the vendor with its relations
-      return manager.getRepository(Vendor).findOne({
+      return vendorRepo.findOne({
         where: { id: savedVendor.id },
         relations: ['category', 'locations'],
       });
@@ -133,4 +126,38 @@ export class VendorService {
     return vendor;
   }
   //#endregion findOne
+
+  //#region until generateUniqueSlug
+  private async generateUniqueSlug(
+    vendorRepo: Repository<Vendor>,
+    name: string,
+  ): Promise<string> {
+    const baseSlug = slugify(name);
+
+    // Lấy tất cả các slug có dạng bắt đầu bằng baseSlug
+    const existingVendors = await vendorRepo.find({
+      select: ['slug'],
+      where: { slug: Like(`${baseSlug}%`) },
+    });
+    const existingSlugs = existingVendors.map(vendor => vendor.slug);
+
+    if (!existingSlugs.includes(baseSlug)) {
+      return baseSlug;
+    }
+
+    let maxSuffix = 0;
+    for (const slug of existingSlugs) {
+      const parts = slug.split('-');
+      const lastPart = parts[parts.length - 1];
+      const suffix = parseInt(lastPart, 10);
+      if (!isNaN(suffix)) {
+        maxSuffix = Math.max(maxSuffix, suffix);
+      }
+    }
+
+    return `${baseSlug}-${maxSuffix + 1}`;
+  }
+  //#endregion until generateUniqueSlug
+
+
 }

@@ -5,10 +5,26 @@ export class CreateLocationDto {
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
-    example: '123 Nguyễn Trãi, Quận 5',
+    example: '321 Phạm Văn Đồng',
     description: 'Address of the location',
   })
   address: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty({
+    example: 'Thủ Đức',
+    description: 'District of the location',
+  })
+  district: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty({
+    example: 'Linh Tây',
+    description: 'Ward of the location',
+  })
+  ward: string;
 
   @IsString()
   @IsNotEmpty()
@@ -31,7 +47,7 @@ export class CreateLocationDto {
   @IsNumber()
   @IsOptional()
   @ApiProperty({
-    example: 10.7769,
+    example: 10.849100,
     description: 'Latitude of the location',
     required: false,
   })
@@ -40,9 +56,10 @@ export class CreateLocationDto {
   @IsNumber()
   @IsOptional()
   @ApiProperty({
-    example: 106.7009,
+    example: 106.772400,
     description: 'Longitude of the location',
     required: false,
   })
   longitude?: number;
+
 }

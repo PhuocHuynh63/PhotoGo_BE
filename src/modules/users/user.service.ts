@@ -332,7 +332,6 @@ export class UserService {
   }
   //#endregion exportUsers
 
-
   //#region auto send mail
   /**
    * Cron job để kiểm tra thời gian đăng nhập cuối cùng của tất cả người dùng
@@ -341,12 +340,11 @@ export class UserService {
   // @Cron('0 */5 * * * *') // Chạy mỗi 5 phút
   // async checkLastLoginForAllUsers(): Promise<void> {
   //   const now = new Date();
-  //   Logger.log('Cron job chạy lúc:', now.toLocaleString('vi-VN'));
 
   //   // Lấy danh sách người dùng cần gửi email
   //   const users = await this.userRepository
   //     .createQueryBuilder('user')
-  //     .select(['user.id', 'user.email', 'user.fullName', 'user.lastLoginAt', 'user.sendMailVoucherAt'])
+  //     .select(['user.id', 'user.email', 'user.fullName', 'user.lastLoginAt'])
   //     .where('user.lastLoginAt IS NOT NULL') // Chỉ lấy người dùng có lastLoginAt
   //     .getMany();
 
@@ -356,55 +354,50 @@ export class UserService {
   //     // Kiểm tra các mốc thời gian và gửi email nếu cần
   //     if (this.shouldSendEmail(user, durationMs)) {
   //       await this.sendLastLoginEmail(user, durationMs);
-
-  //       // Cập nhật sendMailVoucherAt sau khi gửi email
-  //       user.sendMailVoucherAt = now;
-  //       await this.userRepository.save(user);
   //     }
   //   }
   // }
 
-  // // Hàm kiểm tra xem có nên gửi email hay không
-  // private shouldSendEmail(user: User, durationMs: number): boolean {
-  //   const now = new Date();
-  //   const lastSent = user.sendMailVoucherAt ? user.sendMailVoucherAt.getTime() : 0;
+  // Hàm kiểm tra xem có nên gửi email hay không
+  private shouldSendEmail(user: User, durationMs: number): boolean {
+    // Các mốc thời gian tính bằng mili-giây
+    const fiveMinutes = 5 * 60 * 1000;
+    const tenMinutes = 10 * 60 * 1000;
+    const fifteenMinutes = 15 * 60 * 1000;
 
-  //   // Kiểm tra các mốc thời gian
-  //   if (durationMs > 5 * 60 * 1000 && durationMs <= 10 * 60 * 1000) {
-  //     return now.getTime() - lastSent > 5 * 60 * 1000; // Gửi email nếu đã qua 5 phút từ lần gửi trước
-  //   } else if (durationMs > 10 * 60 * 1000 && durationMs <= 15 * 60 * 1000) {
-  //     return now.getTime() - lastSent > 10 * 60 * 1000; // Gửi email nếu đã qua 10 phút từ lần gửi trước
-  //   } else if (durationMs > 15 * 60 * 1000) {
-  //     return now.getTime() - lastSent > 15 * 60 * 1000; // Gửi email nếu đã qua 15 phút từ lần gửi trước
-  //   }
+    // Kiểm tra các mốc thời gian dựa trên durationMs
+    if (durationMs > fiveMinutes && durationMs <= tenMinutes) {
+      return true; // Gửi email cho mốc 5 phút
+    } else if (durationMs > tenMinutes && durationMs <= fifteenMinutes) {
+      return true; // Gửi email cho mốc 10 phút
+    } else if (durationMs > fifteenMinutes) {
+      return true; // Gửi email cho mốc 15 phút hoặc lâu hơn
+    }
 
-  //   return false;
-  // }
+    return false; // Không gửi email nếu không nằm trong các mốc thời gian
+  }
 
-  // // Hàm gửi email
-  // private async sendLastLoginEmail(user: User, durationMs: number): Promise<void> {
-  //   // Tính toán thời gian đã trôi qua
-  //   const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
-  //   const durationHours = Math.floor((durationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  //   const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+  // Hàm gửi email
+  private async sendLastLoginEmail(user: User, durationMs: number): Promise<void> {
+    // Tính toán thời gian đã trôi qua
+    const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+    const durationHours = Math.floor((durationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
 
-  //   const duration = `${durationDays} ngày, ${durationHours} giờ, ${durationMinutes} phút trước`;
+    const duration = `${durationDays} ngày, ${durationHours} giờ, ${durationMinutes} phút trước`;
 
-  //   // Gửi email thông báo
-  //   const emailSubject = 'Thông báo về lần đăng nhập cuối cùng của bạn';
-  //   const emailTemplate = 'last-login';
-  //   const emailContext = {
-  //     fullName: user.fullName,
-  //     lastLoginAt: user.lastLoginAt.toLocaleString('vi-VN'),
-  //     duration,
-  //   };
+    // Gửi email thông báo
+    const emailSubject = 'Thông báo về lần đăng nhập cuối cùng của bạn';
+    const emailTemplate = 'last-login';
+    const emailContext = {
+      fullName: user.fullName,
+      lastLoginAt: user.lastLoginAt.toLocaleString('vi-VN'),
+      duration,
+    };
 
-  //   await this.MailService.sendMail(user.email, emailSubject, emailTemplate, emailContext);
-  // }
+    await this.MailService.sendMail(user.email, emailSubject, emailTemplate, emailContext);
+  }
   //#endregion checkLastLoginForAllUsers
-
-
-
 
 
 }
