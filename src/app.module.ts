@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -19,17 +20,27 @@ import { LocationModule } from './modules/locations/location.module';
 import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
 import { PointModule } from './modules/points/point.module';
 import { VoucherModule } from './modules/vouchers/voucher.module';
+import { WalletModule } from './modules/wallets/wallet.module';
 import { CommentModule } from './modules/comments/comment.module';
+import { RefundModule } from './modules/refunds/refund.module';
+import { BookingModule } from './modules/bookings/booking.module';
+import { CartModule } from './modules/carts/cart.module';
+import { PaymentModule } from './modules/payments/payment.module';  
+import { PayosModule } from './3rdService/payos/payos.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 
 import * as Handlebars from 'handlebars';
-import * as moment from 'moment';
+import moment from 'moment';
 import { join } from 'path';
 import * as fs from 'fs';
 import { UploadModule } from './3rdService/upload/upload.module';
+import { InvoiceModule } from './modules/invoices/invoice.module';
+import { WishlistModule } from './modules/wishlists/wishlist.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { SupportTicketsModule } from './modules/support_tickets/support_tickets.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -64,6 +75,7 @@ if (!fs.existsSync(templateDir)) {
     ConfigModule.forRoot({
       isGlobal: true, // Cho phép dùng process.env ở mọi nơi
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST,
@@ -74,6 +86,7 @@ if (!fs.existsSync(templateDir)) {
       entities: [User, Role], // Đăng ký cả User và Role entity
       autoLoadEntities: true,
       synchronize: false, // Bật true chỉ khi đang dev local
+      namingStrategy:  new SnakeNamingStrategy(),
     }),
 
     MailerModule.forRootAsync({
@@ -116,6 +129,15 @@ if (!fs.existsSync(templateDir)) {
     VoucherModule,
     PointModule,
     VoucherUserModule,
+    BookingModule,
+    InvoiceModule,
+    PaymentModule,
+    PayosModule,
+    RefundModule,
+    WalletModule,
+    CartModule,
+    WishlistModule,
+    SupportTicketsModule,
   ],
   controllers: [AppController],
   providers: [

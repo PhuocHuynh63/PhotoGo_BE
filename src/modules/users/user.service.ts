@@ -1,19 +1,20 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ConsoleLogger, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
-import { Role } from '../roles/entities/role.entity';
 import { RoleService } from '../roles/role.service';
-
 import { hashPasswordHelper } from 'src/utils/utils';
 import { CreateAuthDto } from '../auth/dto/create-auth.dto';
-
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { FindUserDto } from './dto/admin/find-user.dto';
+import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
+import { Cron } from '@nestjs/schedule';
+import { log } from 'console';
+import { logger } from 'handlebars';
 
 
 @Injectable()
@@ -116,6 +117,35 @@ export class UserService {
     return this.userRepository.save(user);
   }
   //#endregion updateUserByAdmin
+
+  //#region updateStatus
+  async updateStatus(id: string, status: string): Promise<User> {
+    const user = await this.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`Người dùng với ID ${id} không tồn tại`);
+    }
+    user.status = status;
+    return this.userRepository.save(user);
+  }
+  //#endregion updateStatus
+
+  //#region updateRank
+  async updateRank(id: string, rank: string): Promise<User> {
+    const user = await this.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`Người dùng với ID ${id} không tồn tại`);
+    }
+    user.rank = rank;
+    return this.userRepository.save(user);
+  }
+  //#endregion updateRank
+
+  //#region update loginAt
+  async updateLoginAt(user: User): Promise<User> {
+    user.lastLoginAt = new Date();
+    return this.userRepository.save(user);
+  }
+  //#endregion update loginAt
 
   //#region remove
   async remove(id: string): Promise<void> {
@@ -245,60 +275,129 @@ export class UserService {
   }
   //#endregion Count user by rank
 
-//#region Get all ranks with count
-async getAllRank(): Promise<{ rank: string; count: number }[]> {
-  const rankCounts = await this.userRepository
-    .createQueryBuilder('user')
-    .select('user.rank', 'rank') // Chọn cột rank
-    .addSelect('COUNT(user.id)', 'count') // Đếm số lượng user theo rank
-    .groupBy('user.rank') // Nhóm theo rank
-    .getRawMany();
+  //#region Get all ranks with count
+  async getAllRank(): Promise<{ rank: string; count: number }[]> {
+    const rankCounts = await this.userRepository
+      .createQueryBuilder('user')
+      .select('user.rank', 'rank') // Chọn cột rank
+      .addSelect('COUNT(user.id)', 'count') // Đếm số lượng user theo rank
+      .groupBy('user.rank') // Nhóm theo rank
+      .getRawMany();
 
-  // Định dạng kết quả trả về
-  return rankCounts.map((item) => ({
-    rank: item.rank,
-    count: Number(item.count), // Chuyển count từ string sang number
-  }));
-}
-//#endregion Get all ranks with count
+    // Định dạng kết quả trả về
+    return rankCounts.map((item) => ({
+      rank: item.rank,
+      count: Number(item.count), // Chuyển count từ string sang number
+    }));
+  }
+  //#endregion Get all ranks with count
 
-//#region exportUsers
-async exportUsers(query: FindUserDto): Promise<User[]> {
-  const queryBuilder = this.userRepository.createQueryBuilder('user');
+  //#region exportUsers
+  async exportUsers(query: FindUserDto): Promise<User[]> {
+    const queryBuilder = this.userRepository.createQueryBuilder('user');
 
-  // Thêm join để lấy thông tin role
-  queryBuilder.leftJoinAndSelect('user.role', 'role');
+    // Thêm join để lấy thông tin role
+    queryBuilder.leftJoinAndSelect('user.role', 'role');
 
-  // Áp dụng bộ lọc tương tự như findAll
-  if (query.term) {
-    queryBuilder.andWhere(
-      '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
-      { term: `%${query.term}%` },
-    );
+    // Áp dụng bộ lọc tương tự như findAll
+    if (query.term) {
+      queryBuilder.andWhere(
+        '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
+        { term: `%${query.term}%` },
+      );
+    }
+
+    if (query.status) {
+      queryBuilder.andWhere('user.status = :status', { status: query.status });
+    }
+
+    if (query.rank) {
+      queryBuilder.andWhere('user.rank = :rank', { rank: query.rank });
+    }
+
+    if (query.auth) {
+      queryBuilder.andWhere('user.auth = :auth', { auth: query.auth });
+    }
+
+    // Sắp xếp
+    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank'];
+    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
+    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+
+    queryBuilder.orderBy(`user.${sortField}`, sortDirection);
+
+    // Lấy tất cả dữ liệu (không phân trang)
+    const users = await queryBuilder.getMany();
+    return users;
+  }
+  //#endregion exportUsers
+
+  //#region auto send mail
+  /**
+   * Cron job để kiểm tra thời gian đăng nhập cuối cùng của tất cả người dùng
+   * và gửi email thông báo nếu thời gian lớn hơn 5 phút.
+  */
+  // @Cron('0 */5 * * * *') // Chạy mỗi 5 phút
+  // async checkLastLoginForAllUsers(): Promise<void> {
+  //   const now = new Date();
+
+  //   // Lấy danh sách người dùng cần gửi email
+  //   const users = await this.userRepository
+  //     .createQueryBuilder('user')
+  //     .select(['user.id', 'user.email', 'user.fullName', 'user.lastLoginAt'])
+  //     .where('user.lastLoginAt IS NOT NULL') // Chỉ lấy người dùng có lastLoginAt
+  //     .getMany();
+
+  //   for (const user of users) {
+  //     const durationMs = now.getTime() - user.lastLoginAt.getTime();
+
+  //     // Kiểm tra các mốc thời gian và gửi email nếu cần
+  //     if (this.shouldSendEmail(user, durationMs)) {
+  //       await this.sendLastLoginEmail(user, durationMs);
+  //     }
+  //   }
+  // }
+
+  // Hàm kiểm tra xem có nên gửi email hay không
+  private shouldSendEmail(user: User, durationMs: number): boolean {
+    // Các mốc thời gian tính bằng mili-giây
+    const fiveMinutes = 5 * 60 * 1000;
+    const tenMinutes = 10 * 60 * 1000;
+    const fifteenMinutes = 15 * 60 * 1000;
+
+    // Kiểm tra các mốc thời gian dựa trên durationMs
+    if (durationMs > fiveMinutes && durationMs <= tenMinutes) {
+      return true; // Gửi email cho mốc 5 phút
+    } else if (durationMs > tenMinutes && durationMs <= fifteenMinutes) {
+      return true; // Gửi email cho mốc 10 phút
+    } else if (durationMs > fifteenMinutes) {
+      return true; // Gửi email cho mốc 15 phút hoặc lâu hơn
+    }
+
+    return false; // Không gửi email nếu không nằm trong các mốc thời gian
   }
 
-  if (query.status) {
-    queryBuilder.andWhere('user.status = :status', { status: query.status });
+  // Hàm gửi email
+  private async sendLastLoginEmail(user: User, durationMs: number): Promise<void> {
+    // Tính toán thời gian đã trôi qua
+    const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+    const durationHours = Math.floor((durationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    const duration = `${durationDays} ngày, ${durationHours} giờ, ${durationMinutes} phút trước`;
+
+    // Gửi email thông báo
+    const emailSubject = 'Thông báo về lần đăng nhập cuối cùng của bạn';
+    const emailTemplate = 'last-login';
+    const emailContext = {
+      fullName: user.fullName,
+      lastLoginAt: user.lastLoginAt.toLocaleString('vi-VN'),
+      duration,
+    };
+
+    await this.MailService.sendMail(user.email, emailSubject, emailTemplate, emailContext);
   }
+  //#endregion checkLastLoginForAllUsers
 
-  if (query.rank) {
-    queryBuilder.andWhere('user.rank = :rank', { rank: query.rank });
-  }
 
-  if (query.auth) {
-    queryBuilder.andWhere('user.auth = :auth', { auth: query.auth });
-  }
-
-  // Sắp xếp
-  const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank'];
-  const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
-  const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
-
-  queryBuilder.orderBy(`user.${sortField}`, sortDirection);
-
-  // Lấy tất cả dữ liệu (không phân trang)
-  const users = await queryBuilder.getMany();
-  return users;
-}
-//#endregion exportUsers
 }
