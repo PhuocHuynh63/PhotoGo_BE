@@ -16,15 +16,6 @@ export class CreateVendorDto {
 
   @IsString()
   @IsNotEmpty()
-  @Length(1, 100)
-  @ApiProperty({
-    example: 'studio-anh-sang',
-    description: 'Unique slug of the vendor',
-  })
-  slug: string;
-
-  @IsString()
-  @IsNotEmpty()
   @ApiProperty({
     example: 'uuid_of_category',
     description: 'Category ID of the vendor',

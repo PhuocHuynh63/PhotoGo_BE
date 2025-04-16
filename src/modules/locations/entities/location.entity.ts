@@ -9,9 +9,15 @@ export class Location {
   @ManyToOne(() => Vendor, (vendor) => vendor.locations, { nullable: false })
   @JoinColumn({ name: 'vendor_id' })
   vendor: Vendor;
-  
+
   @Column({ type: 'text', nullable: false })
   address: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: false })
+  district: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: false })
+  ward: string;
 
   @Column({ type: 'varchar', length: 50, nullable: false })
   city: string;
