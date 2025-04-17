@@ -1,10 +1,13 @@
 import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
 import { VoucherService } from './voucher.service';
 import { CreateVoucherDto } from './dto/create-voucher.dto';
+import { CreateVoucherUserDto } from './dto/create-voucher.dto';
+import { FindVoucherDto } from './dto/find-voucher.dto';
+import { FindVoucherUserDto } from './dto/find-voucher.dto';
 import { Voucher } from './entities/voucher.entity';
+import { VoucherUser } from './entities/voucher-user.entity';
 import { Public } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { FindVoucherDto } from './dto/find-voucher.dto';
 
 @ApiTags('Vouchers')
 @Controller('vouchers')
@@ -12,12 +15,42 @@ import { FindVoucherDto } from './dto/find-voucher.dto';
 export class VoucherController {
   constructor(private readonly voucherService: VoucherService) {}
 
+  //#region Voucher Endpoints
   @Post()
   @ApiOperation({ summary: 'Create a new voucher (Protected)' })
   @ApiResponse({ status: 201, description: 'Voucher created successfully', type: Voucher })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async create(@Body() createVoucherDto: CreateVoucherDto): Promise<Voucher> {
-    return this.voucherService.create(createVoucherDto);
+  async createVoucher(@Body() createVoucherDto: CreateVoucherDto): Promise<Voucher> {
+    return this.voucherService.createVoucher(createVoucherDto);
+  }
+
+  @Public()
+  @Get('user')
+  @ApiOperation({ summary: 'Get all voucher-user mappings (Public)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of voucher-user mappings with pagination',
+    type: [VoucherUser],
+  })
+  async findAllVoucherUsers(@Query() query: FindVoucherUserDto): Promise<{
+    data: VoucherUser[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    return this.voucherService.findAllVoucherUsers(query);
+  }
+
+  @Public()
+  @Get('user/:voucherId/:userId')
+  @ApiOperation({ summary: 'Get a voucher-user mapping by voucherId and userId (Public)' })
+  @ApiResponse({ status: 200, description: 'VoucherUser found', type: VoucherUser })
+  @ApiResponse({ status: 404, description: 'VoucherUser not found' })
+  async findOneVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<VoucherUser> {
+    return this.voucherService.findOneVoucherUser(voucherId, userId);
   }
 
   @Public()
@@ -28,7 +61,7 @@ export class VoucherController {
     description: 'List of vouchers with pagination',
     type: [Voucher],
   })
-  async findAll(@Query() query: FindVoucherDto): Promise<{
+  async findAllVouchers(@Query() query: FindVoucherDto): Promise<{
     data: Voucher[];
     pagination: {
       current: number;
@@ -37,7 +70,7 @@ export class VoucherController {
       totalItem: number;
     };
   }> {
-    return this.voucherService.findAll(query);
+    return this.voucherService.findAllVouchers(query);
   }
 
   @Public()
@@ -45,7 +78,26 @@ export class VoucherController {
   @ApiOperation({ summary: 'Get a voucher by ID (Public)' })
   @ApiResponse({ status: 200, description: 'Voucher found', type: Voucher })
   @ApiResponse({ status: 404, description: 'Voucher not found' })
-  async findOne(@Param('id') id: string): Promise<Voucher> {
-    return this.voucherService.findOne(id);
+  async findOneVoucher(@Param('id') id: string): Promise<Voucher> {
+    return this.voucherService.findOneVoucher(id);
   }
+  //#endregion Voucher Endpoints
+
+  //#region VoucherUser Endpoints
+  @Post('user')
+  @ApiOperation({ summary: 'Assign a voucher to a user (Protected)' })
+  @ApiResponse({ status: 201, description: 'Voucher assigned successfully', type: VoucherUser })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async createVoucherUser(@Body() createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
+    return this.voucherService.createVoucherUser(createVoucherUserDto);
+  }
+
+  @Post('user/:voucherId/:userId/use')
+  @ApiOperation({ summary: 'Use a voucher for a user (Protected)' })
+  @ApiResponse({ status: 200, description: 'Voucher used successfully', type: VoucherUser })
+  @ApiResponse({ status: 400, description: 'Voucher is not valid or has been used' })
+  async useVoucher(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<VoucherUser> {
+    return this.voucherService.useVoucher(voucherId, userId);
+  }
+  //#endregion VoucherUser Endpoints
 }

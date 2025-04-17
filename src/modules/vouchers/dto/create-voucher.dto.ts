@@ -1,5 +1,5 @@
 import { ApiProperty, ApiResponse } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, Length, IsNumber, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, Length, IsNumber, IsDateString, IsOptional, IsEnum } from 'class-validator';
 import { VoucherUserStatusEnum, VoucherTypeDiscount } from 'src/constants/voucher.enum';
 
 export class CreateVoucherDto {
@@ -63,4 +63,18 @@ export class CreateVoucherDto {
     example: VoucherUserStatusEnum.ACTIVE,
   })
   status: string;
+}
+
+export class CreateVoucherUserDto {
+  @IsString()
+  @IsNotEmpty()
+  user_id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  voucher_id: string;
+
+  @IsOptional()
+  @IsEnum(VoucherUserStatusEnum)
+  status // Optional field, default to 'available' if not provided
 }

@@ -26,6 +26,22 @@ export class WishlistController {
     return await this.wishlistService.addWishlistItem(addWishlistItemDto);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'Retrieve all wishlists' })
+  @ApiResponse({ status: 200, description: 'List of all wishlists', type: [Wishlist] })
+  async findAllWishlists(): Promise<Wishlist[]> {
+    return await this.wishlistService.findAllWishlists();
+  }
+
+  @Get(':id/items')
+  @ApiOperation({ summary: 'Retrieve all items in a wishlist' })
+  @ApiResponse({ status: 200, description: 'List of items in the wishlist', type: [WishlistItem] })
+  @ApiResponse({ status: 404, description: 'Wishlist not found' })
+  async findWishlistItems(@Param('id') id: string): Promise<WishlistItem[]> {
+    const wishlist = await this.wishlistService.findWishlistById(id);
+    return wishlist.items;
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Retrieve a wishlist by ID' })
   @ApiResponse({ status: 200, description: 'Wishlist details', type: Wishlist })
@@ -33,20 +49,4 @@ export class WishlistController {
   async findWishlistById(@Param('id') id: string): Promise<Wishlist> {
     return await this.wishlistService.findWishlistById(id);
   }
-
-  @Get(':id/items')
-  @ApiOperation({ summary: 'Retrieve all items in a wishlist' })
-  @ApiResponse({ status: 200, description: 'List of items in the wishlist', type: [WishlistItem] })
-  @ApiResponse({ status: 404, description: 'Wishlist not found' })
-    async findWishlistItems(@Param('id') id: string): Promise<WishlistItem[]> {
-        const wishlist = await this.wishlistService.findWishlistById(id);
-        return wishlist.items;
-    }
-
-  @Get()
-  @ApiOperation({ summary: 'Retrieve all wishlists' })
-  @ApiResponse({ status: 200, description: 'List of all wishlists', type: [Wishlist] })
-    async findAllWishlists(): Promise<Wishlist[]> {
-        return await this.wishlistService.findAllWishlists();
-    }
 }

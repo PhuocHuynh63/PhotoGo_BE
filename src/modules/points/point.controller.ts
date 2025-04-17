@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Query, Param, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
 import { PointService } from './point.service';
-import { CreatePointDto } from './dto/create-point.dto';
+import { CreatePointDto, CreatePointTransactionDto } from './dto/create-point.dto';
 import { Point } from './entities/point.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindPointDto } from './dto/find-point.dto';
+import { PointTransaction } from './entities/point-transaction.entity';
 
 @ApiTags('Points')
 @Controller('points')
@@ -19,6 +20,25 @@ export class PointController {
   @ResponseMessage('Tạo điểm thành công')
   async create(@Body() createPointDto: CreatePointDto): Promise<Point> {
     return this.pointService.create(createPointDto);
+  }
+
+  @Public()
+  @Get('transactions')
+  @ApiOperation({ summary: 'Get all point transactions' })
+  @ApiResponse({ status: 200, description: 'List of all transactions', type: [PointTransaction] })
+  @ApiResponse({ status: 404, description: 'No transactions found' })
+  @ResponseMessage('Lấy danh sách giao dịch thành công')
+  async findAllTransactions(): Promise<PointTransaction[]> {
+    return this.pointService.findAllTransactions();
+  }
+
+  @Public()
+  @Get('transactions/:pointId')
+  @ApiOperation({ summary: 'Get transactions by point ID' })
+  @ApiResponse({ status: 200, description: 'List of transactions for the given point ID', type: [PointTransaction] })
+  @ApiResponse({ status: 404, description: 'No transactions found for the given point ID' })
+  async findTransactionsByPointId(@Param('pointId') pointId: string): Promise<PointTransaction[]> {
+    return this.pointService.findTransactionsByPointId(pointId);
   }
 
   @Public()
@@ -50,5 +70,12 @@ export class PointController {
   @ResponseMessage('Lấy thông tin điểm thành công')
   async findOne(@Param('id') id: string): Promise<Point> {
     return this.pointService.findOne(id);
+  }
+
+  @Post('transactions')
+  @ApiOperation({ summary: 'Create a new point transaction' })
+  @ApiResponse({ status: 201, description: 'Transaction created successfully', type: PointTransaction })
+  async createTransaction(@Body() createPointTransactionDto: CreatePointTransactionDto): Promise<PointTransaction> {
+    return this.pointService.createTransaction(createPointTransactionDto);
   }
 }
