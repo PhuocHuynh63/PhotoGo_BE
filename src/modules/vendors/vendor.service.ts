@@ -5,20 +5,28 @@ import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { Location } from '../locations/entities/location.entity';
-import { CreateVendorDto } from './dto/create-vendor.dto';
+import { VendorManager } from './entities/vendor-manager.entity';
+import { VendorLike } from './entities/vendor-like.entity';
+import { VendorAvailability } from './entities/vendor-availability.entity';
+import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { slugify } from 'src/utils/utils';
-
 
 @Injectable()
 export class VendorService {
   constructor(
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(VendorManager)
+    private readonly vendorManagerRepository: Repository<VendorManager>,
+    @InjectRepository(VendorLike)
+    private readonly vendorLikeRepository: Repository<VendorLike>,
+    @InjectRepository(VendorAvailability)
+    private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
-  //#region create
+  //#region Vendor
   async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
     return this.dataSource.transaction(async (manager) => {
       const categoryRepo = manager.getRepository(Category);
@@ -29,10 +37,9 @@ export class VendorService {
         where: { id: createVendorDto.category_id },
       });
       if (!category) {
-        throw new NotFoundException(`Không tìm thấy danh mục với ID ${createVendorDto.category_id}`);
+        throw new NotFoundException(`Category with ID ${createVendorDto.category_id} not found`);
       }
 
-      // Sử dụng hàm generateUniqueSlug của chính class này
       const uniqueSlug = await this.generateUniqueSlug(vendorRepo, createVendorDto.name);
 
       const vendor = vendorRepo.create({
@@ -61,9 +68,7 @@ export class VendorService {
       });
     });
   }
-  //#endregion create
 
-  //#region findAll
   async findAll(query: FindVendorDto): Promise<{
     data: Vendor[];
     pagination: {
@@ -112,34 +117,52 @@ export class VendorService {
       },
     };
   }
-  //#endregion findAll
 
-  //#region findOne
   async findOne(id: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { id },
       relations: ['category', 'locations'],
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor với ID ${id} không tồn tại`);
+      throw new NotFoundException(`Vendor with ID ${id} not found`);
     }
     return vendor;
   }
-  //#endregion findOne
+  //#endregion Vendor
 
-  //#region until generateUniqueSlug
+  //#region VendorManager
+  async addManager(createVendorManagerDto: CreateVendorManagerDto): Promise<void> {
+    const manager = this.vendorManagerRepository.create(createVendorManagerDto);
+    await this.vendorManagerRepository.save(manager);
+  }
+  //#endregion VendorManager
+
+  //#region VendorLike
+  async likeVendor(createVendorLikeDto: CreateVendorLikeDto): Promise<void> {
+    const like = this.vendorLikeRepository.create(createVendorLikeDto);
+    await this.vendorLikeRepository.save(like);
+  }
+  //#endregion VendorLike
+
+  //#region VendorAvailability
+  async addAvailability(createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
+    const availability = this.vendorAvailabilityRepository.create(createVendorAvailabilityDto);
+    await this.vendorAvailabilityRepository.save(availability);
+  }
+  //#endregion VendorAvailability
+
+  //#region Utility
   private async generateUniqueSlug(
     vendorRepo: Repository<Vendor>,
     name: string,
   ): Promise<string> {
     const baseSlug = slugify(name);
 
-    // Lấy tất cả các slug có dạng bắt đầu bằng baseSlug
     const existingVendors = await vendorRepo.find({
       select: ['slug'],
       where: { slug: Like(`${baseSlug}%`) },
     });
-    const existingSlugs = existingVendors.map(vendor => vendor.slug);
+    const existingSlugs = existingVendors.map((vendor) => vendor.slug);
 
     if (!existingSlugs.includes(baseSlug)) {
       return baseSlug;
@@ -157,7 +180,5 @@ export class VendorService {
 
     return `${baseSlug}-${maxSuffix + 1}`;
   }
-  //#endregion until generateUniqueSlug
-
-
+  //#endregion Utility
 }
