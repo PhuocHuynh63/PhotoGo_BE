@@ -6,6 +6,7 @@ import { CreateAuthDto } from './dto/create-auth.dto';
 import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
+import { log } from 'console';
 
 
 @Injectable()
@@ -36,16 +37,16 @@ export class AuthService {
 
   //#region Login
   async login(user: any) {
-    const payload = { email: user.email, sub: user._id, fullname: user.fullname, role: user.role, image: user.image };
+    const payload = { email: user.email, sub: user.id, fullname: user.fullname, role: user.role, image: user.image };
+
     return {
       user: {
-        _id: user._id,
+        id: user.id,
         email: user.email,
         fullname: user.fullname,
         image: user.image,
         role: user.role,
       },
-      access_token: this.jwtService.sign(payload),
     };
   }
   //#endregion

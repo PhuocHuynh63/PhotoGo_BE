@@ -370,8 +370,8 @@ export class UserService {
       return true; // Gửi email cho mốc 5 phút
     } else if (durationMs > tenMinutes && durationMs <= fifteenMinutes) {
       return true; // Gửi email cho mốc 10 phút
-    } else if (durationMs > fifteenMinutes) {
-      return true; // Gửi email cho mốc 15 phút hoặc lâu hơn
+    } else if (durationMs > fifteenMinutes && durationMs <= fifteenMinutes + 5 * 60 * 1000) {
+      return true; // Gửi email cho mốc 15 phút (chỉ trong khoảng gần 15 phút)
     }
 
     return false; // Không gửi email nếu không nằm trong các mốc thời gian
