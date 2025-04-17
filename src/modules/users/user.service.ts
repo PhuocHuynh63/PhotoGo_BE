@@ -36,7 +36,13 @@ export class UserService {
       hashedPassword = await hashPasswordHelper(passwordHash);
     }
 
-    const role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
+    let role = null;
+    if (!createAuthDto.roleId) {
+      role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
+    } else {
+      role = await this.roleService.findOne(createAuthDto.roleId);
+    } // Tìm role theo roleId
+
 
     const user = this.userRepository.create({
       passwordHash: hashedPassword,

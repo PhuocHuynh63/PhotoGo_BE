@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../../modules/users/user.service';
 import { Role } from '../../modules/roles/entities/role.entity';
 import { RoleService } from 'src/modules/roles/role.service';
+import { UserStatus } from 'src/constants/user.enum';
 
 @Injectable()
 export class GoogleAuthService {
@@ -36,16 +37,16 @@ export class GoogleAuthService {
       // Nếu không tồn tại, tạo mới
 
       const createAuthDto = {
-        fullName: googleAuthDto.name, 
-        email: googleAuthDto.email, 
-        avatarUrl: googleAuthDto.avatar, 
+        fullName: googleAuthDto.name,
+        email: googleAuthDto.email,
+        avatarUrl: googleAuthDto.avatar,
         passwordHash: '',
-        phoneNumber: '', 
-        status: 'active', 
-        auth: 'google', 
+        phoneNumber: '',
+        status: UserStatus.ACTIVE,
+        auth: 'google',
       };
 
-      existingUser = await this.userService.create(createAuthDto); 
+      existingUser = await this.userService.create(createAuthDto);
     }
 
     // Tạo JWT token
