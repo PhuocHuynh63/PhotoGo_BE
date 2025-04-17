@@ -70,4 +70,32 @@ export class PayOSService {
       .digest('hex');
     return expected === signature;
   }
+
+  async refundPayment(paymentId: string, data: { amount: number; description: string }) {
+    const body = {
+      amount: data.amount,
+      reason: data.description, // PayOS gọi là "reason", không phải "description"
+    };
+  
+    try {
+      const res = await this.httpService.axiosRef.post(
+        `https://api.payos.money/v1/payment/payments/${paymentId}/refund`,
+        body,
+        {
+          headers: {
+            'x-client-id': this.clientId,
+            'x-api-key': this.apiKey,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+  
+      return {
+        amount: res.data.amount,
+        date: res.data.date,
+      };
+    } catch (error) {
+      throw new Error(error?.response?.data?.message || 'Failed to process refund with PayOS');
+    }
+  }  
 }

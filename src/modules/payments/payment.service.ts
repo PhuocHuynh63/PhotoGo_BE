@@ -2,7 +2,7 @@ import { Inject ,Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
-import { PaymentMethod, PaymentStatus } from '../../constants/booking.enum';
+import { InvoiceStatus, PaymentMethod, PaymentStatus } from '../../constants/booking.enum';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FindAllPaymentsDto } from './dto/find-all-payments.dto';
 import { Invoice } from '../invoices/entities/invoice.entity';
@@ -88,6 +88,7 @@ export class PaymentService {
 
     try {
       const paymentLinkRes = await this.payos.createPaymentLink(paymentLinkData);
+      console.log('Payment link response:', paymentLinkRes);
 
       await this.paymentRepository.save({
         invoiceId: invoiceId,
@@ -95,6 +96,7 @@ export class PaymentService {
         paymentMethod: PaymentMethod.PAYOS,
         status: PaymentStatus.PENDING,
         transactionId: orderCode.toString(),
+        paymentOSId: paymentLinkRes.paymentLinkId, // Lưu paymentId từ PayOS
       });
 
       return {
@@ -108,8 +110,9 @@ export class PaymentService {
 
   // handle PayOS webhook
   async handlePayOSWebhook(data: any) {
-    const { orderCode, status, transactionId } = data;
+    const { status, transactionId } = data;
     const payment = await this.paymentRepository.findOne({ where: { transactionId } });
+    const invoice = await this.invoiceRepo.findOne({ where: { id: payment.invoiceId } });
 
     if (!payment) {
       throw new NotFoundException(`Payment with transaction ID ${transactionId} not found`);
@@ -117,13 +120,16 @@ export class PaymentService {
 
     if (status === 'COMPLETED') {
       payment.status = PaymentStatus.COMPLETED;
+      invoice.status = InvoiceStatus.PAID;
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
+      invoice.status = InvoiceStatus.PENDING;
     } else {
       return;
     }
 
     await this.paymentRepository.save(payment);
+    await this.invoiceRepo.save(invoice);
   }
 
 }

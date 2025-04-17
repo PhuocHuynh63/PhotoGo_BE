@@ -4,7 +4,7 @@ import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FindAllPaymentsDto } from './dto/find-all-payments.dto';
 import { Payment } from './entities/payment.entity';
-import { CreatePayosDto } from './dto/create-payos.dto';
+import { PayOSWebhookDto } from './dto/payos-webhook.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth('access-token')
@@ -44,12 +44,13 @@ export class PaymentController {
     return this.paymentService.createPayOSLink(invoiceId);
   }
 
-  @Post('/webhook/payos')
-  @ApiOperation({ summary: 'Handle PayOS webhook' })
-  @ApiResponse({ status: 200, description: 'Webhook handled successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid webhook payload' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  async handlePayOSWebhook(@Body() payload: any): Promise<any> {
-    return this.paymentService.handlePayOSWebhook(payload);
-  }
+@Post('/webhook/payos')
+@ApiOperation({ summary: 'Handle PayOS webhook' })
+@ApiResponse({ status: 200, description: 'Webhook handled successfully' })
+@ApiResponse({ status: 400, description: 'Invalid webhook payload' })
+@ApiResponse({ status: 500, description: 'Internal server error' })
+async handlePayOSWebhook(@Body() payload: PayOSWebhookDto): Promise<any> {
+  return this.paymentService.handlePayOSWebhook(payload);
+}
+  
 }

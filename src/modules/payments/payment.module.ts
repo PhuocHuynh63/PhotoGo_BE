@@ -10,5 +10,6 @@ import { InvoiceModule } from '../invoices/invoice.module';
   imports: [TypeOrmModule.forFeature([Payment]), InvoiceModule, PayosModule],
   controllers: [PaymentController],
   providers: [PaymentService],
+  exports: [TypeOrmModule],
 })
 export class PaymentModule {}

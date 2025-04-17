@@ -36,6 +36,7 @@ export enum PaymentStatus {
   PENDING = 'chờ xử lý',
   COMPLETED = 'đã hoàn thành',
   FAILED = 'thất bại',
+  REFUNDED = 'đã hoàn tiền',
 }
 
 export enum RefundStatus {

@@ -1,15 +1,14 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
 export class CreateRefundDto {
-  @IsUUID()
-  @IsNotEmpty()
-  invoiceId: string;
-
   @IsNumber()
   @IsNotEmpty()
-  amount: number;
+  @ApiProperty({ description: 'The ID of the invoice to be refunded', example: 123 })
+  amount?: number;
 
   @IsString()
   @IsNotEmpty()
-  reason: string;
+  @ApiProperty({ description: 'The reason for the refund', example: 'Product defect' })
+  reason?: string;
 }
