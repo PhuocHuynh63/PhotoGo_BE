@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumberString } from 'class-validator';
+import { IsString, IsOptional, IsNumberString , IsUUID} from 'class-validator';
 
 export class FindPointDto {
   @IsNumberString()
@@ -46,4 +46,10 @@ export class FindPointDto {
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
+}
+
+export class FindPointTransactionDto {
+  @IsUUID()
+  @IsOptional()
+  pointId?: string;
 }

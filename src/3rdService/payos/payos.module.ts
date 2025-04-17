@@ -7,6 +7,6 @@ import { HttpModule } from '@nestjs/axios';
 @Module({
   imports: [ConfigModule, HttpModule],
   providers: [payosProvider,PayOSService],
-  exports: [payosProvider.provide],
+  exports: [payosProvider.provide,PayOSService],
 })
 export class PayosModule {}

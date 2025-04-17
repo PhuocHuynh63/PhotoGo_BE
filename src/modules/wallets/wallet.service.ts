@@ -58,12 +58,12 @@ export class WalletService {
   }
 
     async findTransactionsByWalletId(walletId: string): Promise<WalletTransaction[]> {
-        const wallet = await this.walletRepository.findOne({ where: { id: walletId } });
-    
+        const wallet = await this.walletRepository.findOne({ where: { id: walletId }, relations: ['transactions'] });
+
         if (!wallet) {
-        throw new NotFoundException(`Wallet with ID ${walletId} not found`);
+            throw new NotFoundException(`Wallet with ID ${walletId} not found`);
         }
-    
-        return await this.walletTransactionRepository.find({ where: { wallet } });
+
+        return wallet.transactions;
     }
 }
