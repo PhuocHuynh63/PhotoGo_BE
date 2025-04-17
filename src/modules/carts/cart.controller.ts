@@ -16,7 +16,7 @@ export class CartController {
   @Post()
   @ApiOperation({ summary: 'Create a new cart' })
   @ApiResponse({ status: 201, description: 'Cart created successfully', type: Cart })
-  async createCart(@Body() createCartDto: CreateCartDto,): Promise<Cart> {
+  async createCart(@Body() createCartDto: CreateCartDto): Promise<Cart> {
     return await this.cartService.createCart(createCartDto);
   }
 
@@ -29,16 +29,7 @@ export class CartController {
     @Param('cart_id') cartId: string,
     @Param('user_id') userId: string,
   ): Promise<CartItem> {
-    // Pass userId and cartId to the service along with the DTO
     return await this.cartService.addCartItem({ servicePackageId, cartId, userId });
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Retrieve a cart by ID' })
-  @ApiResponse({ status: 200, description: 'Cart details', type: Cart })
-  @ApiResponse({ status: 404, description: 'Cart not found' })
-  async findCartById(@Param('id') id: string): Promise<Cart> {
-    return await this.cartService.findCartById(id);
   }
 
   @Get()
@@ -62,5 +53,13 @@ export class CartController {
   @ApiResponse({ status: 404, description: 'Cart not found' })
   async findCartItemsByUserId(@Param('userId') userId: string): Promise<CartItem[]> {
     return await this.cartService.findCartItemsByUserId(userId);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Retrieve a cart by ID' })
+  @ApiResponse({ status: 200, description: 'Cart details', type: Cart })
+  @ApiResponse({ status: 404, description: 'Cart not found' })
+  async findCartById(@Param('id') id: string): Promise<Cart> {
+    return await this.cartService.findCartById(id);
   }
 }

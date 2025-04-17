@@ -12,13 +12,6 @@ import { WalletTransaction } from './entities/wallet-transaction.entity';
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
-    @Get()
-    @ApiOperation({ summary: 'Retrieve all wallets' })
-    @ApiResponse({ status: 200, description: 'List of wallets', type: [Wallet] })
-    async findAll(): Promise<Wallet[]> {
-        return await this.walletService.findAll();
-    }
-
   @Post()
   @ApiOperation({ summary: 'Create a new wallet' })
   @ApiResponse({ status: 201, description: 'Wallet created successfully', type: Wallet })
@@ -33,6 +26,21 @@ export class WalletController {
     return await this.walletService.createTransaction(createWalletTransactionDto);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'Retrieve all wallets' })
+  @ApiResponse({ status: 200, description: 'List of wallets', type: [Wallet] })
+  async findAll(): Promise<Wallet[]> {
+    return await this.walletService.findAll();
+  }
+
+  @Get(':id/transactions')
+  @ApiOperation({ summary: 'Retrieve all transactions for a wallet' })
+  @ApiResponse({ status: 200, description: 'List of transactions', type: [WalletTransaction] })
+  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  async findTransactionsByWalletId(@Param('id') id: string): Promise<WalletTransaction[]> {
+    return await this.walletService.findTransactionsByWalletId(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Retrieve a wallet by ID' })
   @ApiResponse({ status: 200, description: 'Wallet details', type: Wallet })
@@ -40,12 +48,4 @@ export class WalletController {
   async findWalletById(@Param('id') id: string): Promise<Wallet> {
     return await this.walletService.findWalletById(id);
   }
-
-    @Get(':id/transactions')
-    @ApiOperation({ summary: 'Retrieve all transactions for a wallet' })
-    @ApiResponse({ status: 200, description: 'List of transactions', type: [WalletTransaction] })
-    @ApiResponse({ status: 404, description: 'Wallet not found' })
-    async findTransactionsByWalletId(@Param('id') id: string): Promise<WalletTransaction[]> {
-        return await this.walletService.findTransactionsByWalletId(id);
-    }
 }

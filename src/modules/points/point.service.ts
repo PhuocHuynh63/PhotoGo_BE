@@ -2,14 +2,18 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Point } from './entities/point.entity';
-import { CreatePointDto } from './dto/create-point.dto';
+import { CreatePointDto , CreatePointTransactionDto} from './dto/create-point.dto';
 import { FindPointDto } from './dto/find-point.dto';
+import { PointTransaction } from './entities/point-transaction.entity';
+import { isUUID } from 'class-validator';
 
 @Injectable()
 export class PointService {
   constructor(
     @InjectRepository(Point)
     private readonly pointRepository: Repository<Point>,
+    @InjectRepository(PointTransaction)
+    private readonly pointTransactionRepository: Repository<PointTransaction>,
   ) {}
 
   //#region create
@@ -77,6 +81,9 @@ export class PointService {
 
   //#region findOne
   async findOne(id: string): Promise<Point> {
+    if (!isUUID(id)) {
+      throw new NotFoundException('ID không hợp lệ');
+    }
     const point = await this.pointRepository.findOne({
       where: { id },
       relations: ['user'],
@@ -87,4 +94,34 @@ export class PointService {
     return point;
   }
   //#endregion findOne
+
+  // PointTransaction Methods
+
+  //#region createTransaction
+  async createTransaction(createPointTransactionDto: CreatePointTransactionDto): Promise<PointTransaction> {
+    const transaction = this.pointTransactionRepository.create(createPointTransactionDto);
+    return this.pointTransactionRepository.save(transaction);
+  }
+  //#endregion createTransaction
+
+  //#region findAllTransactions
+  async findAllTransactions(): Promise<PointTransaction[]> {
+    return this.pointTransactionRepository.find({ relations: ['point'] });
+  }
+  //#endregion findAllTransactions
+
+  //#region findOneTransaction
+  async findTransactionsByPointId(pointId: string): Promise<PointTransaction[]> {
+    const transactions = await this.pointTransactionRepository.find({
+      where: { point: { id: pointId } },
+      relations: ['point'],
+    });
+
+    if (!transactions.length) {
+      throw new NotFoundException(`No transactions found for point ID: ${pointId}`);
+    }
+
+    return transactions;
+  }
+  //#endregion findOneTransaction
 }

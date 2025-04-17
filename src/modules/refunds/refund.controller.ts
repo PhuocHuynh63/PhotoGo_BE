@@ -9,7 +9,8 @@ import { Refund } from './entities/refund.entity';
 @ApiBearerAuth('access-token')
 @Controller('refunds')
 export class RefundController {
-  constructor(private readonly refundService: RefundService) {}
+  constructor(private readonly refundService: RefundService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new refund' })
@@ -32,4 +33,24 @@ export class RefundController {
   async findOne(@Param('id') id: string): Promise<Refund> {
     return await this.refundService.findOne(id);
   }
+
+  // @Post('/refund/:paymentId')
+  // @ApiOperation({ summary: 'Refund a payment' })
+  // @ApiResponse({ status: 200, description: 'Refund processed successfully' })
+  // @ApiResponse({ status: 404, description: 'Payment not found' })
+  // @ApiResponse({ status: 400, description: 'Invalid refund request' })
+  // @ApiResponse({ status: 500, description: 'Internal server error' })
+  // async refundPayment(
+  //   @Param('paymentId') paymentId: string,
+  //   @Body() createRefundDto: CreateRefundDto,
+  // ) {
+  //   const result = await this.refundService.refundPayment(paymentId, createRefundDto);
+  //   return {
+  //     message: result.message,
+  //     refundId: result.data.refundId,
+  //     amount: result.data.amount,
+  //     date: result.data.date,
+  //   };
+  // }
+
 }
