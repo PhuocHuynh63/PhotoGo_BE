@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
-import { comparePasswordHelper } from 'src/utils/utils';
+import { comparePasswordHelper, getInitials } from 'src/utils/utils';
 import { JwtService } from '@nestjs/jwt';
 import { CreateAuthDto } from './dto/create-auth.dto';
 
@@ -47,6 +47,12 @@ export class AuthService {
         image: user.image,
         role: user.role,
       },
+      access_token: this.jwtService.sign(payload, {
+        expiresIn: '1d',
+      }),
+      refresh_token: this.jwtService.sign(payload, {
+        expiresIn: '7d',
+      }),
     };
   }
   //#endregion
@@ -66,6 +72,7 @@ export class AuthService {
       return await this.userService.create({
         ...registerDto,
         email: registerEmailLowerCase,
+        avatarUrl: getInitials(registerDto.fullName),
         passwordHash: registerDto.passwordHash,
         fullName: registerDto.fullName,
         auth: 'local',

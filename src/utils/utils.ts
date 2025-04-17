@@ -27,3 +27,10 @@ export function slugify(text: string): string {
 }
 
 
+export function getInitials(fullName: string): string {
+    if (!fullName) return '';
+    const words = fullName.trim().split(' ');
+    if (words.length === 1) return words[0][0]?.toUpperCase() || '';
+    if (words.length === 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase(); // VD: Nguyễn Văn A → NA
+}

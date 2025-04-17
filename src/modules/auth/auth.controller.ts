@@ -23,7 +23,6 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiQuery({ name: 'email', required: true, type: String })
   @ResponseMessage('Đăng ký thành công')
   async register(@Body() registerDto: CreateAuthDto) {
     return this.authService.handleRegister(registerDto);
