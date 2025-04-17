@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsOptional, Length, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, Length, IsArray, ValidateNested , IsUUID, IsDate, IsBoolean} from 'class-validator';
 import { Type } from 'class-transformer';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { CreateLocationDto } from '../../locations/dto/create-location.dto';
+
+import { VendorManagerRole } from '../../../constants/vendor.enum';
 
 export class CreateVendorDto {
   @IsString()
@@ -49,4 +51,51 @@ export class CreateVendorDto {
     description: 'List of locations for the vendor',
   })
   locations: CreateLocationDto[];
+}
+
+
+export class CreateVendorManagerDto {
+  @IsUUID()
+  @IsNotEmpty()
+  vendorId: string;
+
+  @IsUUID()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsEnum(VendorManagerRole)
+  @IsNotEmpty()
+  role: VendorManagerRole;
+}
+
+export class CreateVendorLikeDto {
+  @IsUUID()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsUUID()
+  @IsNotEmpty()
+  vendorId: string;
+}
+
+export class CreateVendorAvailabilityDto {
+  @IsUUID()
+  @IsNotEmpty()
+  vendorId: string;
+
+  @IsDate()
+  @IsNotEmpty()
+  date: Date;
+
+  @IsString()
+  @IsNotEmpty()
+  startTime: string;
+
+  @IsString()
+  @IsNotEmpty()
+  endTime: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isAvailable?: boolean;
 }
