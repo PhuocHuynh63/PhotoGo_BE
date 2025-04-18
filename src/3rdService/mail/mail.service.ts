@@ -55,10 +55,11 @@ export class MailService {
     try {
       const storedOtp = await this.redisClient.get(email);
       if (storedOtp === otp) {
-        await this.redisClient.del(email); // Xóa OTP sau khi xác minh thành công
+        await this.redisClient.del(email);
         this.logger.log(`OTP verified for ${email}`);
         return true;
       }
+      
       this.logger.warn(`Invalid OTP for ${email}`);
       return false;
     } catch (error) {
