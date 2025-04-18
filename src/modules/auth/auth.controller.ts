@@ -5,6 +5,7 @@ import { LocalAuthGuard } from './passport/local-auth.guard';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
 import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { RestPasswordhDto } from './dto/rest-password.dto';
 
 @Controller('auth')
 @ApiBearerAuth('access-token')
@@ -30,11 +31,18 @@ export class AuthController {
 
   @Public()
   @Post('reset-password')
-  @ApiQuery({ name: 'email', required: true, type: String })
-  @ApiQuery({ name: 'passwordHash', required: true, type: String })
   @ResponseMessage('Đặt lại mật khẩu thành công')
-  async resetPassword(@Query('email') email: string, @Query('email') passwordHash: string) {
-    return this.authService.forgotPassword(email, passwordHash);
+  async resetPassword(@Body() body: RestPasswordhDto) {
+    return this.authService.forgotPassword(body);
+  }
+
+  @Public()
+  @Post('activate')
+  @ApiQuery({ name: 'email', required: true, type: String })
+  @ApiQuery({ name: 'otp', required: true, type: String })
+  @ResponseMessage('Kích hoạt tài khoản thành công')
+  async activateAccount(@Query('email') email: string, @Query('otp') otp: string) {
+    return this.authService.activeAccount(email, otp);
   }
 
 

@@ -15,6 +15,7 @@ import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
 import { Cron } from '@nestjs/schedule';
 import { log } from 'console';
 import { logger } from 'handlebars';
+import { UserStatus } from 'src/constants/user.enum';
 
 
 @Injectable()
@@ -161,16 +162,15 @@ export class UserService {
   //#endregion remove
 
   //#region activateAccount
-  async activeAccount(body: { email: string }): Promise<any> {
-    const { email } = body; // Ensure email is declared
+  async activeAccount(email: string): Promise<any> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new NotFoundException('Người dùng không tồn tại');
     }
-    if (user.status === 'active') {
+    if (user.status === UserStatus.ACTIVE) {
       throw new BadRequestException('Tài khoản đã được kích hoạt');
     }
-    user.status = 'active';
+    user.status = UserStatus.ACTIVE;
     await this.userRepository.save(user);
     return { message: 'Tài khoản đã được kích hoạt' };
   }
@@ -277,6 +277,13 @@ export class UserService {
     return user;
   }
   //#endregion findOneByEmail
+
+  //#region checkDuplicateEmail
+  async checkDuplicateEmail(email: string): Promise<boolean> {
+    const count = await this.userRepository.count({ where: { email } });
+    return count > 0; // Trả về true nếu email đã tồn tại
+  }
+  //#endregion checkDuplicateEmail
 
   //#region Count user by rank
   async countUserByRank(rank: string): Promise<number> {

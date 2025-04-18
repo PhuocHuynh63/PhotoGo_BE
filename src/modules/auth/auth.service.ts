@@ -6,6 +6,7 @@ import { CreateAuthDto } from './dto/create-auth.dto';
 import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
+import { RestPasswordhDto } from './dto/rest-password.dto';
 
 
 @Injectable()
@@ -60,11 +61,12 @@ export class AuthService {
   async handleRegister(registerDto: CreateAuthDto) {
     const registerEmailLowerCase = registerDto.email.toLowerCase();
 
-    // Verify OTP
-    // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
-    // if (!isOtpValid) {
-    //   throw new UnauthorizedException('Sai mã xác thực');
-    // }
+    // Check if email already exists
+    const existingUser = await this.userService.checkDuplicateEmail(registerEmailLowerCase);
+
+    if (!existingUser) {
+      throw new ConflictException('Email đã tồn tại');
+    }
 
     // Create user
     const user = await this.userService.create({
@@ -75,9 +77,6 @@ export class AuthService {
       fullName: registerDto.fullName,
       auth: 'local',
     });
-    if (!user) {
-      throw new ConflictException('Email đã tồn tại');
-    }
 
     // Send email
     this.mailService.generateAndSendOtp(registerEmailLowerCase, 'register');
@@ -87,19 +86,21 @@ export class AuthService {
   //#endregion
 
   //#region activeAccount
-  async activeAccount(body: { email: string }) {
-    return await this.userService.activeAccount(body);
+  async activeAccount(email: string, otp: string) {
+    const verifyOtp = await this.mailService.verifyOtp(email, otp);
+    if (!verifyOtp) {
+      throw new BadRequestException('Mã OTP không hợp lệ');
+    }
+    const emailLower = email.toLowerCase();
+    return await this.userService.activeAccount(emailLower)
   }
   //#endregion
 
   //#region forgotPassword
-  async forgotPassword(email: string, passwordHash: string) {
-    const emailLower = email.toLowerCase();
+  async forgotPassword(body: RestPasswordhDto) {
+    const emailLower = body.email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
-    if (!user) {
-      throw new NotFoundException('Ngươi dùng không tồn tại');
-    }
-    return await this.userService.resetPassword(user, passwordHash);
+    return await this.userService.resetPassword(user, body.password);
   }
   //#endregion
 }

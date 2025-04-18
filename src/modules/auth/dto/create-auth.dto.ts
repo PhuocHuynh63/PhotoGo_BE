@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsOptional, IsString, IsEmail, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserStatus } from 'src/constants/user.enum';
 
 export class CreateAuthDto {
   @IsNotEmpty({ message: 'Full name is required' })
@@ -12,11 +13,6 @@ export class CreateAuthDto {
 
   @IsOptional()
   @IsString()
-  @ApiProperty({
-    example: 'https://example.com/avatar.jpg',
-    description: 'Avatar URL of the user',
-    required: false,
-  })
   avatarUrl?: string;
 
   @IsNotEmpty({ message: 'Email is required' })
@@ -26,15 +22,6 @@ export class CreateAuthDto {
     description: 'Email address of the user',
   })
   email: string;
-
-  @IsOptional()
-  @IsString()
-  @ApiProperty({
-    example: '123456',
-    description: 'OTP for email verification',
-    required: false,
-  })
-  otp?: string;
 
   @IsNotEmpty({ message: 'Password is required' })
   @IsString()
@@ -57,28 +44,13 @@ export class CreateAuthDto {
 
   @IsOptional()
   @IsString()
-  @ApiProperty({
-    example: 'R001',
-    description: 'Role ID of the user',
-    required: false,
-  })
   roleId?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({
-    example: 'active',
-    description: 'Status of the user (e.g., active, inactive)',
-    required: false,
-  })
   status?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({
-    example: 'local',
-    description: 'Authentication method (e.g., local, google, facebook)',
-    required: false,
-  })
   auth?: string;
 }

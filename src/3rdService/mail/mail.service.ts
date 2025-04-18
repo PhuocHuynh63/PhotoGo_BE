@@ -35,9 +35,6 @@ export class MailService {
 
 
   async generateAndSendOtp(email: string, template: string): Promise<void> {
-    if (!email) {
-      throw new BadRequestException('Email không hợp lệ');
-    }
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Tạo OTP 6 chữ số
     if (await this.redisClient.exists(email)) {
       await this.redisClient.del(email); // Xóa OTP cũ nếu có
@@ -46,7 +43,6 @@ export class MailService {
     await this.sendOtpMail(email, otp, template);
     this.logger.log(`OTP sent to ${email}: ${otp}`);
   }
-
 
   async verifyOtp(email: string, otp: string): Promise<boolean> {
     try {
