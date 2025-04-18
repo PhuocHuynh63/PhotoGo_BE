@@ -21,7 +21,7 @@ export class AuthService {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
-      throw new NotFoundException('');
+      throw new UnauthorizedException('Xác thực không thành công');
     }
 
     const isMatch = await comparePasswordHelper(password, user.passwordHash);
