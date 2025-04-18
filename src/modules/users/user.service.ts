@@ -270,7 +270,11 @@ export class UserService {
 
   //#region findOneByEmail
   async findOneByEmail(email: string): Promise<User | undefined> {
-    return this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    if (!user) {
+      throw new NotFoundException(`Người dùng với email ${email} không tồn tại`);
+    }
+    return user;
   }
   //#endregion findOneByEmail
 

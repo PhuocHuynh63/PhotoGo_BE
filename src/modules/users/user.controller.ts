@@ -117,6 +117,13 @@ export class UserController {
     return this.userService.findOne(id);
   }
 
+  @Public()
+  @Get('/email/:email')
+  @ResponseMessage('Lấy thông tin người dùng theo email thành công')
+  async findOneByEmail(@Param('email') email: string): Promise<User> {
+    return this.userService.findOneByEmail(email);
+  }
+
   @Put('/img/:id/')
   @UseInterceptors(FileInterceptor('file'))
   @ResponseMessage('Cập nhật ảnh người dùng thành công')
