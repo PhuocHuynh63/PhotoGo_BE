@@ -13,8 +13,8 @@ import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 
 @Entity('service_package')
 export class ServicePackage {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Vendor, (vendor) => vendor.servicePackages, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'vendor_id' })
