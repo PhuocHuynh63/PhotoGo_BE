@@ -172,7 +172,7 @@ export class UserService {
     }
     user.status = 'active';
     await this.userRepository.save(user);
-    return { message: 'Tài khoảng đã được kích hoạt' };
+    return { message: 'Tài khoản đã được kích hoạt' };
   }
   //#endregion
 

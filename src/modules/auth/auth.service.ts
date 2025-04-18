@@ -6,7 +6,6 @@ import { CreateAuthDto } from './dto/create-auth.dto';
 import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
-import { log } from 'console';
 
 
 @Injectable()
@@ -59,30 +58,28 @@ export class AuthService {
 
   //#region Register
   async handleRegister(registerDto: CreateAuthDto) {
-    try {
-      const registerEmailLowerCase = registerDto.email.toLowerCase();
+    const registerEmailLowerCase = registerDto.email.toLowerCase();
 
-      // Verify OTP
-      // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
-      // if (!isOtpValid) {
-      //   throw new UnauthorizedException('Sai mã xác thực');
-      // }
+    // Verify OTP
+    // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
+    // if (!isOtpValid) {
+    //   throw new UnauthorizedException('Sai mã xác thực');
+    // }
 
-      // Create user
-      return await this.userService.create({
-        ...registerDto,
-        email: registerEmailLowerCase,
-        avatarUrl: getInitials(registerDto.fullName),
-        passwordHash: registerDto.passwordHash,
-        fullName: registerDto.fullName,
-        auth: 'local',
-      });
-    } catch (error) {
-      if (error.code === 11000) {
-        throw new ConflictException('Email đã tồn tại');
-      }
-      throw new BadRequestException(error.message || 'Đăng ký không thành công');
+    // Create user
+    const user = await this.userService.create({
+      ...registerDto,
+      email: registerEmailLowerCase,
+      avatarUrl: getInitials(registerDto.fullName),
+      passwordHash: registerDto.passwordHash,
+      fullName: registerDto.fullName,
+      auth: 'local',
+    });
+    if (!user) {
+      throw new ConflictException('Email đã tồn tại');
     }
+
+    return user;
   }
   //#endregion
 
