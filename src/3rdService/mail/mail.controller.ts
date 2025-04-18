@@ -12,7 +12,7 @@ export class MailController {
 
     @Public()
     @Post('send-otp')
-    @ResponseMessage('Send otp successful')
+    @ResponseMessage('Đã gửi mã OTP thành công')
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtp(@Query('email') email: string) {
         const emailLower = email.toLowerCase();
@@ -22,7 +22,7 @@ export class MailController {
 
     @Public()
     @Post('verify-otp')
-    @ResponseMessage('Verify successful')
+    @ResponseMessage('Xác thực mã OTP thành công')
     @ApiQuery({ name: 'otp', required: true, type: String })
     @ApiQuery({ name: 'email', required: true, type: String })
     async verifyOtpController(@Query('email') email: string, @Query('otp') otp: string) {
@@ -31,7 +31,7 @@ export class MailController {
 
     @Public()
     @Post('send-otp-reset-password')
-    @ResponseMessage('Send otp reset successful')
+    @ResponseMessage('Đã gửi mã OTP đặt lại mật khẩu thành công')
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtpResetPassword(@Query('email') email: string) {
         const emailLower = email.toLowerCase();

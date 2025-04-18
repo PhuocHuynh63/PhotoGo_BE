@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import { RedisClientType } from 'redis';
 
@@ -35,19 +35,16 @@ export class MailService {
 
 
   async generateAndSendOtp(email: string, template: string): Promise<void> {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Tạo OTP 6 chữ số
-    try {
-      if (await this.redisClient.exists(email)) {
-        await this.redisClient.del(email); // Xóa OTP cũ nếu có
-      }
-      await this.redisClient.set(email, otp, { EX: 300 }); // Lưu OTP vào Redis với thời gian hết hạn 5 phút
-      await this.sendOtpMail(email, otp, template);
-      this.logger.log(`OTP sent to ${email}: ${otp}`);
-
-    } catch (error) {
-      this.logger.error(`Failed to generate or send OTP to ${email}: ${error.message}`);
-      throw error;
+    if (!email) {
+      throw new BadRequestException('Email không hợp lệ');
     }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Tạo OTP 6 chữ số
+    if (await this.redisClient.exists(email)) {
+      await this.redisClient.del(email); // Xóa OTP cũ nếu có
+    }
+    await this.redisClient.set(email, otp, { EX: 300 }); // Lưu OTP vào Redis với thời gian hết hạn 5 phút
+    await this.sendOtpMail(email, otp, template);
+    this.logger.log(`OTP sent to ${email}: ${otp}`);
   }
 
 
@@ -59,7 +56,7 @@ export class MailService {
         this.logger.log(`OTP verified for ${email}`);
         return true;
       }
-      
+
       this.logger.warn(`Invalid OTP for ${email}`);
       return false;
     } catch (error) {
