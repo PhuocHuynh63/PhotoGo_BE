@@ -23,7 +23,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ResponseMessage('Đăng ký thành công')
+  @ResponseMessage('Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản')
   async register(@Body() registerDto: CreateAuthDto) {
     return this.authService.handleRegister(registerDto);
   }

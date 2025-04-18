@@ -79,6 +79,9 @@ export class AuthService {
       throw new ConflictException('Email đã tồn tại');
     }
 
+    // Send email
+    this.mailService.generateAndSendOtp(registerEmailLowerCase, 'register');
+
     return user;
   }
   //#endregion
