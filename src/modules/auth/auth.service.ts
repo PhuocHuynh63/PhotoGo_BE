@@ -64,7 +64,7 @@ export class AuthService {
     // Check if email already exists
     const existingUser = await this.userService.checkDuplicateEmail(registerEmailLowerCase);
 
-    if (!existingUser) {
+    if (existingUser) {
       throw new ConflictException('Email đã tồn tại');
     }
 

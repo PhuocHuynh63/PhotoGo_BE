@@ -1,11 +1,11 @@
 version: '2.2'
+
 services:
-  # Backend Service (NestJS)
+  # NestJS Backend
   backend:
     container_name: backend
     build:
-      context: ./
-      dockerfile: Dockerfile
+      context: ./Code
     env_file:
       - .env.production
     ports:
@@ -15,9 +15,11 @@ services:
     networks:
       - photogo-network
 
-  # PostgreSQL Service
+  # PostgreSQL với pg_cron
   postgres:
-    image: postgres:17
+    build:
+      context: ./DB
+    image: pgsql_with_cron
     container_name: pgsql_db
     restart: always
     environment:
@@ -31,11 +33,9 @@ services:
     networks:
       - photogo-network
 
-# Define the network
 networks:
   photogo-network:
     driver: bridge
 
-# Volumes
 volumes:
   pgdata:

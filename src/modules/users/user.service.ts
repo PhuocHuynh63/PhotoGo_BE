@@ -280,8 +280,8 @@ export class UserService {
 
   //#region checkDuplicateEmail
   async checkDuplicateEmail(email: string): Promise<boolean> {
-    const count = await this.userRepository.count({ where: { email } });
-    return count > 0; // Trả về true nếu email đã tồn tại
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    return !!user;
   }
   //#endregion checkDuplicateEmail
 
@@ -416,5 +416,5 @@ export class UserService {
   }
   //#endregion checkLastLoginForAllUsers
 
-
+  
 }
