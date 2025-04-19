@@ -2,6 +2,13 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsEmail } from 'class-validator';
 
 export class RestPasswordhDto {
+    @IsNotEmpty({ message: 'OTP is required' })
+    @ApiProperty({
+        example: '123456',
+        description: 'One Time Password (OTP) for verification',
+    })
+    otp: string;
+
     @IsNotEmpty({ message: 'Email is required' })
     @IsEmail({}, { message: 'Email must be valid' })
     @ApiProperty({
@@ -18,4 +25,10 @@ export class RestPasswordhDto {
     })
     password: string;
 
+    @IsNotEmpty({ message: 'Confirm password is required' })
+    @ApiProperty({
+        example: '123456',
+        description: 'Confirm password for the user',
+    })
+    confirmPassword: string;
 }

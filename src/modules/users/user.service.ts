@@ -177,7 +177,7 @@ export class UserService {
   //#endregion
 
   //#region resetPassword
-  async resetPassword(user: User, passwordHash: string): Promise<any> {
+  async resetPassword(user: User, passwordHash: string): Promise<boolean> {
     const isMatch = await bcrypt.compare(passwordHash, user.passwordHash);
     if (isMatch) {
       throw new BadRequestException('Mật khẩu mới không được giống với mật khẩu cũ');
@@ -185,7 +185,7 @@ export class UserService {
     user.oldPasswordHash = user.passwordHash;
     user.passwordHash = await hashPasswordHelper(passwordHash);
     await this.userRepository.save(user);
-    return { message: 'Thiết lập lại mật khẩu thành công' };
+    return true;
   }
   //#endregion
 
@@ -416,5 +416,5 @@ export class UserService {
   }
   //#endregion checkLastLoginForAllUsers
 
-  
+
 }

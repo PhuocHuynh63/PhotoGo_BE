@@ -44,16 +44,28 @@ export class MailService {
     this.logger.log(`OTP sent to ${email}: ${otp}`);
   }
 
-  async verifyOtp(email: string, otp: string): Promise<boolean> {
+  async verifyOtpStrict(email: string, otp: string): Promise<boolean> {
     try {
       const storedOtp = await this.redisClient.get(email);
       if (storedOtp === otp) {
-        await this.redisClient.del(email);
         this.logger.log(`OTP verified for ${email}`);
         return true;
       }
 
-      this.logger.warn(`Invalid OTP for ${email}`);
+      throw new BadRequestException('Mã OTP không hợp lệ hoặc đã hết hạn');
+    } catch (error) {
+      this.logger.error(`Failed to verify OTP for ${email}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async verifyOtp(email: string, otp: string): Promise<boolean> {
+    try {
+      const storedOtp = await this.redisClient.get(email);
+      if (storedOtp === otp) {
+        this.logger.log(`OTP verified for ${email}`);
+        return true;
+      }
       return false;
     } catch (error) {
       this.logger.error(`Failed to verify OTP for ${email}: ${error.message}`);

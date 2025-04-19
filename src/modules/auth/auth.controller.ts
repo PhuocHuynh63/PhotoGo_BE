@@ -39,5 +39,10 @@ export class AuthController {
     return this.authService.activeAccount(email, otp);
   }
 
-
+  @Public()
+  @Post('reset-password')
+  @ResponseMessage('Cài đặt mật khẩu thành công')
+  async resetPassword(@Body() restPasswordDto: RestPasswordhDto) {
+    return this.authService.resetPassword(restPasswordDto);
+  }
 }

@@ -28,7 +28,7 @@ export class MailController {
     @ApiQuery({ name: 'otp', required: true, type: String })
     @ApiQuery({ name: 'email', required: true, type: String })
     async verifyOtpController(@Query('email') email: string, @Query('otp') otp: string) {
-        return await this.mailService.verifyOtp(email, otp);
+        return await this.mailService.verifyOtpStrict(email, otp);
     }
 }
 

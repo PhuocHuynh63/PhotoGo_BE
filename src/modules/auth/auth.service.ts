@@ -101,9 +101,22 @@ export class AuthService {
   //#endregion
 
   //#region forgotPassword
-  async forgotPassword(body: RestPasswordhDto) {
+  async resetPassword(body: RestPasswordhDto) {
     const emailLower = body.email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
+    if (!user) {
+      throw new NotFoundException('Email không tồn tại');
+    }
+    await this.mailService.verifyOtp(emailLower, body.otp);
+
+    if (body.password !== body.confirmPassword) {
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
+    }
+
+    if (body.password.length < 6) {
+      throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
+    }
+
     return await this.userService.resetPassword(user, body.password);
   }
   //#endregion
