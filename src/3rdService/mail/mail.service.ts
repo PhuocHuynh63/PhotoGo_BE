@@ -27,20 +27,20 @@ export class MailService {
     }
   }
 
-  async sendOtpMail(to: string, otp: string, template: string): Promise<void> {
+  async sendOtpMail(to: string, otp: string, template: string, content: string, body: string): Promise<void> {
     const subject = 'Mã OTP Code của bạn là ' + otp;
-    const context = { otp };
+    const context = { otp, content, body };
     await this.sendMail(to, subject, template, context);
   }
 
 
-  async generateAndSendOtp(email: string, template: string): Promise<void> {
+  async generateAndSendOtp(email: string, template: string, content: string, body: string): Promise<void> {
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Tạo OTP 6 chữ số
     if (await this.redisClient.exists(email)) {
       await this.redisClient.del(email); // Xóa OTP cũ nếu có
     }
     await this.redisClient.set(email, otp, { EX: 300 }); // Lưu OTP vào Redis với thời gian hết hạn 5 phút
-    await this.sendOtpMail(email, otp, template);
+    await this.sendOtpMail(email, otp, template, content, body);
     this.logger.log(`OTP sent to ${email}: ${otp}`);
   }
 

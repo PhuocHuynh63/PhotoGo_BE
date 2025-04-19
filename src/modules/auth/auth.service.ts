@@ -22,12 +22,12 @@ export class AuthService {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
-      throw new UnauthorizedException('Xác thực không thành công');
+      throw new BadRequestException('Tài khoản hoặc mật khẩu không chính xác');
     }
 
     const isMatch = await comparePasswordHelper(password, user.passwordHash);
     if (!isMatch) {
-      throw new UnauthorizedException('Xác thực không thành công');
+      throw new BadRequestException('Tài khoản hoặc mật khẩu không chính xác');
     }
     await this.userService.updateLoginAt(user);
 
@@ -78,8 +78,12 @@ export class AuthService {
       auth: 'local',
     });
 
+    const template = 'otp';
+    const content = 'Mã OTP của bạn là: ';
+    const body = 'Vui lòng nhập mã OTP để xác thực tài khoản của bạn.';
+
     // Send email
-    this.mailService.generateAndSendOtp(registerEmailLowerCase, 'register');
+    this.mailService.generateAndSendOtp(registerEmailLowerCase, template, content, body);
 
     return user;
   }

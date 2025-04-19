@@ -16,8 +16,10 @@ export class MailController {
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtp(@Query('email') email: string) {
         const emailLower = email.toLowerCase();
-        const template = 'register';
-        return await this.mailService.generateAndSendOtp(emailLower, template);
+        const template = 'otp';
+        const content = 'Mã OTP của bạn là: ';
+        const body = 'Vui lòng nhập mã OTP để xác thực tài khoản của bạn.';
+        return await this.mailService.generateAndSendOtp(emailLower, template, content, body);
     }
 
     @Public()
@@ -27,16 +29,6 @@ export class MailController {
     @ApiQuery({ name: 'email', required: true, type: String })
     async verifyOtpController(@Query('email') email: string, @Query('otp') otp: string) {
         return await this.mailService.verifyOtp(email, otp);
-    }
-
-    @Public()
-    @Post('send-otp-reset-password')
-    @ResponseMessage('Đã gửi mã OTP đặt lại mật khẩu thành công')
-    @ApiQuery({ name: 'email', required: true, type: String })
-    async sendOtpResetPassword(@Query('email') email: string) {
-        const emailLower = email.toLowerCase();
-        const template = 'reset-password';
-        return await this.mailService.generateAndSendOtp(emailLower, template);
     }
 }
 

@@ -29,12 +29,6 @@ export class AuthController {
     return this.authService.handleRegister(registerDto);
   }
 
-  @Public()
-  @Post('reset-password')
-  @ResponseMessage('Đặt lại mật khẩu thành công')
-  async resetPassword(@Body() body: RestPasswordhDto) {
-    return this.authService.forgotPassword(body);
-  }
 
   @Public()
   @Post('activate')
