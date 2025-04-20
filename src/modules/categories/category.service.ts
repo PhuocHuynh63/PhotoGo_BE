@@ -10,7 +10,7 @@ export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
@@ -40,7 +40,7 @@ export class CategoryService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(category.name ILIKE :term)',
+        `(unaccent(category.name) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

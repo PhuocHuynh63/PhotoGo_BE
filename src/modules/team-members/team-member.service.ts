@@ -10,7 +10,7 @@ export class TeamMemberService {
   constructor(
     @InjectRepository(TeamMember)
     private readonly teamMemberRepository: Repository<TeamMember>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createTeamMemberDto: CreateTeamMemberDto): Promise<TeamMember> {
@@ -42,7 +42,7 @@ export class TeamMemberService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(teamMember.full_name ILIKE :term OR teamMember.role ILIKE :term)',
+        `(unaccent(teamMember.full_name) ILIKE unaccent(:term) OR unaccent(teamMember.role) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

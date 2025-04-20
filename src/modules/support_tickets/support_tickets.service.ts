@@ -12,7 +12,7 @@ export class SupportTicketService {
     @InjectRepository(SupportTicket)
     private readonly supportTicketRepository: Repository<SupportTicket>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   async create(createSupportTicketDto: CreateSupportTicketDto, userId: string): Promise<SupportTicket> {
     return await this.dataSource.transaction(async (manager) => {

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Point } from './entities/point.entity';
-import { CreatePointDto , CreatePointTransactionDto} from './dto/create-point.dto';
+import { CreatePointDto, CreatePointTransactionDto } from './dto/create-point.dto';
 import { FindPointDto } from './dto/find-point.dto';
 import { PointTransaction } from './entities/point-transaction.entity';
 import { isUUID } from 'class-validator';
@@ -14,7 +14,7 @@ export class PointService {
     private readonly pointRepository: Repository<Point>,
     @InjectRepository(PointTransaction)
     private readonly pointTransactionRepository: Repository<PointTransaction>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createPointDto: CreatePointDto): Promise<Point> {
@@ -46,7 +46,7 @@ export class PointService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(user.email ILIKE :term OR user.full_name ILIKE :term)',
+        `(unaccent(user.email) ILIKE unaccent(:term) OR unaccent(user.full_name) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

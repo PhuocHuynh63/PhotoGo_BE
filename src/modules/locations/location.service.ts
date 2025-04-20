@@ -10,7 +10,7 @@ export class LocationService {
   constructor(
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createLocationDto: CreateLocationDto): Promise<Location> {
@@ -42,7 +42,7 @@ export class LocationService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(location.address ILIKE :term OR location.city ILIKE :term OR location.province ILIKE :term)',
+        `(unaccent(location.address) ILIKE unaccent(:term) OR unaccent(location.city) ILIKE unaccent(:term) OR unaccent(location.province) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

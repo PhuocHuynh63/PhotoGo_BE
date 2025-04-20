@@ -16,7 +16,7 @@ export class VoucherService {
     private readonly voucherRepository: Repository<Voucher>,
     @InjectRepository(VoucherUser)
     private readonly voucherUserRepository: Repository<VoucherUser>,
-  ) {}
+  ) { }
 
   //#region Voucher Operations
   async createVoucher(createVoucherDto: CreateVoucherDto): Promise<Voucher> {
@@ -41,7 +41,7 @@ export class VoucherService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(voucher.code ILIKE :term OR voucher.discount_type ILIKE :term OR voucher.status ILIKE :term)',
+        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

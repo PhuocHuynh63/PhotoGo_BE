@@ -10,7 +10,7 @@ export class SubscriptionPlanService {
   constructor(
     @InjectRepository(SubscriptionPlan)
     private readonly subscriptionPlanRepository: Repository<SubscriptionPlan>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createSubscriptionPlanDto: CreateSubscriptionPlanDto): Promise<SubscriptionPlan> {
@@ -40,7 +40,7 @@ export class SubscriptionPlanService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(subscriptionPlan.name ILIKE :term OR subscriptionPlan.description ILIKE :term)',
+        `(unaccent(subscriptionPlan.name) ILIKE unaccent(:term) OR unaccent(subscriptionPlan.description) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

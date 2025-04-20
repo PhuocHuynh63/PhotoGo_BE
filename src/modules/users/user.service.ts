@@ -10,11 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { FindUserDto } from './dto/admin/find-user.dto';
-import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
-import { Cron } from '@nestjs/schedule';
-import { log } from 'console';
-import { logger } from 'handlebars';
 import { UserStatus } from 'src/constants/user.enum';
 
 
@@ -213,7 +209,7 @@ export class UserService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
+        `(unaccent(user.fullName) ILIKE unaccent(:term) OR unaccent(user.email) ILIKE unaccent(:term) OR unaccent(user.phoneNumber) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }

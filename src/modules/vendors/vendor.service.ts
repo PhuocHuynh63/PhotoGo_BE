@@ -24,9 +24,9 @@ export class VendorService {
     @InjectRepository(VendorAvailability)
     private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
-  //#region Vendor
+  //#region CreateVendor
   async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
     return this.dataSource.transaction(async (manager) => {
       const categoryRepo = manager.getRepository(Category);
@@ -68,7 +68,9 @@ export class VendorService {
       });
     });
   }
+  //#endregion CreateVendor
 
+  //#region findAll
   async findAll(query: FindVendorDto): Promise<{
     data: Vendor[];
     pagination: {
@@ -88,7 +90,7 @@ export class VendorService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(vendor.name ILIKE :term OR vendor.slug ILIKE :term)',
+        `(unaccent(vendor.name) ILIKE unaccent(:term) OR unaccent(vendor.slug) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -128,7 +130,7 @@ export class VendorService {
     }
     return vendor;
   }
-  //#endregion Vendor
+  //#endregion findAll
 
   //#region VendorManager
   async addManager(createVendorManagerDto: CreateVendorManagerDto): Promise<void> {

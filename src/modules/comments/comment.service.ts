@@ -10,7 +10,7 @@ export class CommentService {
   constructor(
     @InjectRepository(Comment)
     private readonly commentRepository: Repository<Comment>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createCommentDto: CreateCommentDto): Promise<Comment> {
@@ -43,7 +43,7 @@ export class CommentService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(comment.content ILIKE :term)',
+        `(unaccent(comment.content) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
