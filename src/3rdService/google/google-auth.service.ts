@@ -31,7 +31,7 @@ export class GoogleAuthService {
     };
 
     // Tìm người dùng trong cơ sở dữ liệu thông qua UserService
-    let existingUser = await this.userService.findOneByEmail(googleAuthDto.email);
+    let existingUser = await this.userService.findOneEmail(googleAuthDto.email);
 
     if (!existingUser) {
       // Nếu không tồn tại, tạo mới

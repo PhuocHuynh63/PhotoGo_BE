@@ -278,6 +278,13 @@ export class UserService {
   }
   //#endregion findOneByEmail
 
+  //#region findOneByEmail
+  async findOneEmail(email: string): Promise<User | undefined> {
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    return user;
+  }
+  //#endregion findOneByEmail
+
   //#region checkDuplicateEmail
   async checkDuplicateEmail(email: string): Promise<boolean> {
     const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
