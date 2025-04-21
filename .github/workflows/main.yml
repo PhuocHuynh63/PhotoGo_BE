@@ -39,5 +39,5 @@ jobs:
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           script: |
             cd /home/${{ secrets.VPS_USER }}/backend
-            docker compose down
-            docker compose up --build -d
+            docker-compose down
+            docker-compose up --build -d
