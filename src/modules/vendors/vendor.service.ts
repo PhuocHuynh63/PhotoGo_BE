@@ -28,7 +28,10 @@ export class VendorService {
   ) { }
 
   //#region CreateVendor
-  async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
+  async create(
+    createVendorDto: CreateVendorDto,
+    files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
+  ): Promise<Vendor> {
     return this.dataSource.transaction(async (manager) => {
       const categoryRepo = manager.getRepository(Category);
       const vendorRepo = manager.getRepository(Vendor);
@@ -51,6 +54,24 @@ export class VendorService {
         status: createVendorDto.status || VendorStatus.ACTIVE,
       });
 
+      // Upload logo
+      if (files.logo) {
+        const uploadResult = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
+        vendor.logo = uploadResult;
+      }
+
+      // Upload banner
+      if (files.banner) {
+        const uploadResult = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
+        vendor.banner = uploadResult;
+      }
+
+      // Upload image_url
+      if (files.image_url) {
+        const uploadResult = await this.uploadService.uploadImage(files.image_url, 'vendors/images');
+        vendor.image_url = uploadResult;
+      }
+
       const savedVendor = await vendorRepo.save(vendor);
 
       if (createVendorDto.locations?.length) {
@@ -70,6 +91,19 @@ export class VendorService {
     });
   }
   //#endregion CreateVendor
+
+  //#region findOne
+  async findOne(id: string): Promise<Vendor> {
+    const vendor = await this.vendorRepository.findOne({
+      where: { id },
+      relations: ['category', 'locations'],
+    });
+    if (!vendor) {
+      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    }
+    return vendor;
+  }
+  //#endregion findOne
 
   //#region findAll
   async findAll(query: FindVendorDto): Promise<{
@@ -119,17 +153,6 @@ export class VendorService {
         totalItem,
       },
     };
-  }
-
-  async findOne(id: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
-      where: { id },
-      relations: ['category', 'locations'],
-    });
-    if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
-    }
-    return vendor;
   }
   //#endregion findAll
 

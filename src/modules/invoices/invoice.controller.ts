@@ -2,6 +2,7 @@ import { Controller, Post, Get, Put, Delete, Param, Query, Body } from '@nestjs/
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { FindAllInvoicesDto } from './dto/find-all.dto';
+import { Invoice } from './entities/invoice.entity';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation , ApiResponse } from '@nestjs/swagger';
 

@@ -11,7 +11,7 @@ export enum SupportTicketStatus {
 @Entity('support_ticket')
 export class SupportTicket {
   @PrimaryGeneratedColumn('uuid')
-  id: number;
+  id: string;
 
   @ManyToOne(() => User, (user) => user.id , { nullable: false })
   @JoinColumn({ name: 'user_id' })

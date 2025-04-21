@@ -54,7 +54,7 @@ export class SupportTicketController {
   @ApiResponse({ status: 404, description: 'Support ticket not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async findOne(@Param('id') id: string): Promise<SupportTicket> {
-    return this.supportTicketService.findOne(Number(id));
+    return this.supportTicketService.findOne(id);
   }
 
   @Put(':id')

@@ -82,7 +82,7 @@ export class SupportTicketService {
     };
   }
 
-  async findOne(id: number): Promise<SupportTicket> {
+  async findOne(id: string): Promise<SupportTicket> {
     const supportTicket = await this.supportTicketRepository.findOne({
       where: { id },
       relations: ['user'],
@@ -98,20 +98,14 @@ export class SupportTicketService {
     if (!supportTicket) {
       throw new NotFoundException(`Support ticket with ID ${id} not found`);
     }
-
+  
     Object.assign(supportTicket, updateSupportTicketDto);
     return await this.supportTicketRepository.save(supportTicket);
   }
-    if (!supportTicket) {
-      throw new NotFoundException(`Support ticket with ID ${id} not found`);
-    }
-
-    Object.assign(supportTicket, updateSupportTicketDto);
-    return await this.supportTicketRepository.save(supportTicket);
-  }
+  
 
   async deleteSupportTicket(id: string): Promise<void> {
-    const supportTicket = await this.supportTicketRepository.findOne({ where: { Number(id) } });
+    const supportTicket = await this.supportTicketRepository.findOne({ where: { id } });
     if (!supportTicket) {
       throw new NotFoundException(`Support ticket with ID ${id} not found`);
     }

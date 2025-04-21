@@ -9,9 +9,8 @@ import { VendorManagerRole } from '../../../constants/vendor.enum';
 export class CreateVendorDto {
   @IsString()
   @IsNotEmpty()
-  @Length(1, 100)
   @ApiProperty({
-    description: 'Studio Ánh Sáng',
+    description: 'Tên nhà cung cấp (ví dụ: Studio Ánh Sáng)',
     example: 'Vendor Name',
   })
   name: string;
@@ -20,7 +19,7 @@ export class CreateVendorDto {
   @IsNotEmpty()
   @ApiProperty({
     example: 'uuid_of_category',
-    description: 'Category ID of the vendor',
+    description: 'ID danh mục của nhà cung cấp',
   })
   category_id: string;
 
@@ -28,42 +27,15 @@ export class CreateVendorDto {
   @IsNotEmpty()
   @ApiProperty({
     example: 'studio-anh-sang',
-    description: 'Slug of the vendor',
+    description: 'Slug của nhà cung cấp',
   })
   slug: string;
 
   @IsString()
   @IsOptional()
   @ApiProperty({
-    example: 'https://example.com/logo.png',
-    description: 'Logo of the vendor',
-    required: false,
-  })
-  logo?: string;
-
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    example: 'https://example.com/banner.png',
-    description: 'Banner of the vendor',
-    required: false,
-  })
-  banner?: string;
-
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    example: 'https://example.com/image.png',
-    description: 'Image URL of the vendor',
-    required: false,
-  })
-  image_url?: string;
-
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
     example: 'Studio chụp ảnh chuyên nghiệp với thiết bị hiện đại',
-    description: 'Description of the vendor',
+    description: 'Mô tả của nhà cung cấp',
     required: false,
   })
   description?: string;
@@ -72,7 +44,7 @@ export class CreateVendorDto {
   @IsOptional()
   @ApiProperty({
     enum: VendorStatus,
-    description: 'Status of the vendor',
+    description: 'Trạng thái của nhà cung cấp',
     example: VendorStatus.ACTIVE,
     required: false,
   })
@@ -83,7 +55,7 @@ export class CreateVendorDto {
   @Type(() => CreateLocationDto)
   @ApiProperty({
     type: [CreateLocationDto],
-    description: 'List of locations for the vendor',
+    description: 'Danh sách địa điểm của nhà cung cấp',
   })
   locations: CreateLocationDto[];
 }

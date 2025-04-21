@@ -1,11 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Body, Query, Param } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, Query, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { VendorService } from './vendor.service';
 import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
+import { VendorStatus } from './entities/vendor.entity';
 import { Vendor } from './entities/vendor.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
+import { FilesInterceptor } from '@nestjs/platform-express';
+
 
 @ApiTags('Vendors')
 @Controller('vendors')
@@ -18,8 +21,31 @@ export class VendorController {
   @ApiOperation({ summary: 'Create a new vendor (Protected)' })
   @ApiResponse({ status: 201, description: 'Vendor created successfully', type: Vendor })
   @ResponseMessage('Tạo nhà cung cấp thành công')
-  async create(@Body() createVendorDto: CreateVendorDto): Promise<Vendor> {
-    return this.vendorService.create(createVendorDto);
+  @UseInterceptors(FilesInterceptor('files', 3))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Vendor data and files',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Vendor Name' },
+        category_id: { type: 'string', example: 'uuid_of_category' },
+        slug: { type: 'string', example: 'vendor-slug' },
+        description: { type: 'string', example: 'Studio chụp ảnh chuyên nghiệp', nullable: true },
+        status: { type: 'string', enum: Object.values(VendorStatus), example: VendorStatus.ACTIVE, nullable: true },
+        locations: { type: 'array', items: { type: 'object' }, example: [{ address: '123 Street', city: 'Hanoi' }] },
+        logo: { type: 'string', format: 'binary' },
+        banner: { type: 'string', format: 'binary' },
+        image_url: { type: 'string', format: 'binary' },
+      },
+      required: ['name', 'category_id', 'slug'],
+    },
+  })
+  async create(
+    @Body() createVendorDto: CreateVendorDto,
+    @UploadedFiles() files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
+  ): Promise<Vendor> {
+    return this.vendorService.create(createVendorDto, files);
   }
 
   @Public()
