@@ -71,17 +71,17 @@ export class UserService {
     }
 
     // Nếu có trường passwordHash, kiểm tra mật khẩu cũ trước khi cập nhật
-    if (updateUserDto.passwordHash && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
+    if (updateUserDto.password && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
       const isMatch = await bcrypt.compare(updateUserDto.oldPasswordHash, user.passwordHash);
       if (!isMatch) {
         throw new BadRequestException('Mật khẩu cũ không đúng');
       }
-      if (updateUserDto.passwordHash !== updateUserDto.confirmPassword) {
+      if (updateUserDto.password !== updateUserDto.confirmPassword) {
         throw new BadRequestException('Mật khẩu xác nhận không khớp');
       }
       updateUserDto.oldPasswordHash = user.passwordHash; // Lưu mật khẩu cũ để so sánh
       // Mã hóa mật khẩu mới
-      updateUserDto.passwordHash = await hashPasswordHelper(updateUserDto.passwordHash);
+      updateUserDto.password = await hashPasswordHelper(updateUserDto.password);
     }
 
     // Cập nhật thông tin user
