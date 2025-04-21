@@ -26,12 +26,17 @@ jobs:
         run: |
           mkdir -p .github/temp_build/Code
           cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
+          cp docker-compose.yml .github/temp_build/  # Copy file docker-compose.yml
 
       - name: Copy Code to VPS
         run: |
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
-          scp -o StrictHostKeyChecking=no -i private_key.pem -r .github/temp_build/Code/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/root/backend
+          # Copy mã nguồn vào /home/root/backend/Code
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /home/root/backend/Code"
+          scp -o StrictHostKeyChecking=no -i private_key.pem -r .github/temp_build/Code/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/Code
+          # Copy docker-compose.yml vào /home/root/backend
+          scp -o StrictHostKeyChecking=no -i private_key.pem .github/temp_build/docker-compose.yml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/
           rm -f private_key.pem
 
       - name: SSH and restart backend
@@ -39,11 +44,9 @@ jobs:
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            cd /root/backend &&
-            docker build -t photogo-nestjs:latest . &&
-            docker stop photogo-nestjs || true &&
-            docker rm photogo-nestjs || true &&
-            docker run -d --name photogo-nestjs -p 3000:3000 --restart always photogo-nestjs:latest
+            cd /home/root/backend &&
+            docker-compose down &&
+            docker-compose up -d --build
           "
           rm -f private_key.pem
         env:
