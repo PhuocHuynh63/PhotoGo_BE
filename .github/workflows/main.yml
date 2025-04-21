@@ -25,15 +25,16 @@ jobs:
       - name: Prepare Code folder to send
         run: |
           mkdir -p .github/temp_build/Code
-          cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
-          cp docker-compose.yml .github/temp_build/  # Copy file docker-compose.yml
+          cp -r dist package-lock.json package.json .github/temp_build/Code/
+          cp docker-compose.yml .github/temp_build/
 
       - name: Copy Code to VPS
         run: |
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
-          # Copy mã nguồn vào /home/root/backend/Code
+          # Tạo thư mục đích trên VPS
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /home/root/backend/Code"
+          # Copy dist, package-lock.json, package.json vào /home/root/backend/Code
           scp -o StrictHostKeyChecking=no -i private_key.pem -r .github/temp_build/Code/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/Code
           # Copy docker-compose.yml vào /home/root/backend
           scp -o StrictHostKeyChecking=no -i private_key.pem .github/temp_build/docker-compose.yml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/
