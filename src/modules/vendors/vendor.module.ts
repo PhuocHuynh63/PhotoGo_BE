@@ -7,7 +7,7 @@ import { VendorAvailability } from './entities/vendor-availability.entity';
 import { VendorService } from './vendor.service';
 import { VendorController } from './vendor.controller';
 import { ServicePackage } from '../service-package/entities/service-package.entity';
-import { UploadModule } from '../upload/upload.module';
+import { UploadModule } from '../../3rdService/upload/upload.module'; // Import UploadModule
 
 @Module({
   imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, VendorAvailability, ServicePackage]), UploadModule],

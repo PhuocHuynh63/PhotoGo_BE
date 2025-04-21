@@ -7,13 +7,15 @@ import { Vendor } from './entities/vendor.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { Logger } from '@nestjs/common';
 
 
 @ApiTags('Vendors')
 @Controller('vendors')
 @ApiBearerAuth('access-token')
 export class VendorController {
+  private readonly logger = new Logger(VendorController.name);
   constructor(private readonly vendorService: VendorService) {}
 
   //#region Vendor
@@ -21,19 +23,27 @@ export class VendorController {
   @ApiOperation({ summary: 'Create a new vendor (Protected)' })
   @ApiResponse({ status: 201, description: 'Vendor created successfully', type: Vendor })
   @ResponseMessage('Tạo nhà cung cấp thành công')
-  @UseInterceptors(FilesInterceptor('files', 3))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'logo', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+    { name: 'image_url', maxCount: 1 },
+  ]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     description: 'Vendor data and files',
     schema: {
       type: 'object',
       properties: {
-        name: { type: 'string', example: 'Vendor Name' },
-        category_id: { type: 'string', example: 'uuid_of_category' },
-        slug: { type: 'string', example: 'vendor-slug' },
-        description: { type: 'string', example: 'Studio chụp ảnh chuyên nghiệp', nullable: true },
+        name: { type: 'string', example: 'Sunset Photography Studio' },
+        category_id: { type: 'string', example: 'C003' },
+        slug: { type: 'string', example: 'sunset-photography-studio' },
+        description: { type: 'string', example: 'A professional studio for capturing your best moments.', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), example: VendorStatus.ACTIVE, nullable: true },
-        locations: { type: 'array', items: { type: 'object' }, example: [{ address: '123 Street', city: 'Hanoi' }] },
+        locations: {
+          type: 'string',
+          description: 'A JSON string representing an array of locations',
+          example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724},{"address":"456 Lê Văn Việt","district":"Thủ Đức","ward":"Tăng Nhơn Phú A","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8432,"longitude":106.7793}]',
+        },
         logo: { type: 'string', format: 'binary' },
         banner: { type: 'string', format: 'binary' },
         image_url: { type: 'string', format: 'binary' },
@@ -43,9 +53,17 @@ export class VendorController {
   })
   async create(
     @Body() createVendorDto: CreateVendorDto,
-    @UploadedFiles() files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
+    @UploadedFiles() files: { logo?: Express.Multer.File[]; banner?: Express.Multer.File[]; image_url?: Express.Multer.File[] },
   ): Promise<Vendor> {
-    return this.vendorService.create(createVendorDto, files);
+    this.logger.log(`Received create vendor request: ${JSON.stringify(createVendorDto)}`);
+
+    const fileMap = {
+      logo: files.logo && files.logo[0],
+      banner: files.banner && files.banner[0],
+      image_url: files.image_url && files.image_url[0],
+    };
+
+    return this.vendorService.create(createVendorDto, fileMap);
   }
 
   @Public()

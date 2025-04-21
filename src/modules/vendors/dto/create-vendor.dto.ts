@@ -1,12 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsEnum, IsOptional, Length, IsArray, ValidateNested , IsUUID, IsDate, IsBoolean} from 'class-validator';
 import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { CreateLocationDto } from '../../locations/dto/create-location.dto';
+import { Logger } from '@nestjs/common';
 
 import { VendorManagerRole } from '../../../constants/vendor.enum';
-
 export class CreateVendorDto {
+  private readonly logger = new Logger(CreateVendorDto.name);
+
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
@@ -51,11 +54,49 @@ export class CreateVendorDto {
   status?: VendorStatus;
 
   @IsArray()
-  @ValidateNested({ each: true })
+  @ValidateNested({ each: true, message: 'Each location must be valid' })
   @Type(() => CreateLocationDto)
+  @Transform(({ value }) => {
+    const logger = new Logger('CreateVendorDto');
+    logger.log(`Raw locations value: ${value}`);
+
+    if (!value) {
+      return [];
+    }
+
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (!Array.isArray(parsed)) {
+          throw new Error('locations must be an array');
+        }
+        logger.log(`Parsed locations before transform: ${JSON.stringify(parsed)}`);
+        const transformed = parsed.map((item: any) => {
+          const location = new CreateLocationDto();
+          location.address = item.address;
+          location.district = item.district;
+          location.ward = item.ward;
+          location.city = item.city;
+          location.province = item.province;
+          location.latitude = item.latitude;
+          location.longitude = item.longitude;
+          return location;
+        });
+        logger.log(`Transformed locations: ${JSON.stringify(transformed)}`);
+        return transformed;
+      } catch (e) {
+        logger.error(`Failed to parse locations: ${e.message}`);
+        throw new Error(`locations must be a valid JSON array: ${e.message}`);
+      }
+    }
+
+    logger.log(`Parsed locations (non-string): ${JSON.stringify(value)}`);
+    return value;
+  })
   @ApiProperty({
-    type: [CreateLocationDto],
-    description: 'Danh sách địa điểm của nhà cung cấp',
+    type: 'string',
+    description: 'A JSON string representing an array of locations',
+    example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724},{"address":"456 Lê Văn Việt","district":"Thủ Đức","ward":"Tăng Nhơn Phú A","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8432,"longitude":106.7793}]',
   })
   locations: CreateLocationDto[];
 }
