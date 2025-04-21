@@ -2,7 +2,7 @@ import { Controller, Post, Get, Put, Delete, Body, Param, Query, UseInterceptors
 import { VendorService } from './vendor.service';
 import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
-import { VendorStatus } from './entities/vendor.entity';
+import { VendorStatus } from 'src/constants/vendor.enum';
 import { Vendor } from './entities/vendor.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
