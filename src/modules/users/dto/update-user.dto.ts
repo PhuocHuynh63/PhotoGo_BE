@@ -19,7 +19,7 @@ export class UpdateUserDto {
         minLength: 6,
         maxLength: 50,
     })
-    passwordHash?: string; // Mật khẩu mới
+    password?: string; // Mật khẩu mới
 
     @IsOptional()
     @IsString()
