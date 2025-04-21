@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -12,32 +15,38 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install dependencies & Build NestJS
         run: |
           npm install
           npm run build
 
-      - name: Prepare code to send
+      - name: Prepare Code folder to send
         run: |
           mkdir -p .github/temp_build/Code
           cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
 
-      - name: Copy build to VPS
+      - name: Copy Code to VPS
         run: |
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" .github/temp_build/Code/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/backend
+          scp -o StrictHostKeyChecking=no -i private_key.pem -r .github/temp_build/Code/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/root/backend
           rm -f private_key.pem
 
       - name: SSH and restart backend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_PRIVATE_KEY }}
-          script: |
-            cd /home/${{ secrets.VPS_USER }}/backend
-            docker-compose down
-            docker-compose up --build -d
+        run: |
+          echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd /root/backend &&
+            docker build -t photogo-nestjs:latest . &&
+            docker stop photogo-nestjs || true &&
+            docker rm photogo-nestjs || true &&
+            docker run -d --name photogo-nestjs -p 3000:3000 --restart always photogo-nestjs:latest
+          "
+          rm -f private_key.pem
+        env:
+          VPS_PRIVATE_KEY: ${{ secrets.VPS_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
