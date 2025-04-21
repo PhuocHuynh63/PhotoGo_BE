@@ -13,23 +13,24 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Install & Build NestJS
+      - name: Install dependencies & Build NestJS
         run: |
           npm install
           npm run build
 
       - name: Prepare Code folder to send
         run: |
-          mkdir Code
-          cp -r dist package*.json tsconfig.json Dockerfile Code/
+          mkdir -p .github/temp_build/Code
+          cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
+          cp .env.production .github/temp_build/
 
-      - name: Copy Code folder to VPS
+      - name: Copy Code to VPS
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
-          source: "Code"
+          source: ".github/temp_build/"
           target: "/home/root/backend"
 
       - name: SSH and restart backend
