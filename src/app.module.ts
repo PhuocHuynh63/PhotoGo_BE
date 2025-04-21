@@ -24,7 +24,7 @@ import { CommentModule } from './modules/comments/comment.module';
 import { RefundModule } from './modules/refunds/refund.module';
 import { BookingModule } from './modules/bookings/booking.module';
 import { CartModule } from './modules/carts/cart.module';
-import { PaymentModule } from './modules/payments/payment.module';  
+import { PaymentModule } from './modules/payments/payment.module';
 import { PayosModule } from './3rdService/payos/payos.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -42,6 +42,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { SupportTicketsModule } from './modules/support-tickets/support_tickets.module';
 import { ReviewModule } from './modules/reviews/reviews.module';
 import { ServicePackageModule } from './modules/service-package/service-package.module';
+import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -87,7 +88,7 @@ if (!fs.existsSync(templateDir)) {
       entities: [User, Role], // Đăng ký cả User và Role entity
       autoLoadEntities: true,
       synchronize: false, // Bật true chỉ khi đang dev local
-      namingStrategy:  new SnakeNamingStrategy(),
+      namingStrategy: new SnakeNamingStrategy(),
     }),
 
     MailerModule.forRootAsync({
@@ -118,6 +119,7 @@ if (!fs.existsSync(templateDir)) {
     UserModule,
     RoleModule,
     GoogleAuthModule,
+    FacebookAuthModule,
     AuthModule,
     UploadModule,
     VendorModule,
