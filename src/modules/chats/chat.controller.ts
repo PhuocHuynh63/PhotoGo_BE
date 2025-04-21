@@ -1,26 +1,38 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Req, UseGuards } from '@nestjs/common';
 import { ChatService } from './chat.service';
-import { ChatConversation } from './entities/chat.entity';
+import { Chat } from './entities/chat.entity';
+import { JwtAuthGuard } from 'src/modules/auth/passport/jwt-auth.guard';
 
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
-  async createChat(@Body() body: { vendorId: string; userId: string }): Promise<ChatConversation> {
-    return this.chatService.createChat(body.vendorId, body.userId);
+  async createChat(
+    @Req() req: any,
+    @Body() body: { partnerId: string },
+  ): Promise<Chat> {
+    // Create a chat with both user's IDs in a members array.
+    const members = [req.user.userId, body.partnerId];
+    return this.chatService.createChat(members);
   }
 
-  @Get('user/:userId')
-  async getChatsByUser(@Param('userId') userId: string): Promise<ChatConversation[]> {
-    return this.chatService.getChatsByUser(userId);
+  // Example: Get chats by a member's id
+  @UseGuards(JwtAuthGuard)
+  @Get('member/:memberId')
+  async getChatsByMember(@Param('memberId') memberId: string): Promise<Chat[]> {
+    return this.chatService.getChatsByMember(memberId);
   }
 
-  @Get(':vendorId/:userId')
+  // Example: Get a private chat between two members
+  @UseGuards(JwtAuthGuard)
+  @Get(':partnerId')
   async getChat(
-    @Param('vendorId') vendorId: string,
-    @Param('userId') userId: string,
-  ): Promise<ChatConversation> {
-    return this.chatService.getChat(vendorId, userId);
+    @Req() req: any,
+    @Param('partnerId') partnerId: string,
+  ): Promise<Chat> {
+    const members = [req.user.userId, partnerId];
+    return this.chatService.getChatByMembers(members);
   }
 }

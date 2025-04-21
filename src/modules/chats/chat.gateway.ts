@@ -8,40 +8,85 @@ import {
 } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
 import { ChatService } from './chat.service';
+import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
-  cors: { origin: '*' }, // Adjust for your production domain
+  cors: { origin: '*' },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   handleConnection(client: Socket) {
-    console.log(`Client connected: ${client.id}`);
+    const token = client.handshake.auth?.token || client.handshake.query.token;
+    if (!token) {
+      console.log(`Client ${client.id} has no token`);
+      client.disconnect();
+      return;
+    }
+    try {
+      const decoded = this.jwtService.verify(token, { secret: process.env.JWT_SECRET });
+      client.data.user = decoded;
+      console.log(`Client connected: ${client.id}, user: ${decoded.sub}`);
+    } catch (error) {
+      console.log(`Token verification failed for client ${client.id}: ${error.message}`);
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
   }
 
-  // When a websocket client wants to join a chat, create or retrieve it and join its room.
+  // Socket event: joinChat
   @SubscribeMessage('joinChat')
   async handleJoinChat(
-    @MessageBody() data: { vendorId: string; userId: string },
+    @MessageBody() data: { memberId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const chat = await this.chatService.createChat(data.vendorId, data.userId);
-    client.join(chat.id);
-    client.emit('joinedRoom', { chatId: chat.id, messages: chat.messages });
+    try {
+      const userId = client.data.user?.userId || client.data.user?.sub;
+      if (!userId) {
+        client.disconnect();
+        return;
+      }
+      // Build sorted members array if needed
+      const members = [userId, data.memberId];
+      // Create or retrieve a chat
+      const chat = await this.chatService.createChat(members);
+      client.join(chat.id);
+      client.emit('joinedRoom', { chatId: chat.id, messages: chat.messages });
+    } catch (error) {
+      console.error(`Error in joinChat: ${error.message}`);
+      client.emit('error', { message: error.message });
+    }
   }
 
-  // When a message is sent, push it into the conversation and broadcast the updated conversation.
+  // Socket event: sendMessage using sender id from token.
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
-    @MessageBody() data: { chatId: string; sender_id: string; text: string; timestamp?: string },
+    @MessageBody() data: { chatId: string; text: string; timestamp?: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const updatedChat = await this.chatService.createMessage(data.chatId, data);
-    client.to(data.chatId).emit('messageReceived', updatedChat);
-    client.emit('messageReceived', updatedChat);
+    try {
+      const sender_id = client.data.user?.userId || client.data.user?.sub;
+      if (!sender_id) {
+        client.disconnect();
+        return;
+      }
+      const messagePayload = {
+        sender_id,
+        text: data.text,
+        timestamp: data.timestamp || new Date().toISOString(),
+      };
+      const updatedChat = await this.chatService.createMessage(data.chatId, messagePayload);
+      client.to(data.chatId).emit('messageReceived', updatedChat);
+      client.emit('messageReceived', updatedChat);
+    } catch (error) {
+      console.error(`Error in sendMessage: ${error.message}`);
+      client.emit('error', { message: error.message });
+    }
   }
 }

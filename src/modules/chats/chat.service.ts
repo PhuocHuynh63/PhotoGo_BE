@@ -1,40 +1,56 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ChatConversation } from './entities/chat.entity';
+import { Chat } from './entities/chat.entity';
 
 @Injectable()
 export class ChatService {
   constructor(
-    @InjectRepository(ChatConversation)
-    private readonly chatRepository: Repository<ChatConversation>,
+    @InjectRepository(Chat)
+    private readonly chatRepository: Repository<Chat>,
   ) {}
 
-  async createChat(vendorId: string, userId: string): Promise<ChatConversation> {
-    let chat = await this.chatRepository.findOne({ where: { vendor_id: vendorId, user_id: userId } });
+  // Create (or retrieve) a chat with a given set of members.
+  async createChat(members: string[]): Promise<Chat> {
+    const sortedMembers = Array.from(new Set(members)).sort();
+    // Try to retrieve an existing chat with these members
+    let chat = await this.getChatByMembers(sortedMembers);
     if (!chat) {
       chat = this.chatRepository.create({
-        vendor_id: vendorId,
-        user_id: userId,
+        members: sortedMembers,
         messages: [],
       });
       chat = await this.chatRepository.save(chat);
     }
     return chat;
   }
+  
 
-  async getChatsByUser(userId: string): Promise<ChatConversation[]> {
-    return this.chatRepository.find({ where: { user_id: userId } });
+  async getChatsByMember(memberId: string): Promise<Chat[]> {
+    // Find chats where the given member is a participant
+    return this.chatRepository
+      .createQueryBuilder('chat')
+      .where(':member = ANY(chat.members)', { member: memberId })
+      .getMany();
   }
 
-  async getChat(vendorId: string, userId: string): Promise<ChatConversation> {
-    return this.chatRepository.findOne({ where: { vendor_id: vendorId, user_id: userId } });
+  async getChatByMembers(members: string[]): Promise<Chat> {
+    const sortedMembers = Array.from(new Set(members)).sort();
+    return this.chatRepository
+      .createQueryBuilder('chat')
+      // ensure parameters are passed as a UUID array
+      .where('chat.members @> ARRAY[:...members]::uuid[]', { members: sortedMembers })
+      .andWhere('array_length(chat.members, 1) = :length', { length: sortedMembers.length })
+      .getOne();
   }
 
-  async createMessage(chatId: string, message: { sender_id: string; text: string; timestamp?: string }): Promise<ChatConversation> {
+  async createMessage(
+    chatId: string,
+    message: { sender_id: string; text: string; timestamp?: string },
+  ): Promise<Chat> {
     const chat = await this.chatRepository.findOne({ where: { id: chatId } });
     if (!chat) {
-      throw new NotFoundException('Chat conversation not found');
+      throw new NotFoundException('Không tìm thấy cuộc trò chuyện');
     }
     const newMessage = {
       sender_id: message.sender_id,
