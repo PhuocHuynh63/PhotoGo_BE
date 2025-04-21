@@ -6,6 +6,7 @@ import { CreatePointDto, CreatePointTransactionDto } from './dto/create-point.dt
 import { FindPointDto } from './dto/find-point.dto';
 import { PointTransaction } from './entities/point-transaction.entity';
 import { isUUID } from 'class-validator';
+import { UpdatePointDto } from './dto/update-point.dto';
 
 @Injectable()
 export class PointService {
@@ -124,4 +125,28 @@ export class PointService {
     return transactions;
   }
   //#endregion findOneTransaction
+
+  //#region update
+  async update(id: string, updatePointDto: UpdatePointDto): Promise<Point> {
+    const point = await this.pointRepository.findOne({ where: { id } });
+    if (!point) {
+      throw new NotFoundException(`Điểm thưởng với id ${id} không tồn tại`);
+    }
+
+    Object.assign(point, updatePointDto);
+    return this.pointRepository.save(point);
+  }
+  //#endregion update
+
+  //#region remove
+  async remove(id: string): Promise<void> {
+    const point = await this.pointRepository.findOne({ where: { id } });
+    if (!point) {
+      throw new NotFoundException(`Điểm thưởng với id ${id} không tồn tại`);
+    }
+
+    await this.pointRepository.remove(point);
+  }
+  //#endregion remove
+
 }

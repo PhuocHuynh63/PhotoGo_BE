@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Param, Body } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Put, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { CreateWalletTransactionDto } from './dto/create-wallet-transaction.dto';
+import { UpdateWalletDto } from './dto/update-wallet.dto';
 import { Wallet } from './entities/wallet.entity';
 import { WalletTransaction } from './entities/wallet-transaction.entity';
 
@@ -47,5 +48,21 @@ export class WalletController {
   @ApiResponse({ status: 404, description: 'Wallet not found' })
   async findWalletById(@Param('id') id: string): Promise<Wallet> {
     return await this.walletService.findWalletById(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a wallet by ID' })
+  @ApiResponse({ status: 200, description: 'Wallet updated successfully', type: Wallet })
+  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  async update(@Param('id') id: string, @Body() updateWalletDto: UpdateWalletDto): Promise<Wallet> {
+    return this.walletService.update(id, updateWalletDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a wallet by ID' })
+  @ApiResponse({ status: 200, description: 'Wallet deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  async remove(@Param('id') id: string): Promise<void> {
+    return this.walletService.remove(id);
   }
 }

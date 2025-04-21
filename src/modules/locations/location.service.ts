@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
+import { UpdateLocationDto } from './dto/update-location.dto';
 
 @Injectable()
 export class LocationService {
@@ -87,4 +88,19 @@ export class LocationService {
     return location;
   }
   //#endregion findOne
+
+  //#region updateLocation
+  async updateLocation(id: string, updateLocationDto: UpdateLocationDto): Promise<Location> {
+    const location = await this.findOne(id);
+    Object.assign(location, updateLocationDto);
+    return this.locationRepository.save(location);
+  }
+  //#endregion updateLocation
+
+  //#region deleteLocation
+  async deleteLocation(id: string): Promise<void> {
+    const location = await this.findOne(id);
+    await this.locationRepository.remove(location);
+  }
+  //#endregion deleteLocation
 }

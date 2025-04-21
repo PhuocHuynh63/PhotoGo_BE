@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param } from '@nestjs/common';
 import { VoucherService } from './voucher.service';
 import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherDto } from './dto/find-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
+import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { Voucher } from './entities/voucher.entity';
 import { VoucherUser } from './entities/voucher-user.entity';
 import { Public } from 'src/decorator/custom';
@@ -81,6 +82,22 @@ export class VoucherController {
   async findOneVoucher(@Param('id') id: string): Promise<Voucher> {
     return this.voucherService.findOneVoucher(id);
   }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a voucher by ID' })
+  @ApiResponse({ status: 200, description: 'Voucher updated successfully', type: Voucher })
+  @ApiResponse({ status: 404, description: 'Voucher not found' })
+  async updateVoucher(@Param('id') id: string, @Body() updateVoucherDto: UpdateVoucherDto): Promise<Voucher> {
+    return await this.voucherService.updateVoucher(id, updateVoucherDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a voucher by ID' })
+  @ApiResponse({ status: 200, description: 'Voucher deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Voucher not found' })
+  async deleteVoucher(@Param('id') id: string): Promise<void> {
+    return await this.voucherService.deleteVoucher(id);
+  }
   //#endregion Voucher Endpoints
 
   //#region VoucherUser Endpoints
@@ -98,6 +115,14 @@ export class VoucherController {
   @ApiResponse({ status: 400, description: 'Voucher is not valid or has been used' })
   async useVoucher(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<VoucherUser> {
     return this.voucherService.useVoucher(voucherId, userId);
+  }
+
+  @Delete('user/:voucherId/:userId')
+  @ApiOperation({ summary: 'Delete a voucher-user mapping by voucherId and userId (Protected)' })
+  @ApiResponse({ status: 200, description: 'VoucherUser deleted successfully' })
+  @ApiResponse({ status: 404, description: 'VoucherUser not found' })
+  async deleteVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<void> {
+    return this.voucherService.deleteVoucherUser(voucherId, userId);
   }
   //#endregion VoucherUser Endpoints
 }

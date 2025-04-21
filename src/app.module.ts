@@ -39,7 +39,7 @@ import { UploadModule } from './3rdService/upload/upload.module';
 import { InvoiceModule } from './modules/invoices/invoice.module';
 import { WishlistModule } from './modules/wishlists/wishlist.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { SupportTicketsModule } from './modules/support_tickets/support_tickets.module';
+import { SupportTicketsModule } from './modules/support-tickets/support_tickets.module';
 import { ReviewModule } from './modules/reviews/reviews.module';
 import { ServicePackageModule } from './modules/service-package/service-package.module';
 

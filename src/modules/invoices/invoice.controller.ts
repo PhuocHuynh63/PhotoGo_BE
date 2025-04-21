@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Param, Query, Body } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Param, Query, Body } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { FindAllInvoicesDto } from './dto/find-all.dto';
+import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation , ApiResponse } from '@nestjs/swagger';
 
 @Controller('invoices')
@@ -34,5 +35,21 @@ export class InvoiceController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async findOne(@Param('id') id: string) {
     return await this.invoiceService.findOne(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update an invoice by ID' })
+  @ApiResponse({ status: 200, description: 'Invoice updated successfully', type: UpdateInvoiceDto })
+  @ApiResponse({ status: 404, description: 'Invoice not found' })
+  async updateInvoice(@Param('id') id: string, @Body() updateInvoiceDto: UpdateInvoiceDto): Promise<Invoice> {
+    return await this.invoiceService.updateInvoice(id, updateInvoiceDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete an invoice by ID' })
+  @ApiResponse({ status: 200, description: 'Invoice deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Invoice not found' })
+  async deleteInvoice(@Param('id') id: string): Promise<void> {
+    return await this.invoiceService.deleteInvoice(id);
   }
 }

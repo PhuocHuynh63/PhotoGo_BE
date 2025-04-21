@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Param, Body } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Param, Body } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WishlistService } from './wishlist.service';
 import { CreateWishlistDto } from './dto/create-wishlist.dto';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
+import { UpdateWishlistDto } from './dto/update-wishlist.dto';
 import { Wishlist } from './entities/wishlist.entity';
 import { WishlistItem } from './entities/wishlist-item.entity';
 
@@ -48,5 +49,29 @@ export class WishlistController {
   @ApiResponse({ status: 404, description: 'Wishlist not found' })
   async findWishlistById(@Param('id') id: string): Promise<Wishlist> {
     return await this.wishlistService.findWishlistById(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a wishlist by ID' })
+  @ApiResponse({ status: 200, description: 'Wishlist updated successfully', type: Wishlist })
+  @ApiResponse({ status: 404, description: 'Wishlist not found' })
+  async updateWishlist(@Param('id') id: string, @Body() updateWishlistDto: UpdateWishlistDto): Promise<Wishlist> {
+    return await this.wishlistService.updateWishlist(id, updateWishlistDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a wishlist by ID' })
+  @ApiResponse({ status: 200, description: 'Wishlist deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Wishlist not found' })
+  async deleteWishlist(@Param('id') id: string): Promise<void> {
+    return await this.wishlistService.deleteWishlist(id);
+  }
+
+  @Delete(':id/items/:itemId')
+  @ApiOperation({ summary: 'Remove an item from the wishlist' })
+  @ApiResponse({ status: 200, description: 'Item removed from wishlist successfully' })
+  @ApiResponse({ status: 404, description: 'Wishlist or item not found' })
+  async deleteWishlistItem(@Param('id') id: string, @Param('itemId') itemId: string): Promise<void> {
+    return await this.wishlistService.deleteWishlistItem(id, itemId);
   }
 }

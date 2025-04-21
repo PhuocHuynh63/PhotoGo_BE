@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Param, Body } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Put, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
+import { UpdateCartDto } from './dto/update-cart.dto';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { GetUser } from 'src/decorator/user.decorator';
@@ -61,5 +62,32 @@ export class CartController {
   @ApiResponse({ status: 404, description: 'Cart not found' })
   async findCartById(@Param('id') id: string): Promise<Cart> {
     return await this.cartService.findCartById(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a cart by ID' })
+  @ApiResponse({ status: 200, description: 'Cart updated successfully', type: Cart })
+  @ApiResponse({ status: 404, description: 'Cart not found' })
+  async updateCart(@Param('id') id: string, @Body() updateCartDto: UpdateCartDto): Promise<Cart> {
+    return await this.cartService.updateCart(id, updateCartDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a cart by ID' })
+  @ApiResponse({ status: 200, description: 'Cart deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Cart not found' })
+  async deleteCart(@Param('id') id: string): Promise<void> {
+    return await this.cartService.removeCart(id);
+  }
+
+  @Delete(':cartId/items/:itemId')
+  @ApiOperation({ summary: 'Remove an item from the cart' })
+  @ApiResponse({ status: 200, description: 'Item removed from cart successfully' })
+  @ApiResponse({ status: 404, description: 'Cart or item not found' })
+  async removeCartItem(
+    @Param('cartId') cartId: string,
+    @Param('itemId') itemId: string,
+  ): Promise<void> {
+    return await this.cartService.removeCartItem(cartId, itemId);
   }
 }

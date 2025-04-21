@@ -11,6 +11,7 @@ import { VendorAvailability } from './entities/vendor-availability.entity';
 import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { slugify } from 'src/utils/utils';
+import { UpdateVendorDto } from './dto/update-vendor.dto';
 
 @Injectable()
 export class VendorService {
@@ -131,6 +132,35 @@ export class VendorService {
     return vendor;
   }
   //#endregion findAll
+
+  //#region update
+  async update(id: string, updateVendorDto: UpdateVendorDto): Promise<Vendor> {
+    const vendor = await this.vendorRepository.findOne({ where: { id } });
+    if (!vendor) {
+      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    }
+
+    const uniqueSlug = await this.generateUniqueSlug(this.vendorRepository, updateVendorDto.name);
+
+    Object.assign(vendor, {
+      ...updateVendorDto,
+      slug: uniqueSlug,
+    });
+
+    return this.vendorRepository.save(vendor);
+  }
+  //#endregion update
+
+  //#region remove
+  async remove(id: string): Promise<void> {
+    const vendor = await this.vendorRepository.findOne({ where: { id } });
+    if (!vendor) {
+      throw new NotFoundException(`Vendor with ID ${id} not found`);
+    }
+
+    await this.vendorRepository.remove(vendor);
+  }
+  //#endregion remove
 
   //#region VendorManager
   async addManager(createVendorManagerDto: CreateVendorManagerDto): Promise<void> {

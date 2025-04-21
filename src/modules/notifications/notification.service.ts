@@ -96,4 +96,18 @@ export class NotificationService {
     return notification;
   }
   //#endregion findOne
+
+  //#region update
+  async update(id: string, updateNotificationDto: Partial<CreateNotificationDto>): Promise<Notification> {
+    await this.notificationRepository.update(id, updateNotificationDto);
+    return this.findOne(id);
+  }
+  //#endregion update
+
+  //#region remove
+  async remove(id: string): Promise<void> {
+    const notification = await this.findOne(id);
+    await this.notificationRepository.remove(notification);
+  }
+  //#endregion remove
 }

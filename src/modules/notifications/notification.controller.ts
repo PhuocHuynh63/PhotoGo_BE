@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Query, Param, Res } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, Res } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { Notification } from './entities/notification.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -50,5 +51,21 @@ export class NotificationController {
   @ResponseMessage('Lấy thông tin thông báo thành công')
   async findOne(@Param('id') id: string): Promise<Notification> {
     return this.notificationService.findOne(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a notification by ID' })
+  @ApiResponse({ status: 200, description: 'Notification updated successfully', type: Notification })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
+  async update(@Param('id') id: string, @Body() updateNotificationDto: UpdateNotificationDto): Promise<Notification> {
+    return this.notificationService.update(id, updateNotificationDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a notification by ID' })
+  @ApiResponse({ status: 200, description: 'Notification deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
+  async remove(@Param('id') id: string): Promise<void> {
+    return this.notificationService.remove(id);
   }
 }

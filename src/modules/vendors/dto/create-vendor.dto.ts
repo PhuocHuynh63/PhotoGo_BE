@@ -25,6 +25,41 @@ export class CreateVendorDto {
   category_id: string;
 
   @IsString()
+  @IsNotEmpty()
+  @ApiProperty({
+    example: 'studio-anh-sang',
+    description: 'Slug of the vendor',
+  })
+  slug: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: 'https://example.com/logo.png',
+    description: 'Logo of the vendor',
+    required: false,
+  })
+  logo?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: 'https://example.com/banner.png',
+    description: 'Banner of the vendor',
+    required: false,
+  })
+  banner?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: 'https://example.com/image.png',
+    description: 'Image URL of the vendor',
+    required: false,
+  })
+  image_url?: string;
+
+  @IsString()
   @IsOptional()
   @ApiProperty({
     example: 'Studio chụp ảnh chuyên nghiệp với thiết bị hiện đại',
