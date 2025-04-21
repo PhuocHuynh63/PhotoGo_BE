@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Query, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, UseGuards } from '@nestjs/common';
 import { SupportTicketService } from './support_tickets.service';
 import { CreateSupportTicketDto } from './dto/create-support_ticket.dto';
 import { FindSupportTicketDto } from './dto/FindSupportTicketDto';
+import { UpdateSupportTicketDto } from './dto/update-support_ticket.dto';
 import { SupportTicket } from './entities/support_ticket.entity';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
@@ -53,6 +54,22 @@ export class SupportTicketController {
   @ApiResponse({ status: 404, description: 'Support ticket not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async findOne(@Param('id') id: string): Promise<SupportTicket> {
-    return this.supportTicketService.findOne(Number(id));
+    return this.supportTicketService.findOne(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a support ticket by ID' })
+  @ApiResponse({ status: 200, description: 'Support ticket updated successfully', type: SupportTicket })
+  @ApiResponse({ status: 404, description: 'Support ticket not found' })
+  async updateSupportTicket(@Param('id') id: string, @Body() updateSupportTicketDto: UpdateSupportTicketDto): Promise<SupportTicket> {
+    return await this.supportTicketService.updateSupportTicket(id, updateSupportTicketDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a support ticket by ID' })
+  @ApiResponse({ status: 200, description: 'Support ticket deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Support ticket not found' })
+  async deleteSupportTicket(@Param('id') id: string): Promise<void> {
+    return await this.supportTicketService.deleteSupportTicket(id);
   }
 }

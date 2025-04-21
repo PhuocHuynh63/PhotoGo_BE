@@ -74,6 +74,18 @@ export class VoucherService {
     }
     return voucher;
   }
+
+  async updateVoucher(id: string, updateVoucherDto: Partial<CreateVoucherDto>): Promise<Voucher> {
+    await this.voucherRepository.update(id, updateVoucherDto);
+    return this.findOneVoucher(id);
+  }
+
+  async deleteVoucher(id: string): Promise<void> {
+    const result = await this.voucherRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(`Voucher with ID ${id} not found`);
+    }
+  }
   //#endregion Voucher Operations
 
   //#region VoucherUser Operations
@@ -198,6 +210,13 @@ export class VoucherService {
     voucherUser.status = VoucherUserStatusEnum.USED;
     voucherUser.used_at = new Date();
     return this.voucherUserRepository.save(voucherUser);
+  }
+
+  async deleteVoucherUser(voucherId: string, userId: string): Promise<void> {
+    const result = await this.voucherUserRepository.delete({ voucher_id: voucherId, user_id: userId });
+    if (result.affected === 0) {
+      throw new NotFoundException(`VoucherUser with voucher_id ${voucherId} and user_id ${userId} not found`);
+    }
   }
   //#endregion VoucherUser Operations
 }

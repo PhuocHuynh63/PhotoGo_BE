@@ -88,4 +88,19 @@ export class CommentService {
     return comment;
   }
   //#endregion findOne
+
+  //#region updateComment
+  async updateComment(id: string, updateCommentDto: Partial<CreateCommentDto>): Promise<Comment> {
+    const comment = await this.findOne(id);
+    Object.assign(comment, updateCommentDto);
+    return this.commentRepository.save(comment);
+  }
+  //#endregion updateComment
+
+  //#region deleteComment
+  async deleteComment(id: string): Promise<void> {
+    const comment = await this.findOne(id);
+    await this.commentRepository.remove(comment);
+  }
+  //#endregion deleteComment
 }

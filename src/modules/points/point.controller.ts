@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param } from '@nestjs/common';
 import { PointService } from './point.service';
 import { CreatePointDto, CreatePointTransactionDto } from './dto/create-point.dto';
+import { UpdatePointDto } from './dto/update-point.dto';
 import { Point } from './entities/point.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -77,5 +78,21 @@ export class PointController {
   @ApiResponse({ status: 201, description: 'Transaction created successfully', type: PointTransaction })
   async createTransaction(@Body() createPointTransactionDto: CreatePointTransactionDto): Promise<PointTransaction> {
     return this.pointService.createTransaction(createPointTransactionDto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a point entry by ID' })
+  @ApiResponse({ status: 200, description: 'Point updated successfully', type: Point })
+  @ApiResponse({ status: 404, description: 'Point not found' })
+  async update(@Param('id') id: string, @Body() updatePointDto: UpdatePointDto): Promise<Point> {
+    return this.pointService.update(id, updatePointDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a point entry by ID' })
+  @ApiResponse({ status: 200, description: 'Point deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Point not found' })
+  async remove(@Param('id') id: string): Promise<void> {
+    return this.pointService.remove(id);
   }
 }

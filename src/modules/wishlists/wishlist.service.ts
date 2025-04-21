@@ -5,6 +5,7 @@ import { Wishlist } from './entities/wishlist.entity';
 import { WishlistItem } from './entities/wishlist-item.entity';
 import { CreateWishlistDto } from './dto/create-wishlist.dto';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
+import { UpdateWishlistDto } from './dto/update-wishlist.dto';
 
 @Injectable()
 export class WishlistService {
@@ -49,4 +50,35 @@ export class WishlistService {
     async findAllWishlists(): Promise<Wishlist[]> {
         return await this.wishlistRepository.find({ relations: ['items', 'items.servicePackage'] });
     }
+
+  async updateWishlist(id: string, updateWishlistDto: UpdateWishlistDto): Promise<Wishlist> {
+    const wishlist = await this.wishlistRepository.findOne({ where: { id } });
+
+    if (!wishlist) {
+      throw new NotFoundException(`Wishlist with ID ${id} not found`);
+    }
+
+    Object.assign(wishlist, updateWishlistDto);
+    return await this.wishlistRepository.save(wishlist);
+  }
+
+  async deleteWishlist(id: string): Promise<void> {
+    const wishlist = await this.wishlistRepository.findOne({ where: { id } });
+
+    if (!wishlist) {
+      throw new NotFoundException(`Wishlist with ID ${id} not found`);
+    }
+
+    await this.wishlistRepository.remove(wishlist);
+  }
+  
+  async deleteWishlistItem(id: string, itemId: string): Promise<void> {
+    const wishlistItem = await this.wishlistItemRepository.findOne({ where: { id }, relations: ['wishlist'] });
+
+    if (!wishlistItem) {
+      throw new NotFoundException(`Wishlist item with ID ${id} not found`);
+    }
+
+    await this.wishlistItemRepository.remove(wishlistItem);
+  }
 }
