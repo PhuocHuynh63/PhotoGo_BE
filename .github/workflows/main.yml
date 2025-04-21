@@ -1,4 +1,4 @@
-name: Deploy NestJS to VPS
+name: Deploy to VPS
 
 on:
   push:
@@ -6,39 +6,38 @@ on:
       - main
 
 jobs:
-  deploy-backend:
+  deploy:
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v3
 
-      - name: Install backend dependencies and build
-        working-directory: backend
+      - name: Install dependencies & Build NestJS
         run: |
           npm install
           npm run build
 
-      - name: Prepare backend deploy folder
+      - name: Prepare code to send
         run: |
-          mkdir -p deploy_folder
-          cp -r backend/dist backend/package.json backend/package-lock.json backend/tsconfig.json backend/docker-compose.yml deploy_folder/
+          mkdir -p .github/temp_build/Code
+          cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
 
-      - name: Rsync code to VPS
+      - name: Copy build to VPS
         run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > private_key.pem
+          echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" deploy_folder/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/${{ secrets.SSH_USER }}/backend
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" .github/temp_build/Code/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/backend
           rm -f private_key.pem
 
-      - name: Restart backend via SSH
+      - name: SSH and restart backend
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_PRIVATE_KEY }}
           script: |
-            cd /home/${{ secrets.SSH_USER }}/backend
-            docker-compose down
-            docker-compose up -d --build
+            cd /home/${{ secrets.VPS_USER }}/backend
+            docker compose down
+            docker compose up --build -d
