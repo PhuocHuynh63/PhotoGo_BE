@@ -39,9 +39,9 @@ async function bootstrap() {
 
   //ConfigCORS
   app.enableCors({
-    origin: ['http://localhost:8080', 'http://localhost:3000'], // Rõ ràng các origin được phép
+    origin: ['http://localhost:8080', 'http://localhost:3000', 'https://photogo.id.vn'], // Rõ ràng các origin được phép
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: ['Content-Type','multipart/form-data', 'Authorization'], // Cho phép các header cần thiết
+    allowedHeaders: ['Content-Type', 'multipart/form-data', 'Authorization'], // Cho phép các header cần thiết
     credentials: true,
     preflightContinue: false,
   });
