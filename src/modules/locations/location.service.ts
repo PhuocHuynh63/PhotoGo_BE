@@ -4,13 +4,14 @@ import { Repository } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
+import { UpdateLocationDto } from './dto/update-location.dto';
 
 @Injectable()
 export class LocationService {
   constructor(
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createLocationDto: CreateLocationDto): Promise<Location> {
@@ -42,7 +43,7 @@ export class LocationService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(location.address ILIKE :term OR location.city ILIKE :term OR location.province ILIKE :term)',
+        `(unaccent(location.address) ILIKE unaccent(:term) OR unaccent(location.city) ILIKE unaccent(:term) OR unaccent(location.province) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -87,4 +88,19 @@ export class LocationService {
     return location;
   }
   //#endregion findOne
+
+  //#region updateLocation
+  async updateLocation(id: string, updateLocationDto: UpdateLocationDto): Promise<Location> {
+    const location = await this.findOne(id);
+    Object.assign(location, updateLocationDto);
+    return this.locationRepository.save(location);
+  }
+  //#endregion updateLocation
+
+  //#region deleteLocation
+  async deleteLocation(id: string): Promise<void> {
+    const location = await this.findOne(id);
+    await this.locationRepository.remove(location);
+  }
+  //#endregion deleteLocation
 }

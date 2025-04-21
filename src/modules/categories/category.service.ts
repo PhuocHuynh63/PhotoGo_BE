@@ -4,13 +4,14 @@ import { Repository } from 'typeorm';
 import { Category } from './entities/category.entity';
 import { CreateCategoryDto } from './dto/category.dto';
 import { FindCategoryDto } from './dto/find-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
 export class CategoryService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
@@ -40,7 +41,7 @@ export class CategoryService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(category.name ILIKE :term)',
+        `(unaccent(category.name) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -86,4 +87,19 @@ export class CategoryService {
     return category;
   }
   //#endregion findOne
+
+  //#region update
+  async update(id: string, updateCategoryDto: UpdateCategoryDto): Promise<Category> {
+    const category = await this.findOne(id);
+    Object.assign(category, updateCategoryDto);
+    return this.categoryRepository.save(category);
+  }
+  //#endregion update
+
+  //#region remove
+  async remove(id: string): Promise<void> {
+    const category = await this.findOne(id);
+    await this.categoryRepository.remove(category);
+  }
+  //#endregion remove
 }

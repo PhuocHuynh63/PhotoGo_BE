@@ -38,13 +38,13 @@ export class BookingController {
     return this.bookingService.findOne(id);
   }
 
-//   @Patch(':id')
-//   update(@Param('id') id: string, @Body() updateBookingDto: UpdateBookingDto): Promise<Booking> {
-//     return this.bookingService.update(id, updateBookingDto);
-//   }
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateBookingDto: UpdateBookingDto): Promise<Booking> {
+    return this.bookingService.update(id, updateBookingDto);
+  }
   
-//   @Delete(':id')
-//   remove(@Param('id') id: string): Promise<void> {
-//     return this.bookingService.remove(id);
-//   }
+  @Delete(':id')
+  remove(@Param('id') id: string): Promise<void> {
+    return this.bookingService.remove(id);
+  }
 }

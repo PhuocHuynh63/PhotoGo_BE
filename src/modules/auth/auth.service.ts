@@ -6,7 +6,7 @@ import { CreateAuthDto } from './dto/create-auth.dto';
 import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
-import { log } from 'console';
+import { RestPasswordhDto } from './dto/rest-password.dto';
 
 
 @Injectable()
@@ -22,12 +22,12 @@ export class AuthService {
     const emailLower = email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
-      throw new NotFoundException('');
+      throw new BadRequestException('Tài khoản hoặc mật khẩu không chính xác');
     }
 
     const isMatch = await comparePasswordHelper(password, user.passwordHash);
     if (!isMatch) {
-      throw new UnauthorizedException('Xác thực không thành công');
+      throw new BadRequestException('Tài khoản hoặc mật khẩu không chính xác');
     }
     await this.userService.updateLoginAt(user);
 
@@ -59,47 +59,65 @@ export class AuthService {
 
   //#region Register
   async handleRegister(registerDto: CreateAuthDto) {
-    try {
-      const registerEmailLowerCase = registerDto.email.toLowerCase();
+    const registerEmailLowerCase = registerDto.email.toLowerCase();
 
-      // Verify OTP
-      // const isOtpValid = await this.mailService.verifyOtp(registerEmailLowerCase, registerDto.otp);
-      // if (!isOtpValid) {
-      //   throw new UnauthorizedException('Sai mã xác thực');
-      // }
+    // Check if email already exists
+    const existingUser = await this.userService.checkDuplicateEmail(registerEmailLowerCase);
 
-      // Create user
-      return await this.userService.create({
-        ...registerDto,
-        email: registerEmailLowerCase,
-        avatarUrl: getInitials(registerDto.fullName),
-        passwordHash: registerDto.passwordHash,
-        fullName: registerDto.fullName,
-        auth: 'local',
-      });
-    } catch (error) {
-      if (error.code === 11000) {
-        throw new ConflictException('Email đã tồn tại');
-      }
-      throw new BadRequestException(error.message || 'Đăng ký không thành công');
+    if (existingUser) {
+      throw new ConflictException('Email đã tồn tại');
     }
+
+    // Create user
+    const user = await this.userService.create({
+      ...registerDto,
+      email: registerEmailLowerCase,
+      avatarUrl: getInitials(registerDto.fullName),
+      passwordHash: registerDto.passwordHash,
+      fullName: registerDto.fullName,
+      auth: 'local',
+    });
+
+    const template = 'otp';
+    const content = 'Mã OTP của bạn là: ';
+    const body = 'Vui lòng nhập mã OTP để xác thực tài khoản của bạn.';
+
+    // Send email
+    this.mailService.generateAndSendOtp(registerEmailLowerCase, template, content, body);
+
+    return user;
   }
   //#endregion
 
   //#region activeAccount
-  async activeAccount(body: { email: string }) {
-    return await this.userService.activeAccount(body);
+  async activeAccount(email: string, otp: string) {
+    const verifyOtp = await this.mailService.verifyOtp(email, otp);
+    if (!verifyOtp) {
+      throw new BadRequestException('Mã OTP không hợp lệ');
+    }
+    const emailLower = email.toLowerCase();
+    return await this.userService.activeAccount(emailLower)
   }
   //#endregion
 
   //#region forgotPassword
-  async forgotPassword(email: string, passwordHash: string) {
-    const emailLower = email.toLowerCase();
+  async resetPassword(body: RestPasswordhDto) {
+    const emailLower = body.email.toLowerCase();
     const user = await this.userService.findOneByEmail(emailLower);
     if (!user) {
-      throw new NotFoundException('Ngươi dùng không tồn tại');
+      throw new NotFoundException('Email không tồn tại');
     }
-    return await this.userService.resetPassword(user, passwordHash);
+    await this.mailService.verifyOtp(emailLower, body.otp);
+
+    if (body.password !== body.confirmPassword) {
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
+    }
+
+    if (body.password.length < 6) {
+      throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
+    }
+
+    return await this.userService.resetPassword(user, body.password);
   }
   //#endregion
 }

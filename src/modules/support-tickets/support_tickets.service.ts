@@ -12,7 +12,7 @@ export class SupportTicketService {
     @InjectRepository(SupportTicket)
     private readonly supportTicketRepository: Repository<SupportTicket>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   async create(createSupportTicketDto: CreateSupportTicketDto, userId: string): Promise<SupportTicket> {
     return await this.dataSource.transaction(async (manager) => {
@@ -82,7 +82,7 @@ export class SupportTicketService {
     };
   }
 
-  async findOne(id: number): Promise<SupportTicket> {
+  async findOne(id: string): Promise<SupportTicket> {
     const supportTicket = await this.supportTicketRepository.findOne({
       where: { id },
       relations: ['user'],
@@ -91,5 +91,29 @@ export class SupportTicketService {
       throw new NotFoundException(`Support ticket with ID ${id} not found`);
     }
     return supportTicket;
+  }
+
+  async updateSupportTicket(id: string, updateSupportTicketDto: Partial<CreateSupportTicketDto>): Promise<SupportTicket> {
+    const supportTicket = await this.supportTicketRepository.findOne({ where: { id } });
+    if (!supportTicket) {
+      throw new NotFoundException(`Support ticket with ID ${id} not found`);
+    }
+  
+    Object.assign(supportTicket, updateSupportTicketDto);
+    return await this.supportTicketRepository.save(supportTicket);
+  }
+  
+
+  async deleteSupportTicket(id: string): Promise<void> {
+    const supportTicket = await this.supportTicketRepository.findOne({ where: { id } });
+    if (!supportTicket) {
+      throw new NotFoundException(`Support ticket with ID ${id} not found`);
+    }
+
+    try {
+      await this.supportTicketRepository.remove(supportTicket);
+    } catch (error) {
+      throw new BadRequestException(`Error deleting support ticket with ID ${id}: ${error.message}`);
+    }
   }
 }

@@ -10,11 +10,8 @@ import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { FindUserDto } from './dto/admin/find-user.dto';
-import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
-import { Cron } from '@nestjs/schedule';
-import { log } from 'console';
-import { logger } from 'handlebars';
+import { UserStatus } from 'src/constants/user.enum';
 
 
 @Injectable()
@@ -36,7 +33,13 @@ export class UserService {
       hashedPassword = await hashPasswordHelper(passwordHash);
     }
 
-    const role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
+    let role = null;
+    if (!createAuthDto.roleId) {
+      role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
+    } else {
+      role = await this.roleService.findOne(createAuthDto.roleId);
+    } // Tìm role theo roleId
+
 
     const user = this.userRepository.create({
       passwordHash: hashedPassword,
@@ -155,23 +158,22 @@ export class UserService {
   //#endregion remove
 
   //#region activateAccount
-  async activeAccount(body: { email: string }): Promise<any> {
-    const { email } = body; // Ensure email is declared
+  async activeAccount(email: string): Promise<any> {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new NotFoundException('Người dùng không tồn tại');
     }
-    if (user.status === 'active') {
+    if (user.status === UserStatus.ACTIVE) {
       throw new BadRequestException('Tài khoản đã được kích hoạt');
     }
-    user.status = 'active';
+    user.status = UserStatus.ACTIVE;
     await this.userRepository.save(user);
-    return { message: 'Tài khoảng đã được kích hoạt' };
+    return { message: 'Tài khoản đã được kích hoạt' };
   }
   //#endregion
 
   //#region resetPassword
-  async resetPassword(user: User, passwordHash: string): Promise<any> {
+  async resetPassword(user: User, passwordHash: string): Promise<boolean> {
     const isMatch = await bcrypt.compare(passwordHash, user.passwordHash);
     if (isMatch) {
       throw new BadRequestException('Mật khẩu mới không được giống với mật khẩu cũ');
@@ -179,7 +181,7 @@ export class UserService {
     user.oldPasswordHash = user.passwordHash;
     user.passwordHash = await hashPasswordHelper(passwordHash);
     await this.userRepository.save(user);
-    return { message: 'Thiết lập lại mật khẩu thành công' };
+    return true;
   }
   //#endregion
 
@@ -207,7 +209,7 @@ export class UserService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
+        `(unaccent(user.fullName) ILIKE unaccent(:term) OR unaccent(user.email) ILIKE unaccent(:term) OR unaccent(user.phoneNumber) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -264,9 +266,27 @@ export class UserService {
 
   //#region findOneByEmail
   async findOneByEmail(email: string): Promise<User | undefined> {
-    return this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    if (!user) {
+      throw new NotFoundException(`Người dùng với email ${email} không tồn tại`);
+    }
+    return user;
   }
   //#endregion findOneByEmail
+
+  //#region findOneByEmail
+  async findOneEmail(email: string): Promise<User | undefined> {
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    return user;
+  }
+  //#endregion findOneByEmail
+
+  //#region checkDuplicateEmail
+  async checkDuplicateEmail(email: string): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    return !!user;
+  }
+  //#endregion checkDuplicateEmail
 
   //#region Count user by rank
   async countUserByRank(rank: string): Promise<number> {

@@ -6,6 +6,7 @@ import { CartItem } from './entities/cart-item.entity';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { BadRequestException } from '@nestjs/common/exceptions';
+import { UpdateCartDto } from './dto/update-cart.dto';
 
 @Injectable()
 export class CartService {
@@ -82,5 +83,40 @@ export class CartService {
     }
 
     return cart.items;
+  }
+
+  async updateCart(id: string, updateCartDto: UpdateCartDto): Promise<Cart> {
+    const cart = await this.cartRepository.findOne({ where: { id } });
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${id} not found`);
+    }
+
+    Object.assign(cart, updateCartDto);
+    return await this.cartRepository.save(cart);
+  }
+
+  async removeCart(id: string): Promise<void> {
+    const cart = await this.cartRepository.findOne({ where: { id } });
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${id} not found`);
+    }
+
+    await this.cartRepository.remove(cart);
+  }
+
+  async removeCartItem(cartId: string, itemId: string): Promise<void> {
+    const cart = await this.cartRepository.findOne({ where: { id: cartId } });
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} not found`);
+    }
+
+    const cartItem = await this.cartItemRepository.findOne({ where: { id: itemId, cartId } });
+    if (!cartItem) {
+      throw new NotFoundException(`Cart item with ID ${itemId} not found in cart ${cartId}`);
+    }
+
+    await this.cartItemRepository.remove(cartItem);
   }
 }

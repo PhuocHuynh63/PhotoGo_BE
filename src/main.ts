@@ -30,20 +30,21 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
-    forbidNonWhitelisted: true,
+    // forbidNonWhitelisted: true,
+    forbidNonWhitelisted: false,
+    transform: true,
   }));
 
   app.setGlobalPrefix('api/v1', { exclude: [''] });
 
   //ConfigCORS
-  app.enableCors(
-    {
-      "origin": true,
-      "methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
-      "preflightContinue": false,
-      credentials: true
-    }
-  );
+  app.enableCors({
+    origin: ['http://localhost:8080', 'http://localhost:3000'], // Rõ ràng các origin được phép
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: ['Content-Type','multipart/form-data', 'Authorization'], // Cho phép các header cần thiết
+    credentials: true,
+    preflightContinue: false,
+  });
 
   //#region Microservices
   // const rabbitmqConsumerService = app.get(RabbitmqConsumerService);

@@ -12,31 +12,23 @@ export class MailController {
 
     @Public()
     @Post('send-otp')
-    @ResponseMessage('Send otp successful')
+    @ResponseMessage('Đã gửi mã OTP thành công')
     @ApiQuery({ name: 'email', required: true, type: String })
     async sendOtp(@Query('email') email: string) {
         const emailLower = email.toLowerCase();
-        const template = 'register';
-        return await this.mailService.generateAndSendOtp(emailLower, template);
+        const template = 'otp';
+        const content = 'Mã OTP của bạn là: ';
+        const body = 'Vui lòng nhập mã OTP để xác thực tài khoản của bạn.';
+        return await this.mailService.generateAndSendOtp(emailLower, template, content, body);
     }
 
     @Public()
     @Post('verify-otp')
-    @ResponseMessage('Verify successful')
+    @ResponseMessage('Xác thực mã OTP thành công')
     @ApiQuery({ name: 'otp', required: true, type: String })
     @ApiQuery({ name: 'email', required: true, type: String })
     async verifyOtpController(@Query('email') email: string, @Query('otp') otp: string) {
-        return await this.mailService.verifyOtp(email, otp);
-    }
-
-    @Public()
-    @Post('send-otp-reset-password')
-    @ResponseMessage('Send otp reset successful')
-    @ApiQuery({ name: 'email', required: true, type: String })
-    async sendOtpResetPassword(@Query('email') email: string) {
-        const emailLower = email.toLowerCase();
-        const template = 'reset-password';
-        return await this.mailService.generateAndSendOtp(emailLower, template);
+        return await this.mailService.verifyOtpStrict(email, otp);
     }
 }
 

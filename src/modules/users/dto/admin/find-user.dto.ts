@@ -1,5 +1,6 @@
 import { ApiProperty, ApiQuery } from "@nestjs/swagger";
 import { IsOptional, IsString, Matches } from "class-validator";
+import { UserStatus } from "src/constants/user.enum";
 
 @ApiQuery({ required: false })
 export class FindUserDto {
@@ -15,8 +16,8 @@ export class FindUserDto {
   @IsOptional()
   @IsString()
   @ApiProperty({
-    example: 'active',
-    description: 'Status of the user account (e.g., active, inactive)',
+    example: UserStatus.ACTIVE,
+    description: 'Trạng thái của người dùng (hoạt động, không hoạt động)',
     required: false,
   })
   status?: string;
@@ -24,8 +25,8 @@ export class FindUserDto {
   @IsOptional()
   @IsString()
   @ApiProperty({
-    example: 'Unrank',
-    description: 'Rank of the user (e.g., Unrank, Bronze, Silver)',
+    example: 'Không hạng',
+    description: 'Hạng của người dùng như (Đồng, Bạc, Vàng)',
     required: false,
   })
   rank?: string;

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsNumberString } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumberString, IsUUID, IsDate } from 'class-validator';
 import { VendorStatus } from 'src/constants/vendor.enum';
 
 export class FindVendorDto {
@@ -57,4 +57,55 @@ export class FindVendorDto {
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
+}
+
+export class VendorManagerFilterDto {
+  @IsUUID()
+  @IsOptional()
+  @ApiProperty({
+    example: 'uuid-of-manager',
+    description: 'Filter vendors by manager user ID',
+    required: false,
+  })
+  managerUserId?: string;
+}
+
+export class VendorLikeFilterDto {
+  @IsUUID()
+  @IsOptional()
+  @ApiProperty({
+    example: 'uuid-of-user',
+    description: 'Filter vendors liked by a specific user',
+    required: false,
+  })
+  likedByUserId?: string;
+}
+
+export class VendorAvailabilityFilterDto {
+  @IsDate()
+  @IsOptional()
+  @ApiProperty({
+    example: '2025-04-17',
+    description: 'Filter vendors available on a specific date',
+    required: false,
+  })
+  availableDate?: Date;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: '09:00',
+    description: 'Filter vendors available starting from this time',
+    required: false,
+  })
+  availableStartTime?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: '18:00',
+    description: 'Filter vendors available until this time',
+    required: false,
+  })
+  availableEndTime?: string;
 }
