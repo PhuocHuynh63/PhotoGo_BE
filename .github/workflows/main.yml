@@ -33,7 +33,10 @@ jobs:
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
           # Tạo thư mục đích trên VPS
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /home/root/backend/Code"
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            mkdir -p /home/root/backend/Code &&
+            rm -rf /home/root/backend/Code/dist  # Xóa thư mục dist trước khi copy
+          "
           # Copy dist, package-lock.json, package.json vào /home/root/backend/Code
           scp -o StrictHostKeyChecking=no -i private_key.pem -r .github/temp_build/Code/* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/Code
           # Copy docker-compose.yml vào /home/root/backend
