@@ -8,7 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    environment: production
+    
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -23,12 +24,11 @@ jobs:
           mkdir -p .github/temp_build/Code
           cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
 
-      - name: Copy Code to VPS
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_PRIVATE_KEY }}
+      - name: Deploy to VPS
+        run: |
+          echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
           source: ".github/temp_build/"
           target: "/home/root/backend"
 
