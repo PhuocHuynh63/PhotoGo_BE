@@ -17,7 +17,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly chatService: ChatService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   handleConnection(client: Socket) {
     const token = client.handshake.auth?.token || client.handshake.query.token;
@@ -30,6 +30,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const decoded = this.jwtService.verify(token, { secret: process.env.JWT_SECRET });
       client.data.user = decoded;
       console.log(`Client connected: ${client.id}, user: ${decoded.sub}`);
+      const userId = decoded.userId || decoded.sub;
+      client.join(userId);
     } catch (error) {
       console.log(`Token verification failed for client ${client.id}: ${error.message}`);
       client.disconnect();
@@ -50,6 +52,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const userId = client.data.user?.userId || client.data.user?.sub;
       if (!userId) {
         client.disconnect();
+        return;
+      }
+      // Check if the partner memberId is valid (not null or "NULL")
+      if (!data.memberId || data.memberId.toLowerCase() === 'null') {
+        client.emit('error', { message: 'Invalid partner id' });
         return;
       }
       // Build sorted members array if needed
@@ -82,8 +89,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: data.timestamp || new Date().toISOString(),
       };
       const updatedChat = await this.chatService.createMessage(data.chatId, messagePayload);
+
+      // Emit to those who have joined the specific chat room.
       client.to(data.chatId).emit('messageReceived', updatedChat);
-      client.emit('messageReceived', updatedChat);
+
+      // For each member in the chat (if conversation is exactly two users), notify the recipient
+      updatedChat.members.forEach(memberId => {
+        if (memberId !== sender_id) {
+          // Emit a notification to the recipient's personal room.
+          client.to(memberId).emit('chatNotification', {
+            chatId: data.chatId,
+            newMessage: messagePayload,
+          });
+        }
+      });
     } catch (error) {
       console.error(`Error in sendMessage: ${error.message}`);
       client.emit('error', { message: error.message });

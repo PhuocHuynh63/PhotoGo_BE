@@ -5,7 +5,7 @@ import { JwtAuthGuard } from 'src/modules/auth/passport/jwt-auth.guard';
 
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(private readonly chatService: ChatService) { }
 
   @UseGuards(JwtAuthGuard)
   @Post()
@@ -13,7 +13,7 @@ export class ChatController {
     @Req() req: any,
     @Body() body: { partnerId: string },
   ): Promise<Chat> {
-    // Create a chat with both user's IDs in a members array.
+    // Build an array with the caller id (from token) and the provided partner id.
     const members = [req.user.userId, body.partnerId];
     return this.chatService.createChat(members);
   }
