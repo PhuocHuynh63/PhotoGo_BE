@@ -35,7 +35,7 @@ services:
 
 networks:
   photogo-network:
-    driver: bridge
+    external: true
 
 volumes:
   pgdata:
