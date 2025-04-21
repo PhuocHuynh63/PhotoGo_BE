@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: Deploy NestJS to VPS
 
 on:
   push:
@@ -7,38 +7,40 @@ on:
 
 jobs:
   deploy:
+    name: Build and Deploy to VPS
     runs-on: ubuntu-latest
-    environment: production
-    
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Install dependencies & Build NestJS
-        run: |
-          npm install
-          npm run build
+      - name: Install dependencies
+        run: npm install
 
-      - name: Prepare Code folder to send
-        run: |
-          mkdir -p .github/temp_build/Code
-          cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
+      - name: Build NestJS
+        run: npm run build
 
-      - name: Deploy to VPS
+      - name: Prepare app folder for deployment
+        run: |
+          mkdir -p deploy_folder
+          cp -r dist package*.json tsconfig.json docker-compose.yml Dockerfile deploy_folder/
+
+      - name: Save private key
         run: |
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-          source: ".github/temp_build/"
-          target: "/home/root/backend"
 
-      - name: SSH and restart backend
+      - name: Copy files to VPS
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" deploy_folder/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/backend
+
+      - name: SSH into VPS and restart Docker
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           script: |
-            cd /home/root/backend
+            cd /home/${{ secrets.VPS_USER }}/backend
             docker compose down
             docker compose up --build -d
