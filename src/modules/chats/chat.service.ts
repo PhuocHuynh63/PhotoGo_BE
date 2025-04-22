@@ -13,37 +13,32 @@ export class ChatService {
     @InjectRepository(Chat)
     private readonly chatRepository: Repository<Chat>,
     private readonly userService: UserService,
-  ) {}
+  ) { }
 
   // Change signature: now accepts an array of member IDs
   async createChat(members: string[]): Promise<Chat> {
-    // Sort & deduplicate the members array.
     const sortedMembers = Array.from(new Set(members)).sort();
 
-    // If there is only one member after deduplication, they are trying to chat with themselves.
     if (sortedMembers.length < 2) {
-      throw new BadRequestException('Không thể trò chuyện với bản thân');
+      throw new Error('Không thể trò chuyện với bản thân');
     }
-    
-    // Determine the partner's id. For simplicity, assume caller is the first element.
-    // In real usage, you may want to check which one is not the caller.
+
     const partnerId = sortedMembers[0] === members[0] ? sortedMembers[1] : sortedMembers[0];
 
-    // Fetch the partner user details.
-    const partner = await this.userService.findOne(partnerId);
-    if (!partner) {
-      throw new NotFoundException('Không tìm thấy thông tin người dùng của đối tác');
+    let partner;
+    try {
+      partner = await this.userService.findOne(partnerId);
+    } catch (error) {
+      // Replace HTTP exception with a plain error
+      throw new Error(`Người dùng với ID ${partnerId} không tồn tại`);
     }
 
-    // If partner.role is an object, use partner.role.name. Otherwise, use partner.role directly.
     const partnerRole: string = typeof partner.role === 'object' ? partner.role.id : partner.role;
     if (this.unchatableRoles.includes(partnerRole)) {
-      throw new BadRequestException(
-        `Không thể trò truyện với người dùng có chức vụ là: ${partner.role.name}`,
-      );
+      const roleName = typeof partner.role === 'object' ? partner.role.name : partner.role;
+      throw new Error(`Không thể trò truyện với người dùng có chức vụ là: ${roleName}`);
     }
 
-    // Try to find an existing chat with these exact members.
     let chat = await this.getChatByMembers(sortedMembers);
     if (!chat) {
       chat = this.chatRepository.create({
