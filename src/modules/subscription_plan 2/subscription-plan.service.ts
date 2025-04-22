@@ -82,4 +82,19 @@ export class SubscriptionPlanService {
     return subscriptionPlan;
   }
   //#endregion findOne
+
+  //#region updateSubscriptionPlan
+  async updateSubscriptionPlan(id: string, updateSubscriptionPlanDto: Partial<CreateSubscriptionPlanDto>): Promise<SubscriptionPlan> {
+    const subscriptionPlan = await this.findOne(id);
+    Object.assign(subscriptionPlan, updateSubscriptionPlanDto);
+    return this.subscriptionPlanRepository.save(subscriptionPlan);
+  }
+  //#endregion updateSubscriptionPlan
+
+  //#region deleteSubscriptionPlan
+  async deleteSubscriptionPlan(id: string): Promise<void> {
+    const subscriptionPlan = await this.findOne(id);
+    await this.subscriptionPlanRepository.remove(subscriptionPlan);
+  }
+  //#endregion deleteSubscriptionPlan
 }
