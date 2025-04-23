@@ -7,16 +7,20 @@ import { User } from './entities/user.entity';
 import { RoleModule } from '../roles/role.module';
 import { UploadModule } from 'src/3rdService/upload/upload.module';
 import { MailModule } from 'src/3rdService/mail/mail.module';
+import { BullQueueModule } from 'src/3rdService/bull/bull-queue.module';
+import { UserProcessor } from './bull/user.processor';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
-    RoleModule, 
+    RoleModule,
     UploadModule,
     MailModule,
+    BullQueueModule.registerQueue('user-deletion'),
+    BullQueueModule.forRoot(),
   ],
-  providers: [UserService],
+  providers: [UserService, UserProcessor],
   controllers: [UserController],
   exports: [UserService, TypeOrmModule],
 })
-export class UserModule {}
+export class UserModule { }

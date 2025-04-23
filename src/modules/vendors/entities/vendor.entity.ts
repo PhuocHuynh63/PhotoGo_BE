@@ -21,7 +21,7 @@ export class Vendor {
 
   @Column({ type: 'text', nullable: true })
   description: string;
-
+  
   @Column({type: 'varchar', length: 100, nullable: true})
   logo?: string;
 
