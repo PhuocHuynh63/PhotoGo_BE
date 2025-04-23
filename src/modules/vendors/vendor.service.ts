@@ -5,7 +5,6 @@ import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { Location } from '../locations/entities/location.entity';
-import { CreateLocationDto } from '../locations/dto/create-location.dto';
 import { VendorManager } from './entities/vendor-manager.entity';
 import { VendorLike } from './entities/vendor-like.entity';
 import { VendorAvailability } from './entities/vendor-availability.entity';
@@ -14,6 +13,8 @@ import { FindVendorDto } from './dto/find-vendor.dto';
 import { slugify } from 'src/utils/utils';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { UploadService } from 'src/3rdService/upload/upload.service'; // Assuming you have an UploadService for handling file uploads
+import { VendorResponseDto } from './dto/response/vendor-response.dto';
+import { ReviewService } from '../reviews/reviews.service'; // Assuming you have a ReviewService for handling reviews
 
 @Injectable()
 export class VendorService {
@@ -30,6 +31,8 @@ export class VendorService {
     private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
+    private readonly reviewService: ReviewService,
+
   ) { }
 
   //#region CreateVendor
@@ -68,18 +71,6 @@ export class VendorService {
       } catch (error) {
         this.logger.error(`Failed to upload banner: ${error.message}`);
         throw new BadRequestException(`Failed to upload banner: ${error.message}`);
-      }
-    }
-
-    // Upload image_url
-    if (files.image_url) {
-      this.logger.log('Uploading image_url');
-      try {
-        const uploadResult = await this.uploadService.uploadImage(files.image_url, 'vendors/images');
-        vendorData.image_url = uploadResult;
-      } catch (error) {
-        this.logger.error(`Failed to upload image_url: ${error.message}`);
-        throw new BadRequestException(`Failed to upload image_url: ${error.message}`);
       }
     }
 
@@ -158,7 +149,7 @@ export class VendorService {
   async findOne(id: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { id },
-      relations: ['category', 'locations'],
+      relations: ['category', 'locations', 'servicePackages'],
     });
     if (!vendor) {
       throw new NotFoundException(`Vendor with ID ${id} not found`);
@@ -166,6 +157,46 @@ export class VendorService {
     return vendor;
   }
   //#endregion findOne
+
+  //#region getvendorResponse
+  async getVendorResponse(id: string, reviewService: ReviewService): Promise<VendorResponseDto> {
+    const vendor = await this.findOne(id);
+  
+    const totalPrice = vendor.servicePackages.reduce(
+      (acc, pkg) => acc + Number(pkg.price), 0,
+    );
+  
+    const averageRating = await reviewService.getAverageRatingByVendorId(id);
+  
+    const response = new VendorResponseDto();
+    response.name = vendor.name;
+    response.slug = vendor.slug;
+    response.description = vendor.description;
+    response.logo = vendor.logo;
+    response.banner = vendor.banner;
+    response.status = vendor.status;
+    response.category = vendor.category;
+    response.locations = vendor.locations.map(loc => ({
+      address: loc.address,
+      district: loc.district,
+      ward: loc.ward,
+      city: loc.city,
+      province: loc.province,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+    }));
+    response.servicePackages = vendor.servicePackages.map(pkg => ({
+      name: pkg.name,
+      description: pkg.description,
+      price: pkg.price,
+      duration: pkg.duration,
+    }));
+    response.totalPrice = totalPrice;
+    response.averageRating = averageRating;
+  
+    return response;
+  }
+  //#endregion getvendorResponse  
 
   //#region findAll
   async findAll(query: FindVendorDto): Promise<{
@@ -184,6 +215,7 @@ export class VendorService {
     const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
     queryBuilder.leftJoinAndSelect('vendor.category', 'category');
     queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
+    queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'service_package');
 
     if (query.term) {
       queryBuilder.andWhere(
@@ -219,21 +251,44 @@ export class VendorService {
   //#endregion findAll
 
   //#region update
-  async update(id: string, updateVendorDto: UpdateVendorDto): Promise<Vendor> {
+  async update(
+    id: string,
+    updateVendorDto: UpdateVendorDto,
+    files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
+  ): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({ where: { id } });
+  
     if (!vendor) {
       throw new NotFoundException(`Vendor with ID ${id} not found`);
     }
-
-    const uniqueSlug = await this.generateUniqueSlug(this.vendorRepository, updateVendorDto.name);
-
-    Object.assign(vendor, {
-      ...updateVendorDto,
-      slug: uniqueSlug,
-    });
-
+  
+    // Update các field đơn giản nếu được truyền vào
+    if (updateVendorDto.name) {
+      vendor.name = updateVendorDto.name;
+      vendor.slug = await this.generateUniqueSlug(this.vendorRepository, updateVendorDto.name);
+    }
+  
+    if (updateVendorDto.description !== undefined) {
+      vendor.description = updateVendorDto.description;
+    }
+  
+    if (updateVendorDto.status !== undefined) {
+      vendor.status = updateVendorDto.status;
+    }
+  
+    // Upload ảnh nếu có truyền vào
+    if (files.logo) {
+      const uploadedLogo = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
+      vendor.logo = uploadedLogo;
+    }
+  
+    if (files.banner) {
+      const uploadedBanner = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
+      vendor.banner = uploadedBanner;
+    }
+  
     return this.vendorRepository.save(vendor);
-  }
+  }  
   //#endregion update
 
   //#region remove

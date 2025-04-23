@@ -14,10 +14,6 @@ export class CreateServicePackageDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
-  @IsOptional()
-  image?: string;
-
   @IsNumber()
   @Min(0)
   @IsNotEmpty()

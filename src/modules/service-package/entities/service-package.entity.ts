@@ -29,9 +29,6 @@ export class ServicePackage {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'image_url' })
-  image: string; // URL hoặc đường dẫn đến hình ảnh của gói dịch vụ
-
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.0, nullable: false })
   price: number;
 

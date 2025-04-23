@@ -1,4 +1,6 @@
-import { Column, Entity, CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn } from 'typeorm';
+import { Invoice } from 'src/modules/invoices/entities/invoice.entity';
+import { Column, Entity, CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import { VoucherStatusEnum, VoucherUserStatusEnum } from '../../../constants/voucher.enum';
 
 @Entity('voucher')
 export class Voucher {
@@ -21,7 +23,7 @@ export class Voucher {
   end_date: string;
 
   @Column({ type: 'varchar', length: 20, nullable: false })
-  status: string;
+  status: VoucherStatusEnum;
 
   @CreateDateColumn({ type: 'timestamptz', default: () => 'NOW()' })
   created_at: Date;

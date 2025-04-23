@@ -1,4 +1,14 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateVendorDto } from './create-vendor.dto';
+import { IsOptional } from 'class-validator';
+import { VendorStatus } from 'src/constants/vendor.enum';
 
-export class UpdateVendorDto extends PartialType(CreateVendorDto) {}
+export class UpdateVendorDto {
+    @IsOptional()
+    name?: string;
+  
+    @IsOptional()
+    description?: string;
+  
+    @IsOptional()
+    status?: VendorStatus;
+  }
+  

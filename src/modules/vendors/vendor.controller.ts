@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Put, Delete, Body, Param, Query, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { VendorService } from './vendor.service';
+import { ReviewService } from '../reviews/reviews.service';
 import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { VendorStatus } from 'src/constants/vendor.enum';
@@ -9,6 +10,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Logger } from '@nestjs/common';
+import { VendorResponseDto } from './dto/response/vendor-response.dto';
 
 
 @ApiTags('Vendors')
@@ -16,7 +18,9 @@ import { Logger } from '@nestjs/common';
 @ApiBearerAuth('access-token')
 export class VendorController {
   private readonly logger = new Logger(VendorController.name);
-  constructor(private readonly vendorService: VendorService) {}
+  constructor(private readonly vendorService: VendorService,
+              private readonly reviewService: ReviewService
+  ) {}
 
   //#region Vendor
   @Post()
@@ -26,7 +30,6 @@ export class VendorController {
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'logo', maxCount: 1 },
     { name: 'banner', maxCount: 1 },
-    { name: 'image_url', maxCount: 1 },
   ]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -46,21 +49,19 @@ export class VendorController {
         },
         logo: { type: 'string', format: 'binary' },
         banner: { type: 'string', format: 'binary' },
-        image_url: { type: 'string', format: 'binary' },
       },
       required: ['name', 'category_id', 'slug'],
     },
   })
   async create(
     @Body() createVendorDto: CreateVendorDto,
-    @UploadedFiles() files: { logo?: Express.Multer.File[]; banner?: Express.Multer.File[]; image_url?: Express.Multer.File[] },
+    @UploadedFiles() files: { logo?: Express.Multer.File[]; banner?: Express.Multer.File[] },
   ): Promise<Vendor> {
     this.logger.log(`Received create vendor request: ${JSON.stringify(createVendorDto)}`);
 
     const fileMap = {
       logo: files.logo && files.logo[0],
       banner: files.banner && files.banner[0],
-      image_url: files.image_url && files.image_url[0],
     };
 
     return this.vendorService.create(createVendorDto, fileMap);
@@ -90,18 +91,46 @@ export class VendorController {
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a vendor by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Vendor found', type: Vendor })
-  async findOne(@Param('id') id: string): Promise<Vendor> {
-    return this.vendorService.findOne(id);
+  @ApiResponse({ status: 200, description: 'Vendor found', type: VendorResponseDto })
+  async findOne(@Param('id') id: string): Promise<VendorResponseDto> {
+    return this.vendorService.getVendorResponse(id, this.reviewService);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a vendor by ID' })
+  @ApiOperation({ summary: 'Update a vendor by ID (multipart/form-data)' })
   @ApiResponse({ status: 200, description: 'Vendor updated successfully', type: Vendor })
   @ApiResponse({ status: 404, description: 'Vendor not found' })
-  async update(@Param('id') id: string, @Body() updateVendorDto: UpdateVendorDto): Promise<Vendor> {
-    return this.vendorService.update(id, updateVendorDto);
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'logo', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+  ]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Update vendor data and files',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'New Vendor Name' },
+        description: { type: 'string', example: 'Updated vendor description', nullable: true },
+        status: { type: 'string', enum: Object.values(VendorStatus), example: VendorStatus.ACTIVE, nullable: true },
+        logo: { type: 'string', format: 'binary' },
+        banner: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async update(
+    @Param('id') id: string,
+    @Body() updateVendorDto: UpdateVendorDto,
+    @UploadedFiles() files: { logo?: Express.Multer.File[]; banner?: Express.Multer.File[] },
+  ): Promise<Vendor> {
+    const fileMap = {
+      logo: files.logo && files.logo[0],
+      banner: files.banner && files.banner[0],
+    };
+  
+    return this.vendorService.update(id, updateVendorDto, fileMap);
   }
+  
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a vendor by ID' })

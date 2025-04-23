@@ -6,6 +6,7 @@ import { BookingStatus } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { ServicePackage } from '../service-package/entities/service-package.entity';
 
 @Injectable()
 export class BookingService {
@@ -14,25 +15,47 @@ export class BookingService {
     private bookingRepository: Repository<Booking>,
     @InjectRepository(BookingHistory)
     private bookingHistoryRepository: Repository<BookingHistory>,
+    @InjectRepository(ServicePackage)
+    private servicePackageRepository: Repository<ServicePackage>,
   ) {}
 
-  async create(createBookingDto: CreateBookingDto): Promise<Booking> {
-    const booking = this.bookingRepository.create({
-      ...createBookingDto,
-      status: BookingStatus.PENDING,
+  //#region Create Booking
+  async create(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    servicePackageId: string,
+  ): Promise<Booking> {
+
+    const servicePackage = await this.servicePackageRepository.findOne({
+      where: { id: servicePackageId },
+      relations: ['vendor'],
     });
 
-    const savedBooking = await this.bookingRepository.save(booking);
+    if (!servicePackage) {
+      throw new NotFoundException(`Service Package with ID ${servicePackageId} not found`);
+    }
 
-    // Ghi lại lịch sử booking
+    const vendorId = servicePackage.vendorId;
+
+    const booking = this.bookingRepository.create({
+      ...createBookingDto,
+      userId,
+      servicePackageId,
+      vendorId,
+      status: BookingStatus.PENDING,
+    });
+  
+    const savedBooking = await this.bookingRepository.save(booking);
+  
     const history = this.bookingHistoryRepository.create({
       bookingId: savedBooking.id,
       status: BookingStatus.PENDING,
     });
     await this.bookingHistoryRepository.save(history);
-
+  
     return savedBooking;
-  }
+  }  
+  //#endregion
 
   async findAll(): Promise<Booking[]> {
     return this.bookingRepository.find({
@@ -43,7 +66,6 @@ export class BookingService {
   async findOne(id: string): Promise<Booking> {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'vendor', 'servicePackage', 'histories', 'invoices', 'disputes'],
     });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${id} not found`);

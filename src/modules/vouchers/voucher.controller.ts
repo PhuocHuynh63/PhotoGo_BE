@@ -105,8 +105,9 @@ export class VoucherController {
   @ApiOperation({ summary: 'Assign a voucher to a user (Protected)' })
   @ApiResponse({ status: 201, description: 'Voucher assigned successfully', type: VoucherUser })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async createVoucherUser(@Body() createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
-    return this.voucherService.createVoucherUser(createVoucherUserDto);
+  async createVoucherUser(@Query ('userId') userId: string, @Query('voucherId') voucherId: string,
+                          @Body() createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
+    return this.voucherService.createVoucherUser(userId,voucherId,createVoucherUserDto);
   }
 
   @Post('user/:voucherId/:userId/use')

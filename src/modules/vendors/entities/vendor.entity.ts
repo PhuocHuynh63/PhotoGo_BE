@@ -28,9 +28,6 @@ export class Vendor {
   @Column({ type: 'varchar', length: 100, nullable: true })
   banner?: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  image_url?: string;
-
   @Column({ type: 'enum', enum: VendorStatus, default: VendorStatus.ACTIVE })
   status: VendorStatus;
 
