@@ -16,8 +16,10 @@ export class InvoiceController {
   @ApiOperation({ summary: 'Create a new invoice' })
   @ApiResponse({ status: 201, description: 'Invoice created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input' })
-  async create(@Body() createInvoiceDto: CreateInvoiceDto) {
-    return await this.invoiceService.create(createInvoiceDto);
+  async create(@Query('bookingId') bookingId: string,
+               @Query('voucherId') voucherId: string,
+               @Body() createInvoiceDto: CreateInvoiceDto) {
+    return await this.invoiceService.create(bookingId,voucherId,createInvoiceDto);
   }
 
   @Get()

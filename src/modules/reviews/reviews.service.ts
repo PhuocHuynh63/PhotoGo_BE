@@ -51,8 +51,8 @@ export class ReviewService {
           'review.id',
           'review.rating',
           'review.comment',
-          'user.fullName', // Updated to match the likely property name
-          'vendor.name', // Updated to match the likely property name
+          'user', // Updated to match the likely property name
+          'vendor', // Updated to match the likely property name
         ])
         .getMany();
     } catch (error) {
@@ -69,7 +69,7 @@ export class ReviewService {
     try {
       const reviews = await this.reviewRepository.find({
         where: { vendorId },
-        relations: ['user', 'vendor', 'booking'],
+        relations: ['vendor'],
       });
 
       if (!reviews.length) {
@@ -138,4 +138,17 @@ export class ReviewService {
       throw new BadRequestException('Failed to delete review: ' + error.message);
     }
   }
+
+  async getAverageRatingByVendorId(vendorId: string): Promise<number> {
+    const reviews = await this.reviewRepository.find({
+      where: { vendorId },
+      select: ['rating'],
+    });
+  
+    if (!reviews.length) return 0;
+  
+    const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+    return parseFloat((total / reviews.length).toFixed(2));
+  }
+  
 }

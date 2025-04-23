@@ -9,6 +9,8 @@ import { Payment } from '../payments/entities/payment.entity';
 import { Refund } from '../refunds/entities/refund.entity';
 import { RefundHistory } from '../refunds/entities/refund-history.entity';
 import { Dispute } from '../disputes/entities/dispute.entity'; // Adjust the import path as necessary
+import { ServicePackageModule } from '../service-package/service-package.module';
+import { ServicePackage } from '../service-package/entities/service-package.entity';
 
 @Module({
   imports: [
@@ -20,9 +22,12 @@ import { Dispute } from '../disputes/entities/dispute.entity'; // Adjust the imp
       Refund,
       RefundHistory,
       Dispute,
+      ServicePackage,
     ]),
+    ServicePackageModule,
   ],
   controllers: [BookingController],
   providers: [BookingService],
+  exports: [BookingService],
 })
 export class BookingModule {}

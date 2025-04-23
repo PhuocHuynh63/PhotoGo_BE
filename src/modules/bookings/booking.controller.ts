@@ -1,11 +1,15 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { Booking } from './entities/booking.entity';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiExtraModels } from '@nestjs/swagger/dist/decorators/api-extra-models.decorator';
+import { BookingDepositType, BookingSourceType, BookingStatus } from 'src/constants/booking.enum';
+import e from 'express';
 
 @Controller('bookings')
+@ApiExtraModels(CreateBookingDto)
 @ApiTags('Booking')
 @ApiBearerAuth('access-token')
 export class BookingController {
@@ -13,11 +17,14 @@ export class BookingController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new booking' })
-  @ApiResponse({ status: 201, description: 'Booking created successfully', type: Booking })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiBody({ type: CreateBookingDto })
-  create(@Body() createBookingDto: CreateBookingDto): Promise<Booking> {
-    return this.bookingService.create(createBookingDto);
+  @ApiResponse({ status: 201, description: 'Booking created successfully', type: Booking })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  create(@Body() createBookingDto: CreateBookingDto,
+         @Query('userId') userId: string,
+         @Query('servicePackageId') servicePackageId: string): Promise<Booking> {
+    return this.bookingService.create(createBookingDto, userId, servicePackageId);
   }
 
   @Get()

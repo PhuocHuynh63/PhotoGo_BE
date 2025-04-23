@@ -6,6 +6,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { RabbitmqConsumerService } from './3rdService/microservices/rabbitmq/rabbitmq.consumer.service';
 import passport from 'passport';
+import { CreateBookingDto } from './modules/bookings/dto/create-booking.dto';
 
 async function bootstrap() {
 
@@ -69,7 +70,9 @@ async function bootstrap() {
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config, {
+    extraModels: [CreateBookingDto],
+  });
   SwaggerModule.setup('api/document', app, document);
   //#endregion
 
