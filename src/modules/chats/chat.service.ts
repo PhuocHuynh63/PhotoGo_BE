@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Chat } from './entities/chat.entity';
 import { UserService } from 'src/modules/users/user.service';
+import { CreateChatDto } from './dto/create-chat.dto';
+import { FindChatDto } from './dto/find-chat.dto';
 
 @Injectable()
 export class ChatService {
@@ -15,8 +17,10 @@ export class ChatService {
     private readonly userService: UserService,
   ) { }
 
-  // Change signature: now accepts an array of member IDs
-  async createChat(members: string[]): Promise<Chat> {
+  // Consolidated method: accepts a DTO and the caller's userId.
+  async createChat(createChatDto: CreateChatDto, userId: string): Promise<Chat> {
+    // Assemble the members array using the user's id from token and the partnerId from the DTO.
+    const members = [userId, createChatDto.partnerId];
     const sortedMembers = Array.from(new Set(members)).sort();
 
     if (sortedMembers.length < 2) {
@@ -46,6 +50,15 @@ export class ChatService {
         messages: [],
       });
       chat = await this.chatRepository.save(chat);
+    }
+    return chat;
+  }
+
+  async findChat(findChatDto: FindChatDto, userId: string): Promise<Chat> {
+    const members = [userId, findChatDto.partnerId];
+    const chat = await this.getChatByMembers(members);
+    if (!chat) {
+      throw new NotFoundException('Không tìm thấy cuộc trò chuyện');
     }
     return chat;
   }

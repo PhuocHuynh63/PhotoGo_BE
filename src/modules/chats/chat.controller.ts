@@ -1,38 +1,40 @@
-import { Controller, Post, Body, Get, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Req, Query } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { Chat } from './entities/chat.entity';
-import { JwtAuthGuard } from 'src/modules/auth/passport/jwt-auth.guard';
+import { CreateChatDto } from './dto/create-chat.dto';
+import { FindChatDto } from './dto/find-chat.dto';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
-@Controller('chat')
+@ApiTags('Chats')
+@ApiBearerAuth('access-token')
+@Controller('chats')
 export class ChatController {
   constructor(private readonly chatService: ChatService) { }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
-  async createChat(
-    @Req() req: any,
-    @Body() body: { partnerId: string },
-  ): Promise<Chat> {
-    // Build an array with the caller id (from token) and the provided partner id.
-    const members = [req.user.userId, body.partnerId];
-    return this.chatService.createChat(members);
+  @ApiOperation({ summary: 'Create a new chat' })
+  @ApiResponse({ status: 201, description: 'Chat created successfully', type: Chat })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  async createChat(@Req() req: any, @Body() createChatDto: CreateChatDto): Promise<Chat> {
+    // Use the token's user ID as the caller. The service method createChatFromDto calls the established createChat.
+    const userId: string = req.user.userId || req.user.sub;
+    return this.chatService.createChat(createChatDto, userId);
   }
 
-  // Example: Get chats by a member's id
-  @UseGuards(JwtAuthGuard)
+  @Get(':partnerId')
+  @ApiOperation({ summary: 'Get a chat between the current user and a partner' })
+  @ApiResponse({ status: 200, description: 'Chat found', type: Chat })
+  @ApiResponse({ status: 404, description: 'Chat not found' })
+  async getChat(@Req() req: any, @Param('partnerId') partnerId: string): Promise<Chat> {
+    const userId: string = req.user.userId || req.user.sub;
+    const findChatDto: FindChatDto = { partnerId };
+    return this.chatService.findChat(findChatDto, userId);
+  }
+
   @Get('member/:memberId')
+  @ApiOperation({ summary: 'Get all chats for a member' })
+  @ApiResponse({ status: 200, description: 'Chats retrieved successfully', type: [Chat] })
   async getChatsByMember(@Param('memberId') memberId: string): Promise<Chat[]> {
     return this.chatService.getChatsByMember(memberId);
-  }
-
-  // Example: Get a private chat between two members
-  @UseGuards(JwtAuthGuard)
-  @Get(':partnerId')
-  async getChat(
-    @Req() req: any,
-    @Param('partnerId') partnerId: string,
-  ): Promise<Chat> {
-    const members = [req.user.userId, partnerId];
-    return this.chatService.getChatByMembers(members);
   }
 }
