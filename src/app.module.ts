@@ -43,6 +43,7 @@ import { SupportTicketsModule } from './modules/support-tickets/support_tickets.
 import { ReviewModule } from './modules/reviews/reviews.module';
 import { ServicePackageModule } from './modules/service-package/service-package.module';
 import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
+import { BullQueueModule } from './3rdService/bull/bull-queue.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -116,6 +117,7 @@ if (!fs.existsSync(templateDir)) {
       }),
       inject: [ConfigService],
     }),
+    BullQueueModule,
     UserModule,
     RoleModule,
     GoogleAuthModule,

@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
-import { RedisClientType } from 'redis';
+import { Redis } from 'ioredis'; // Dùng Redis từ ioredis thay vì RedisClientType
 
 @Injectable()
 export class MailService {
@@ -8,7 +8,7 @@ export class MailService {
 
   constructor(
     private readonly mailerService: MailerService,
-    @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
+    @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) { }
 
 
@@ -39,7 +39,7 @@ export class MailService {
     if (await this.redisClient.exists(email)) {
       await this.redisClient.del(email); // Xóa OTP cũ nếu có
     }
-    await this.redisClient.set(email, otp, { EX: 300 }); // Lưu OTP vào Redis với thời gian hết hạn 5 phút
+    await this.redisClient.set(email, otp, 'EX', 300); // Lưu OTP vào Redis với thời gian hết hạn 5 phút
     await this.sendOtpMail(email, otp, template, content, body);
     this.logger.log(`OTP sent to ${email}: ${otp}`);
   }
