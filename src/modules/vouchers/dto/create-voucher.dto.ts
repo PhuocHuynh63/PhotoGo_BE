@@ -1,6 +1,7 @@
 import { ApiProperty, ApiResponse } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, Length, IsNumber, IsDateString, IsOptional, IsEnum } from 'class-validator';
-import { VoucherUserStatusEnum, VoucherTypeDiscount } from 'src/constants/voucher.enum';
+import { assign } from 'nodemailer/lib/shared';
+import { VoucherUserStatusEnum, VoucherTypeDiscount, VoucherStatusEnum } from 'src/constants/voucher.enum';
 
 export class CreateVoucherDto {
   @IsString()
@@ -60,21 +61,26 @@ export class CreateVoucherDto {
   @Length(1, 20)
   @ApiProperty({
     description: 'Trạng thái của mã giảm giá (hoạt động, không hoạt động)',
-    example: VoucherUserStatusEnum.ACTIVE,
+    example: VoucherStatusEnum.ACTIVE,
   })
-  status: string;
+  status: VoucherStatusEnum;
 }
 
 export class CreateVoucherUserDto {
-  @IsString()
-  @IsNotEmpty()
-  user_id: string;
-
-  @IsString()
-  @IsNotEmpty()
-  voucher_id: string;
-
   @IsOptional()
   @IsEnum(VoucherUserStatusEnum)
-  status // Optional field, default to 'available' if not provided
+  @ApiProperty({
+    description: 'Trạng thái của mã giảm giá cho người dùng (có sẵn, đã sử dụng, hết hạn)',
+    example: VoucherUserStatusEnum.AVAILABLE,
+    default: VoucherUserStatusEnum.AVAILABLE,
+  })
+  status: VoucherUserStatusEnum; // Optional field, default to 'available' if not provided
+
+  @IsDateString()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Ngày gán mã giảm giá cho người dùng',
+    example: '2025-10-01',
+  })
+  assigned_at: string
 }

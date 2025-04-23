@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -12,32 +15,56 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install dependencies & Build NestJS
         run: |
           npm install
           npm run build
 
-      - name: Prepare code to send
+      - name: Prepare Code folder to send
         run: |
           mkdir -p .github/temp_build/Code
-          cp -r dist package*.json tsconfig.json Dockerfile .github/temp_build/Code/
+          cp -r dist package-lock.json package.json Dockerfile .github/temp_build/Code/
+          cp docker-compose.yml .github/temp_build/
 
-      - name: Copy build to VPS
+      - name: Copy Code to VPS
         run: |
           echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" .github/temp_build/Code/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/${{ secrets.VPS_USER }}/backend
+          tar -czf code.tar.gz -C .github/temp_build/Code .
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            mkdir -p /home/root/backend/Code &&
+            rm -rf /home/root/backend/Code/dist
+          "
+          scp -o StrictHostKeyChecking=no -i private_key.pem code.tar.gz ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/Code/
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd /home/root/backend/Code &&
+            tar -xzf code.tar.gz &&
+            rm code.tar.gz
+          "
+          scp -o StrictHostKeyChecking=no -i private_key.pem .github/temp_build/docker-compose.yml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/
           rm -f private_key.pem
 
       - name: SSH and restart backend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_PRIVATE_KEY }}
-          script: |
-            cd /home/${{ secrets.VPS_USER }}/backend
-            docker-compose down
-            docker-compose up --build -d
+        run: |
+          echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd /home/root/backend &&
+            docker-compose down &&
+            timeout 300 docker-compose up -d --build || echo 'Build timed out after 5 minutes'
+          "
+          rm -f private_key.pem
+        env:
+          VPS_PRIVATE_KEY: ${{ secrets.VPS_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}

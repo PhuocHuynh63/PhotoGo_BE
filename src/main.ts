@@ -6,6 +6,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { RabbitmqConsumerService } from './3rdService/microservices/rabbitmq/rabbitmq.consumer.service';
 import passport from 'passport';
+import { CreateBookingDto } from './modules/bookings/dto/create-booking.dto';
 
 async function bootstrap() {
 
@@ -41,7 +42,7 @@ async function bootstrap() {
   app.enableCors({
     origin: ['http://localhost:8080', 'http://localhost:3000', 'https://photogo.id.vn'], // Rõ ràng các origin được phép
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: ['Content-Type', 'multipart/form-data', 'Authorization'], // Cho phép các header cần thiết
+    allowedHeaders: ['Content-Type', 'Authorization'], // Cho phép các header cần thiết
     credentials: true,
     preflightContinue: false,
   });
@@ -69,7 +70,9 @@ async function bootstrap() {
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config, {
+    extraModels: [CreateBookingDto],
+  });
   SwaggerModule.setup('api/document', app, document);
   //#endregion
 

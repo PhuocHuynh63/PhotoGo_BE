@@ -7,7 +7,8 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { FindVoucherDto } from './dto/find-voucher.dto';
 import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
-import { VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { UpdateVoucherDto } from './dto/update-voucher.dto';
 
 @Injectable()
 export class VoucherService {
@@ -75,7 +76,7 @@ export class VoucherService {
     return voucher;
   }
 
-  async updateVoucher(id: string, updateVoucherDto: Partial<CreateVoucherDto>): Promise<Voucher> {
+  async updateVoucher(id: string, updateVoucherDto: Partial<UpdateVoucherDto>): Promise<Voucher> {
     await this.voucherRepository.update(id, updateVoucherDto);
     return this.findOneVoucher(id);
   }
@@ -89,28 +90,30 @@ export class VoucherService {
   //#endregion Voucher Operations
 
   //#region VoucherUser Operations
-  async createVoucherUser(createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
-    const voucher = await this.voucherRepository.findOne({ where: { id: createVoucherUserDto.voucher_id } });
+  async createVoucherUser(userId: string, voucherId: string,createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
-      throw new NotFoundException(`Voucher with ID ${createVoucherUserDto.voucher_id} not found`);
+      throw new NotFoundException(`Voucher with ID ${voucherId} not found`);
     }
 
     const currentDate = new Date();
-    if (voucher.status !== 'active' || currentDate < new Date(voucher.start_date) || currentDate > new Date(voucher.end_date)) {
+    if (voucher.status !== VoucherStatusEnum.ACTIVE || currentDate < new Date(voucher.start_date) || currentDate > new Date(voucher.end_date)) {
       throw new BadRequestException('Voucher is not valid or has expired');
     }
 
     const existingVoucherUser = await this.voucherUserRepository.findOne({
-      where: { user_id: createVoucherUserDto.user_id, voucher_id: createVoucherUserDto.voucher_id },
+      where: { user_id: userId, voucher_id: voucherId},
     });
     if (existingVoucherUser) {
       throw new BadRequestException('User already has this voucher');
     }
 
     const voucherUser = this.voucherUserRepository.create({
-      user_id: createVoucherUserDto.user_id,
-      voucher_id: createVoucherUserDto.voucher_id,
-      status: createVoucherUserDto.status || 'available',
+      user_id: userId,
+      voucher_id: voucherId,
+      status: VoucherUserStatusEnum.AVAILABLE,
+      assigned_at: createVoucherUserDto.assigned_at || currentDate,
+      used_at: null,
     });
     return this.voucherUserRepository.save(voucherUser);
   }
@@ -183,10 +186,9 @@ export class VoucherService {
     const currentDate = new Date();
     const voucher = voucherUser.voucher;
     if (
-      voucher.status === 'active' &&
       currentDate >= new Date(voucher.start_date) &&
       currentDate <= new Date(voucher.end_date) &&
-      voucherUser.status === VoucherUserStatusEnum.ACTIVE
+      voucherUser.status === VoucherUserStatusEnum.AVAILABLE
     ) {
       voucherUser['is_valid'] = true;
     } else {

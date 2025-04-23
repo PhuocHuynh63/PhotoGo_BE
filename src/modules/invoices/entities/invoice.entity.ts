@@ -3,6 +3,7 @@ import { Booking } from '../../bookings/entities/booking.entity';
 import { InvoiceStatus } from 'src/constants/booking.enum';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Refund } from '../../refunds/entities/refund.entity';
+import { Voucher } from 'src/modules/vouchers/entities/voucher.entity';
 
 
 
@@ -18,7 +19,7 @@ export class Invoice {
   @Column({ type: 'uuid', name: 'booking_id' })
   bookingId: string;
 
-  @Column({ type: 'integer', default: 0 })
+  @Column({ type: 'integer', default: 0})
   originalPrice: number;
 
   @Column({ type: 'integer', default: 0 })
@@ -39,10 +40,10 @@ export class Invoice {
   @Column({ type: 'enum', enum: InvoiceStatus, default: InvoiceStatus.PENDING })
   status: InvoiceStatus;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'issued_at' })
   issuedAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updatedAt: Date;
 
   @OneToMany(() => Payment, (payment) => payment.invoice)
