@@ -79,7 +79,7 @@ export class BookingService {
     if (updateBookingDto.status) {
       booking.status = updateBookingDto.status;
 
-      // Ghi lại lịch sử thay đổi trạng thái
+      // Cập Nhật lịch sử thay đổi trạng thái
       const history = this.bookingHistoryRepository.create({
         bookingId: booking.id,
         status: updateBookingDto.status,
