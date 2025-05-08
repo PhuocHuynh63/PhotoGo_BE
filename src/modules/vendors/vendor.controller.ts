@@ -8,6 +8,7 @@ import { Vendor } from './entities/vendor.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
+import { FilterVendorDto } from './dto/filter-vendor.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Logger } from '@nestjs/common';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
@@ -82,6 +83,31 @@ export class VendorController {
     return {
       message: 'Vendors fetched with availability filter',
       data: vendors,
+    };
+  }
+
+  @Public()
+  @Get('filter')
+  @ApiOperation({ summary: 'Filter vendors by location, price range, and rating range (Public)' })
+  @ApiResponse({ status: 200, description: 'List of filtered vendors' })
+  async filterVendors(@Query() filterDto: FilterVendorDto) {
+    const result = await this.vendorService.filterVendors(filterDto);
+    return {
+      message: 'Vendors filtered successfully',
+      ...result,
+    };
+  }
+
+  @Public()
+  @Get('search/locations')
+  @ApiOperation({ summary: 'Search vendors by location (Public)' })
+  @ApiQuery({ name: 'term', required: true, description: 'Search term for location', example: 'Thủ Đức' })
+  @ApiResponse({ status: 200, description: 'List of vendors with matching locations' })
+  async searchLocations(@Query('term') term: string) {
+    const result = await this.vendorService.searchLocations(term);
+    return {
+      message: 'Vendors found by location search',
+      ...result,
     };
   }
 
@@ -184,7 +210,5 @@ export class VendorController {
   async addAvailability(@Body() createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
     return this.vendorService.addAvailability(createVendorAvailabilityDto);
   }
-
-  
   //#endregion VendorAvailability
 }
