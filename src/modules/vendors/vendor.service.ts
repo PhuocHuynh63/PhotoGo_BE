@@ -250,6 +250,24 @@ export class VendorService {
   }
   //#endregion findAll
 
+  //#region findAllWithAvailability
+  async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
+    const vendors = await this.vendorRepository
+      .createQueryBuilder('vendor')
+      .leftJoinAndSelect('vendor.availabilities', 'vendor_availability', 
+        'vendor_availability.date = :date AND vendor_availability.isAvailable = true AND vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :endTime',
+        { date, startTime, endTime }
+      )
+      .getMany();
+  
+    // Optionally: map isAvailable
+    return vendors.map(vendor => ({
+      ...vendor,
+      isAvailable: vendor.availabilities.length > 0,
+    }));
+  }
+  //#endregion findAllWithAvailability  
+
   //#region update
   async update(
     id: string,

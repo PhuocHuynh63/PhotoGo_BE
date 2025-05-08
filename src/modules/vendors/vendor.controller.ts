@@ -6,7 +6,7 @@ import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { Vendor } from './entities/vendor.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Logger } from '@nestjs/common';
@@ -65,6 +65,24 @@ export class VendorController {
     };
 
     return this.vendorService.create(createVendorDto, fileMap);
+  }
+  
+  @Get('available')
+  @ApiOperation({ summary: 'Tìm vendor còn trống theo ngày và giờ' })
+  @ApiQuery({ name: 'date', required: true, description: 'Ngày (format: YYYY-MM-DD)', example: '2025-05-10' })
+  @ApiQuery({ name: 'startTime', required: true, description: 'Giờ bắt đầu (format: HH:mm)', example: '09:00' })
+  @ApiQuery({ name: 'endTime', required: true, description: 'Giờ kết thúc (format: HH:mm)', example: '11:00' })
+  @ApiResponse({ status: 200, description: 'Danh sách vendor có sẵn' })
+  async findAllWithAvailability(
+    @Query('date') date: string,
+    @Query('startTime') startTime: string,
+    @Query('endTime') endTime: string,
+  ) {
+    const vendors = await this.vendorService.findAllWithAvailability(date, startTime, endTime);
+    return {
+      message: 'Vendors fetched with availability filter',
+      data: vendors,
+    };
   }
 
   @Public()
@@ -166,5 +184,7 @@ export class VendorController {
   async addAvailability(@Body() createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
     return this.vendorService.addAvailability(createVendorAvailabilityDto);
   }
+
+  
   //#endregion VendorAvailability
 }
