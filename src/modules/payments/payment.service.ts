@@ -7,9 +7,10 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FindAllPaymentsDto } from './dto/find-all-payments.dto';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { ConfigService } from '@nestjs/config';
+import { BookingStatus } from '../../constants/booking.enum';
 
 import  PayOS  from '@payos/node';
-
+import { BookingService } from '../bookings/booking.service';
 
 @Injectable()
 export class PaymentService {
@@ -20,6 +21,7 @@ export class PaymentService {
     private readonly invoiceRepo: Repository<Invoice>,
     @Inject('PAYOS_CLIENT') private readonly payos: PayOS, // Inject PayOS client
     private readonly configService: ConfigService,
+    private readonly bookingService: BookingService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
@@ -99,6 +101,9 @@ export class PaymentService {
         paymentOSId: paymentLinkRes.paymentLinkId, // Lưu paymentId từ PayOS
       });
 
+      await this.bookingService.update(invoice.booking.id, {
+        status: BookingStatus.COMPLETED});
+        
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,
       };

@@ -3,6 +3,7 @@ import { Category } from '../../categories/entities/category.entity';
 import { Location } from '../../locations/entities/location.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { ServicePackage } from '../../service-package/entities/service-package.entity';
+import { VendorAvailability } from './vendor-availability.entity';
 
 @Entity('vendors')
 export class Vendor {
@@ -42,4 +43,8 @@ export class Vendor {
 
   @OneToMany(() => ServicePackage, (servicePackage) => servicePackage.vendor)
   servicePackages: ServicePackage[];
+
+  @OneToMany(() => VendorAvailability, (availability) => availability.vendor)
+  availabilities: VendorAvailability[];
+
 }
