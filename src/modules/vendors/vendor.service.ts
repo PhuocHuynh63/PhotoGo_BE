@@ -371,4 +371,135 @@ export class VendorService {
     return `${baseSlug}-${maxSuffix + 1}`;
   }
   //#endregion Utility
+
+  //#region SearchLocations
+  async searchLocations(searchTerm: string): Promise<{
+    data: Vendor[];
+    pagination: {
+      totalItem: number;
+    };
+  }> {
+    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
+    queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
+    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
+
+    // Search in location fields
+    queryBuilder.andWhere(
+      `(unaccent(locations.address) ILIKE unaccent(:term) OR 
+        unaccent(locations.district) ILIKE unaccent(:term) OR 
+        unaccent(locations.ward) ILIKE unaccent(:term) OR 
+        unaccent(locations.city) ILIKE unaccent(:term) OR 
+        unaccent(locations.province) ILIKE unaccent(:term))`,
+      { term: `%${searchTerm}%` }
+    );
+
+    const [data, totalItem] = await queryBuilder.getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        totalItem,
+      },
+    };
+  }
+  //#endregion SearchLocations
+
+  //#region FilterVendors
+  async filterVendors(params: {
+    location?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    maxRating?: number;
+  }): Promise<{
+    data: Vendor[];
+    pagination: {
+      totalItem: number;
+    };
+  }> {
+    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
+    
+    // Join necessary relations
+    queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
+    queryBuilder.leftJoin('vendor.category', 'category');
+    queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'servicePackages');
+    queryBuilder.leftJoinAndSelect('vendor.reviews', 'review');
+
+    // Location filter
+    if (params.location) {
+      queryBuilder.andWhere(
+        `(unaccent(locations.address) ILIKE unaccent(:location) OR 
+          unaccent(locations.district) ILIKE unaccent(:location) OR 
+          unaccent(locations.ward) ILIKE unaccent(:location) OR 
+          unaccent(locations.city) ILIKE unaccent(:location) OR 
+          unaccent(locations.province) ILIKE unaccent(:location))`,
+        { location: `%${params.location}%` }
+      );
+    }
+
+    // Price range filter
+    if (params.minPrice !== undefined || params.maxPrice !== undefined) {
+      const subQuery = this.vendorRepository
+        .createQueryBuilder('v')
+        .select('v.id')
+        .leftJoin('v.servicePackages', 'sp')
+        .groupBy('v.id');
+
+      const havingConditions = [];
+      const havingParams: Record<string, any> = {};
+
+      if (params.minPrice !== undefined) {
+        havingConditions.push('MIN(sp.price) >= :minPrice');
+        havingParams.minPrice = params.minPrice;
+      }
+      if (params.maxPrice !== undefined) {
+        havingConditions.push('MAX(sp.price) <= :maxPrice');
+        havingParams.maxPrice = params.maxPrice;
+      }
+
+      if (havingConditions.length > 0) {
+        subQuery.having(havingConditions.join(' AND '), havingParams);
+      }
+
+      queryBuilder.andWhere('vendor.id IN (' + subQuery.getQuery() + ')');
+      queryBuilder.setParameters(subQuery.getParameters());
+    }
+    // Rating range filter
+    if (params.minRating !== undefined || params.maxRating !== undefined) {
+      const subQuery = this.vendorRepository
+        .createQueryBuilder('v')
+        .select('v.id')
+        .leftJoin('v.reviews', 'r')
+        .groupBy('v.id');
+
+      const havingConditions = [];
+      const havingParams: Record<string, any> = {};
+
+      if (params.minRating !== undefined) {
+        havingConditions.push('AVG(r.rating) >= :minRating');
+        havingParams.minRating = params.minRating;
+      }
+      if (params.maxRating !== undefined) {
+        havingConditions.push('AVG(r.rating) <= :maxRating');
+        havingParams.maxRating = params.maxRating;
+      }
+
+      if (havingConditions.length > 0) {
+        subQuery.having(havingConditions.join(' AND '), havingParams);
+      }
+
+      queryBuilder.andWhere('vendor.id IN (' + subQuery.getQuery() + ')');
+      queryBuilder.setParameters(subQuery.getParameters());
+    }
+
+    const [data, totalItem] = await queryBuilder.getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        totalItem,
+      },
+    };
+  }
+  //#endregion FilterVendors
 }

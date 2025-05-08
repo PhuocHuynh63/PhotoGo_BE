@@ -4,7 +4,7 @@ import { Location } from '../../locations/entities/location.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { ServicePackage } from '../../service-package/entities/service-package.entity';
 import { VendorAvailability } from './vendor-availability.entity';
-
+import { Review } from '../../reviews/entities/review.entity';
 @Entity('vendors')
 export class Vendor {
   @PrimaryGeneratedColumn('uuid')
@@ -46,5 +46,8 @@ export class Vendor {
 
   @OneToMany(() => VendorAvailability, (availability) => availability.vendor)
   availabilities: VendorAvailability[];
+
+  @OneToMany(() => Review, (review) => review.vendor)
+  reviews: Review[];
 
 }
