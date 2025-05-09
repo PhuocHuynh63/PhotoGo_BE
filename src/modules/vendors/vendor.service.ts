@@ -15,6 +15,7 @@ import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { UploadService } from 'src/3rdService/upload/upload.service'; // Assuming you have an UploadService for handling file uploads
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
 import { ReviewService } from '../reviews/reviews.service'; // Assuming you have a ReviewService for handling reviews
+import { VendorSortField } from 'src/constants/vendor.enum';
 
 @Injectable()
 export class VendorService {
@@ -411,19 +412,36 @@ export class VendorService {
     maxPrice?: number;
     minRating?: number;
     maxRating?: number;
+    current?: string;
+    pageSize?: string;
+    sortBy?: VendorSortField;
+    sortDirection?: 'asc' | 'desc';
   }): Promise<{
     data: Vendor[];
     pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
       totalItem: number;
     };
   }> {
+    const currentPage = params.current ? Number(params.current) : 1;
+    const pageSize = params.pageSize ? Number(params.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
     const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
     
     // Join necessary relations
-    queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-    queryBuilder.leftJoin('vendor.category', 'category');
-    queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'servicePackages');
-    queryBuilder.leftJoinAndSelect('vendor.reviews', 'review');
+    const isGroupBySort =
+      params.sortBy === VendorSortField.PRICE ||
+      params.sortBy === VendorSortField.RATING;
+
+    if (!isGroupBySort) {
+      queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
+      queryBuilder.leftJoinAndSelect('vendor.category', 'category');
+      queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'servicePackages');
+      queryBuilder.leftJoinAndSelect('vendor.reviews', 'review');
+    }
 
     // Location filter
     if (params.location) {
@@ -464,6 +482,7 @@ export class VendorService {
       queryBuilder.andWhere('vendor.id IN (' + subQuery.getQuery() + ')');
       queryBuilder.setParameters(subQuery.getParameters());
     }
+
     // Rating range filter
     if (params.minRating !== undefined || params.maxRating !== undefined) {
       const subQuery = this.vendorRepository
@@ -492,14 +511,59 @@ export class VendorService {
       queryBuilder.setParameters(subQuery.getParameters());
     }
 
+    // Add sorting
+    if (params.sortBy) {
+      const sortDirection = params.sortDirection?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+      
+      switch (params.sortBy) {
+        case VendorSortField.PRICE: {
+          queryBuilder
+            .select('vendor.*')
+            .addSelect('(SELECT MIN(sp.price) FROM service_package sp WHERE sp.vendor_id = vendor.id)', 'minPrice')
+            .leftJoinAndSelect('vendor.locations', 'locations')
+            .leftJoinAndSelect('vendor.category', 'category')
+            .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
+            .leftJoinAndSelect('vendor.reviews', 'review')
+            .distinct(true)
+            .orderBy('minPrice', sortDirection, 'NULLS LAST');
+          break;
+        }
+
+        case VendorSortField.RATING: {
+          queryBuilder
+            .select('vendor.*')
+            .addSelect('(SELECT COALESCE(AVG(r.rating), 0) FROM review r WHERE r.vendor_id = vendor.id)', 'avgRating')
+            .leftJoinAndSelect('vendor.locations', 'locations')
+            .leftJoinAndSelect('vendor.category', 'category')
+            .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
+            .leftJoinAndSelect('vendor.reviews', 'review')
+            .distinct(true)
+            .orderBy('avgRating', sortDirection, 'NULLS LAST');
+          break;
+        }
+
+        default:
+          queryBuilder.orderBy(`vendor.${params.sortBy}`, sortDirection);
+      }
+    } else {
+      queryBuilder.orderBy('vendor.created_at', 'DESC');
+    }
+
+    // Add pagination
+    queryBuilder.skip(skip).take(pageSize);
+
     const [data, totalItem] = await queryBuilder.getManyAndCount();
+    const totalPage = Math.ceil(totalItem / pageSize);
 
     return {
       data,
       pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
         totalItem,
       },
     };
   }
-  //#endregion FilterVendors
+//#endregion FilterVendors
 }
