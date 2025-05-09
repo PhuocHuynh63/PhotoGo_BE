@@ -9,3 +9,11 @@ export enum VendorManagerRole {
   MANAGER = 'manager',
   STAFF = 'staff',
 }
+
+export enum VendorSortField {
+  CREATED_AT = 'created_at',
+  UPDATED_AT = 'updated_at',
+  NAME = 'name',
+  PRICE = 'price',
+  RATING = 'rating'
+}
