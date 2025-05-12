@@ -41,13 +41,13 @@ export class Vendor {
   @OneToMany(() => Location, (location) => location.vendor, { cascade: true })
   locations: Location[];
 
-  @OneToMany(() => ServicePackage, (servicePackage) => servicePackage.vendor)
+  @OneToMany(() => ServicePackage, (servicePackage) => servicePackage.vendor, { cascade: true })
   servicePackages: ServicePackage[];
 
-  @OneToMany(() => VendorAvailability, (availability) => availability.vendor)
+  @OneToMany(() => VendorAvailability, (availability) => availability.vendor, { cascade: true })
   availabilities: VendorAvailability[];
 
-  @OneToMany(() => Review, (review) => review.vendor)
+  @OneToMany(() => Review, (review) => review.vendor, { cascade: true } )
   reviews: Review[];
 
 }

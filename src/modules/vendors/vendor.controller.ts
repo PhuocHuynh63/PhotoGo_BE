@@ -67,23 +67,43 @@ export class VendorController {
 
     return this.vendorService.create(createVendorDto, fileMap);
   }
-  
-  @Get('available')
-  @ApiOperation({ summary: 'Tìm vendor còn trống theo ngày và giờ' })
-  @ApiQuery({ name: 'date', required: true, description: 'Ngày (format: YYYY-MM-DD)', example: '2025-05-10' })
-  @ApiQuery({ name: 'startTime', required: true, description: 'Giờ bắt đầu (format: HH:mm)', example: '09:00' })
-  @ApiQuery({ name: 'endTime', required: true, description: 'Giờ kết thúc (format: HH:mm)', example: '11:00' })
-  @ApiResponse({ status: 200, description: 'Danh sách vendor có sẵn' })
-  async findAllWithAvailability(
-    @Query('date') date: string,
-    @Query('startTime') startTime: string,
-    @Query('endTime') endTime: string,
-  ) {
-    const vendors = await this.vendorService.findAllWithAvailability(date, startTime, endTime);
-    return {
-      message: 'Vendors fetched with availability filter',
-      data: vendors,
+
+  @Public()
+  @Get()
+  @ApiOperation({ summary: 'Get all vendors (Public)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of vendors with pagination',
+    type: [Vendor],
+  })
+  @ResponseMessage('Lấy danh sách nhà cung cấp thành công')
+  async findAll(@Query() query: FindVendorDto): Promise<{
+    data: Vendor[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
     };
+  }> {
+    return this.vendorService.findAll(query);
+  }
+
+  @Public()
+  @Get('slug/:slug')
+  @ApiOperation({ summary: 'Get a vendor by slug (Public)' })
+  @ApiResponse({ status: 200, description: 'Vendor found', type: VendorResponseDto })
+  @ApiResponse({ status: 404, description: 'Vendor not found' })
+  async findBySlug(@Param('slug') slug: string): Promise<VendorResponseDto> {
+    return this.vendorService.findBySlug(slug);
+  }
+
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a vendor by ID (Public)' })
+  @ApiResponse({ status: 200, description: 'Vendor found', type: VendorResponseDto })
+  async findOne(@Param('id') id: string): Promise<VendorResponseDto> {
+    return this.vendorService.getVendorResponse(id, this.reviewService);
   }
 
   @Public()
@@ -111,33 +131,22 @@ export class VendorController {
     };
   }
 
-  @Public()
-  @Get()
-  @ApiOperation({ summary: 'Get all vendors (Public)' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of vendors with pagination',
-    type: [Vendor],
-  })
-  @ResponseMessage('Lấy danh sách nhà cung cấp thành công')
-  async findAll(@Query() query: FindVendorDto): Promise<{
-    data: Vendor[];
-    pagination: {
-      current: number;
-      pageSize: number;
-      totalPage: number;
-      totalItem: number;
+  @Get('available')
+  @ApiOperation({ summary: 'Tìm vendor còn trống theo ngày và giờ' })
+  @ApiQuery({ name: 'date', required: true, description: 'Ngày (format: YYYY-MM-DD)', example: '2025-05-10' })
+  @ApiQuery({ name: 'startTime', required: true, description: 'Giờ bắt đầu (format: HH:mm)', example: '09:00' })
+  @ApiQuery({ name: 'endTime', required: true, description: 'Giờ kết thúc (format: HH:mm)', example: '11:00' })
+  @ApiResponse({ status: 200, description: 'Danh sách vendor có sẵn' })
+  async findAllWithAvailability(
+    @Query('date') date: string,
+    @Query('startTime') startTime: string,
+    @Query('endTime') endTime: string,
+  ) {
+    const vendors = await this.vendorService.findAllWithAvailability(date, startTime, endTime);
+    return {
+      message: 'Vendors fetched with availability filter',
+      data: vendors,
     };
-  }> {
-    return this.vendorService.findAll(query);
-  }
-
-  @Public()
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a vendor by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Vendor found', type: VendorResponseDto })
-  async findOne(@Param('id') id: string): Promise<VendorResponseDto> {
-    return this.vendorService.getVendorResponse(id, this.reviewService);
   }
 
   @Put(':id')
@@ -174,7 +183,6 @@ export class VendorController {
   
     return this.vendorService.update(id, updateVendorDto, fileMap);
   }
-  
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a vendor by ID' })

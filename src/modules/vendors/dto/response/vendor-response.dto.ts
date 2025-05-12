@@ -3,9 +3,13 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Category } from 'src/modules/categories/entities/category.entity';
 import { LocationDto } from 'src/modules/locations/dto/response/location-response.dto';
 import { ServicePackageDto } from 'src/modules/service-package/dto/response/package-response.dto';
+import { Review } from 'src/modules/reviews/entities/review.entity';
 
 
 export class VendorResponseDto {
+  @ApiProperty()
+  id: string;
+
   @ApiProperty()
   name: string;
 
@@ -38,4 +42,7 @@ export class VendorResponseDto {
 
   @ApiProperty() 
   averageRating: number;
+
+  @ApiProperty({ type: () => [Review] })
+  reviews: Review[];
 }
