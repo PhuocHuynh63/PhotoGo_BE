@@ -251,6 +251,21 @@ export class VendorService {
   }
   //#endregion findAll
 
+  //#region findBySlug
+  async findBySlug(slug: string): Promise<VendorResponseDto> {
+    const vendor = await this.vendorRepository.findOne({
+      where: { slug },
+      relations: ['category', 'locations', 'servicePackages', 'reviews'],
+    });
+  
+    if (!vendor) {
+      throw new NotFoundException(`Vendor with slug ${slug} not found`);
+    }
+
+    return this.getVendorResponse(vendor.id, this.reviewService);
+  }
+  //#endregion findBySlug
+
   //#region findAllWithAvailability
   async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
     const vendors = await this.vendorRepository
@@ -405,7 +420,7 @@ export class VendorService {
   }
   //#endregion SearchLocations
 
-  //#region FilterVendors
+  //#region filterVendors
   async filterVendors(params: {
     location?: string;
     minPrice?: number;
@@ -428,142 +443,245 @@ export class VendorService {
     const currentPage = params.current ? Number(params.current) : 1;
     const pageSize = params.pageSize ? Number(params.pageSize) : 10;
     const skip = (currentPage - 1) * pageSize;
+    const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
-    
-    // Join necessary relations
-    const isGroupBySort =
-      params.sortBy === VendorSortField.PRICE ||
-      params.sortBy === VendorSortField.RATING;
+    let query = `
+      WITH vendor_stats AS (
+        SELECT 
+          v.id,
+          AVG(r.rating) as avg_rating
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_data AS (
+        SELECT 
+          v.*,
+          vs.avg_rating,
+          l.id as location_id,
+          l.address,
+          l.district,
+          l.ward,
+          l.city,
+          l.province,
+          l.latitude,
+          l.longitude,
+          c.id as category_id,
+          c.name as category_name
+        FROM vendors v
+        LEFT JOIN vendor_stats vs ON vs.id = v.id
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        LEFT JOIN category c ON c.id = v.category_id
+        WHERE 1=1
+    `;
 
-    if (!isGroupBySort) {
-      queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-      queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-      queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'servicePackages');
-      queryBuilder.leftJoinAndSelect('vendor.reviews', 'review');
-    }
+    const queryParams: any[] = [];
+    let paramIndex = 1;
 
-    // Location filter
+    // Add location filter
     if (params.location) {
-      queryBuilder.andWhere(
-        `(unaccent(locations.address) ILIKE unaccent(:location) OR 
-          unaccent(locations.district) ILIKE unaccent(:location) OR 
-          unaccent(locations.ward) ILIKE unaccent(:location) OR 
-          unaccent(locations.city) ILIKE unaccent(:location) OR 
-          unaccent(locations.province) ILIKE unaccent(:location))`,
-        { location: `%${params.location}%` }
-      );
+      query += `
+        AND (
+          unaccent(l.address) ILIKE unaccent($${paramIndex}) OR
+          unaccent(l.district) ILIKE unaccent($${paramIndex}) OR
+          unaccent(l.ward) ILIKE unaccent($${paramIndex}) OR
+          unaccent(l.city) ILIKE unaccent($${paramIndex}) OR
+          unaccent(l.province) ILIKE unaccent($${paramIndex})
+        )
+      `;
+      queryParams.push(`%${params.location}%`);
+      paramIndex++;
     }
 
-    // Price range filter
-    if (params.minPrice !== undefined || params.maxPrice !== undefined) {
-      const subQuery = this.vendorRepository
-        .createQueryBuilder('v')
-        .select('v.id')
-        .leftJoin('v.servicePackages', 'sp')
-        .groupBy('v.id');
-
-      const havingConditions = [];
-      const havingParams: Record<string, any> = {};
-
-      if (params.minPrice !== undefined) {
-        havingConditions.push('MIN(sp.price) >= :minPrice');
-        havingParams.minPrice = params.minPrice;
-      }
-      if (params.maxPrice !== undefined) {
-        havingConditions.push('MAX(sp.price) <= :maxPrice');
-        havingParams.maxPrice = params.maxPrice;
-      }
-
-      if (havingConditions.length > 0) {
-        subQuery.having(havingConditions.join(' AND '), havingParams);
-      }
-
-      queryBuilder.andWhere('vendor.id IN (' + subQuery.getQuery() + ')');
-      queryBuilder.setParameters(subQuery.getParameters());
+    // Add price filters
+    if (params.minPrice !== undefined) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM service_package sp 
+        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex}
+      )`;
+      queryParams.push(params.minPrice);
+      paramIndex++;
+    }
+    if (params.maxPrice !== undefined) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM service_package sp 
+        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex}
+      )`;
+      queryParams.push(params.maxPrice);
+      paramIndex++;
     }
 
-    // Rating range filter
-    if (params.minRating !== undefined || params.maxRating !== undefined) {
-      const subQuery = this.vendorRepository
-        .createQueryBuilder('v')
-        .select('v.id')
-        .leftJoin('v.reviews', 'r')
-        .groupBy('v.id');
-
-      const havingConditions = [];
-      const havingParams: Record<string, any> = {};
-
-      if (params.minRating !== undefined) {
-        havingConditions.push('AVG(r.rating) >= :minRating');
-        havingParams.minRating = params.minRating;
-      }
-      if (params.maxRating !== undefined) {
-        havingConditions.push('AVG(r.rating) <= :maxRating');
-        havingParams.maxRating = params.maxRating;
-      }
-
-      if (havingConditions.length > 0) {
-        subQuery.having(havingConditions.join(' AND '), havingParams);
-      }
-
-      queryBuilder.andWhere('vendor.id IN (' + subQuery.getQuery() + ')');
-      queryBuilder.setParameters(subQuery.getParameters());
+    // Add rating filters
+    if (params.minRating !== undefined) {
+      query += ` AND vs.avg_rating >= $${paramIndex}`;
+      queryParams.push(params.minRating);
+      paramIndex++;
     }
+    if (params.maxRating !== undefined) {
+      query += ` AND vs.avg_rating <= $${paramIndex}`;
+      queryParams.push(params.maxRating);
+      paramIndex++;
+    }
+
+    query += `) 
+    SELECT 
+      vd.*,
+      sp.id as service_package_id,
+      sp.name as service_package_name,
+      sp.description as service_package_description,
+      sp.price as service_package_price,
+      sp.duration as service_package_duration,
+      sp.status as service_package_status,
+      r.id as review_id,
+      r.rating as review_rating,
+      r.comment as review_comment
+    FROM vendor_data vd
+    LEFT JOIN service_package sp ON sp.vendor_id = vd.id
+    LEFT JOIN review r ON r.vendor_id = vd.id`;
 
     // Add sorting
-    if (params.sortBy) {
-      const sortDirection = params.sortDirection?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-      
-      switch (params.sortBy) {
-        case VendorSortField.PRICE: {
-          queryBuilder
-            .select('vendor.*')
-            .addSelect('(SELECT MIN(sp.price) FROM service_package sp WHERE sp.vendor_id = vendor.id)', 'minPrice')
-            .leftJoinAndSelect('vendor.locations', 'locations')
-            .leftJoinAndSelect('vendor.category', 'category')
-            .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
-            .leftJoinAndSelect('vendor.reviews', 'review')
-            .distinct(true)
-            .orderBy('minPrice', sortDirection, 'NULLS LAST');
-          break;
-        }
-
-        case VendorSortField.RATING: {
-          queryBuilder
-            .select('vendor.*')
-            .addSelect('(SELECT COALESCE(AVG(r.rating), 0) FROM review r WHERE r.vendor_id = vendor.id)', 'avgRating')
-            .leftJoinAndSelect('vendor.locations', 'locations')
-            .leftJoinAndSelect('vendor.category', 'category')
-            .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
-            .leftJoinAndSelect('vendor.reviews', 'review')
-            .distinct(true)
-            .orderBy('avgRating', sortDirection, 'NULLS LAST');
-          break;
-        }
-
-        default:
-          queryBuilder.orderBy(`vendor.${params.sortBy}`, sortDirection);
-      }
-    } else {
-      queryBuilder.orderBy('vendor.created_at', 'DESC');
+    switch (params.sortBy) {
+      case VendorSortField.PRICE:
+        query += ` ORDER BY sp.price ${sortDirection} NULLS LAST, vd.id`;
+        break;
+      case VendorSortField.RATING:
+        query += ` ORDER BY vd.avg_rating ${sortDirection} NULLS LAST, vd.id`;
+        break;
+      case VendorSortField.NAME:
+        query += ` ORDER BY vd.name ${sortDirection}, vd.id`;
+        break;
+      default:
+        query += ` ORDER BY vd.created_at DESC, vd.id`;
     }
 
     // Add pagination
-    queryBuilder.skip(skip).take(pageSize);
+    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(pageSize, skip);
 
-    const [data, totalItem] = await queryBuilder.getManyAndCount();
-    const totalPage = Math.ceil(totalItem / pageSize);
+    // Get total count
+    let countQuery = `
+      WITH vendor_stats AS (
+        SELECT 
+          v.id,
+          AVG(r.rating) as avg_rating
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      )
+      SELECT COUNT(DISTINCT v.id)
+      FROM vendors v
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN locations l ON l.vendor_id = v.id
+      WHERE 1=1
+    `;
+
+    // Add the same filters to count query
+    if (params.location) {
+      countQuery += `
+        AND (
+          unaccent(l.address) ILIKE unaccent($1) OR
+          unaccent(l.district) ILIKE unaccent($1) OR
+          unaccent(l.ward) ILIKE unaccent($1) OR
+          unaccent(l.city) ILIKE unaccent($1) OR
+          unaccent(l.province) ILIKE unaccent($1)
+        )
+      `;
+    }
+
+    if (params.minPrice !== undefined) {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM service_package sp 
+        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex}
+      )`;
+    }
+    if (params.maxPrice !== undefined) {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM service_package sp 
+        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex}
+      )`;
+    }
+    if (params.minRating !== undefined) {
+      countQuery += ` AND vs.avg_rating >= $${paramIndex}`;
+    }
+    if (params.maxRating !== undefined) {
+      countQuery += ` AND vs.avg_rating <= $${paramIndex}`;
+    }
+
+    // Execute queries
+    const [data, totalItem] = await Promise.all([
+      this.dataSource.query(query, queryParams),
+      this.dataSource.query(countQuery, queryParams.slice(0, -2)) // Remove pagination params for count
+    ]);
+
+    const totalPage = Math.ceil(totalItem[0].count / pageSize);
+
+    // Group service packages and reviews by vendor
+    const vendorMap = new Map();
+    data.forEach(row => {
+      if (!vendorMap.has(row.id)) {
+        vendorMap.set(row.id, {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          logo: row.logo,
+          banner: row.banner,
+          status: row.status,
+          slug: row.slug,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          averageRating: row.avg_rating || 0,
+          locations: row.location_id ? [{
+            id: row.location_id,
+            address: row.address,
+            district: row.district,
+            ward: row.ward,
+            city: row.city,
+            province: row.province,
+            latitude: row.latitude,
+            longitude: row.longitude
+          }] : [],
+          servicePackages: [],
+          category: row.category_id ? {
+            id: row.category_id,
+            name: row.category_name
+          } : null,
+          reviews: []
+        });
+      }
+
+      const vendor = vendorMap.get(row.id);
+      
+      // Add service package if it exists and not already added
+      if (row.service_package_id && !vendor.servicePackages.some(sp => sp.id === row.service_package_id)) {
+        vendor.servicePackages.push({
+          id: row.service_package_id,
+          name: row.service_package_name,
+          description: row.service_package_description,
+          price: row.service_package_price,
+          duration: row.service_package_duration,
+          status: row.service_package_status
+        });
+      }
+
+      // Add review if it exists and not already added
+      if (row.review_id && !vendor.reviews.some(r => r.id === row.review_id)) {
+        vendor.reviews.push({
+          id: row.review_id,
+          rating: row.review_rating,
+          comment: row.review_comment
+        });
+      }
+    });
 
     return {
-      data,
+      data: Array.from(vendorMap.values()),
       pagination: {
         current: currentPage,
         pageSize,
         totalPage,
-        totalItem,
-      },
+        totalItem: Number(totalItem[0].count)
+      }
     };
   }
-//#endregion FilterVendors
+  //#endregion filterVendors
 }
