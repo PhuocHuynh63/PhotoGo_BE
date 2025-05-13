@@ -6,6 +6,16 @@ import { VendorSortField } from 'src/constants/vendor.enum';
 
 
 export class FilterVendorDto {
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Name search term',
+    example: 'Nhà hàng',
+    required: false,
+  })
+  name?: string;
+
   @IsString()
   @IsOptional()
   @ApiProperty({

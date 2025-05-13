@@ -422,6 +422,7 @@ export class VendorService {
 
   //#region filterVendors
   async filterVendors(params: {
+    name?: string;
     location?: string;
     minPrice?: number;
     maxPrice?: number;
@@ -477,6 +478,13 @@ export class VendorService {
 
     const queryParams: any[] = [];
     let paramIndex = 1;
+
+    // Add name filter
+    if (params.name) {
+      query += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
+      queryParams.push(`%${params.name}%`);
+      paramIndex++;
+    }
 
     // Add location filter
     if (params.location) {
@@ -575,42 +583,61 @@ export class VendorService {
       WHERE 1=1
     `;
 
+    const countParams: any[] = [];
+    let countParamIndex = 1;
+
     // Add the same filters to count query
+    if (params.name) {
+      countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
+      countParams.push(`%${params.name}%`);
+      countParamIndex++;
+    }
+
     if (params.location) {
       countQuery += `
         AND (
-          unaccent(l.address) ILIKE unaccent($1) OR
-          unaccent(l.district) ILIKE unaccent($1) OR
-          unaccent(l.ward) ILIKE unaccent($1) OR
-          unaccent(l.city) ILIKE unaccent($1) OR
-          unaccent(l.province) ILIKE unaccent($1)
+          unaccent(l.address) ILIKE unaccent($${countParamIndex}) OR
+          unaccent(l.district) ILIKE unaccent($${countParamIndex}) OR
+          unaccent(l.ward) ILIKE unaccent($${countParamIndex}) OR
+          unaccent(l.city) ILIKE unaccent($${countParamIndex}) OR
+          unaccent(l.province) ILIKE unaccent($${countParamIndex})
         )
       `;
+      countParams.push(`%${params.location}%`);
+      countParamIndex++;
     }
 
     if (params.minPrice !== undefined) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex}
+        WHERE sp.vendor_id = v.id AND sp.price >= $${countParamIndex}
       )`;
+      countParams.push(params.minPrice);
+      countParamIndex++;
     }
     if (params.maxPrice !== undefined) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex}
+        WHERE sp.vendor_id = v.id AND sp.price <= $${countParamIndex}
       )`;
+      countParams.push(params.maxPrice);
+      countParamIndex++;
     }
     if (params.minRating !== undefined) {
-      countQuery += ` AND vs.avg_rating >= $${paramIndex}`;
+      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
+      countParams.push(params.minRating);
+      countParamIndex++;
     }
     if (params.maxRating !== undefined) {
-      countQuery += ` AND vs.avg_rating <= $${paramIndex}`;
+      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
+      countParams.push(params.maxRating);
+      countParamIndex++;
     }
 
     // Execute queries
     const [data, totalItem] = await Promise.all([
       this.dataSource.query(query, queryParams),
-      this.dataSource.query(countQuery, queryParams.slice(0, -2)) // Remove pagination params for count
+      this.dataSource.query(countQuery, countParams)
     ]);
 
     const totalPage = Math.ceil(totalItem[0].count / pageSize);
