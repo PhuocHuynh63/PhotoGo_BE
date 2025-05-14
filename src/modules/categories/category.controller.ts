@@ -16,9 +16,9 @@ export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new category (Protected)' })
-  @ApiResponse({ status: 201, description: 'Category created successfully', type: Category })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo danh mục mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Danh mục được tạo thành công', type: Category })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ResponseMessage('Tạo danh mục thành công')
   async create(@Body() createCategoryDto: CreateCategoryDto): Promise<Category> {
     return this.categoryService.create(createCategoryDto);
@@ -26,10 +26,10 @@ export class CategoryController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all categories (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả danh mục (Công khai)' })
   @ApiResponse({
     status: 200,
-    description: 'List of categories with pagination',
+    description: 'Danh sách danh mục với phân trang',
     type: [Category],
   })
   @ResponseMessage('Lấy danh sách danh mục thành công')
@@ -47,27 +47,27 @@ export class CategoryController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a category by ID (Protected)' })
-  @ApiResponse({ status: 200, description: 'Category found', type: Category })
-  @ApiResponse({ status: 404, description: 'Category not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Lấy danh mục theo ID (Protected)' })
+  @ApiResponse({ status: 200, description: 'Danh mục được tìm thấy', type: Category })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy danh mục' })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ResponseMessage('Lấy thông tin danh mục thành công')
   async findOne(@Param('id') id: string): Promise<Category> {
     return this.categoryService.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a category by ID' })
-  @ApiResponse({ status: 200, description: 'Category updated successfully', type: Category })
-  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiOperation({ summary: 'Cập nhật danh mục theo ID' })
+  @ApiResponse({ status: 200, description: 'Danh mục được cập nhật thành công', type: Category })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy danh mục' })
   async update(@Param('id') id: string, @Body() updateCategoryDto: UpdateCategoryDto): Promise<Category> {
     return this.categoryService.update(id, updateCategoryDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a category by ID' })
-  @ApiResponse({ status: 200, description: 'Category deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiOperation({ summary: 'Xóa danh mục theo ID' })
+  @ApiResponse({ status: 200, description: 'Danh mục được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy danh mục' })
   async remove(@Param('id') id: string): Promise<void> {
     return this.categoryService.remove(id);
   }

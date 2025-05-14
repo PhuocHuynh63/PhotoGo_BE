@@ -14,9 +14,9 @@ export class LocationController {
   constructor(private readonly locationService: LocationService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new location (Protected)' })
-  @ApiResponse({ status: 201, description: 'Location created successfully', type: Location })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo địa điểm mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Địa điểm được tạo thành công', type: Location })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ResponseMessage('Tạo địa điểm thành công') 
   async create(@Body() createLocationDto: CreateLocationDto): Promise<Location> {
     return this.locationService.create(createLocationDto);
@@ -24,10 +24,10 @@ export class LocationController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all locations (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả địa điểm (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'List of locations with pagination',
+    description: 'Danh sách địa điểm với phân trang',
     type: [Location],
   })
   @ResponseMessage('Lấy danh sách địa điểm thành công')
@@ -45,26 +45,26 @@ export class LocationController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a location by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Location found', type: Location })
-  @ApiResponse({ status: 404, description: 'Location not found' })
+  @ApiOperation({ summary: 'Lấy địa điểm theo ID (Public)' })
+  @ApiResponse({ status: 200, description: 'Địa điểm được tìm thấy', type: Location })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
   @ResponseMessage('Lấy thông tin địa điểm thành công')
   async findOne(@Param('id') id: string): Promise<Location> {
     return this.locationService.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a location by ID' })
-  @ApiResponse({ status: 200, description: 'Location updated successfully', type: Location })
-  @ApiResponse({ status: 404, description: 'Location not found' })
+  @ApiOperation({ summary: 'Cập nhật địa điểm theo ID' })
+  @ApiResponse({ status: 200, description: 'Địa điểm được cập nhật thành công', type: Location })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
   async updateLocation(@Param('id') id: string, @Body() updateLocationDto: UpdateLocationDto): Promise<Location> {
     return await this.locationService.updateLocation(id, updateLocationDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a location by ID' })
-  @ApiResponse({ status: 200, description: 'Location deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Location not found' })
+  @ApiOperation({ summary: 'Xóa địa điểm theo ID' })
+  @ApiResponse({ status: 200, description: 'Địa điểm được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
   async deleteLocation(@Param('id') id: string): Promise<void> {
     return await this.locationService.deleteLocation(id);
   }

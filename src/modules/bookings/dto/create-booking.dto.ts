@@ -5,14 +5,14 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CreateBookingDto {
   @IsDateString()
   @ApiProperty({
-    description: 'Date of the booking',
+    description: 'Ngày booking',
     example: '2023-10-01'
   })
   date: string;
 
   @IsString()
   @ApiProperty({
-    description: 'Time of the booking',
+    description: 'Giờ booking',
     example: '14:00'
   })
   time: string;
@@ -29,7 +29,7 @@ export class CreateBookingDto {
   @IsUUID()
   @IsOptional()
   @ApiProperty({
-    description: 'Campaign ID if the booking is from a campaign',
+    description: 'ID chiến dịch nếu booking từ chiến dịch',
     example: '123e4567-e89b-12d3-a456-426614174003',
     required: false
   })
@@ -49,7 +49,7 @@ export class CreateBookingDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Deposit amount for the booking',
+    description: 'Số tiền đặt cọc cho booking',
     example: '100.00',
     required: false
   })

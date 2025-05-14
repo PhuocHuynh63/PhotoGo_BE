@@ -59,7 +59,7 @@ export class RefundService {
     });
 
     if (!refund) {
-      throw new NotFoundException(`Refund with ID ${id} not found`);
+      throw new NotFoundException(`Hoàn trả với ID ${id} không tồn tại`);
     }
 
     return refund;
@@ -70,15 +70,15 @@ export class RefundService {
   
     const payment = await this.paymentRepository.findOne({ where: { id: paymentId } });
     if (!payment) {
-      throw new NotFoundException(`Payment with ID ${paymentId} not found`);
+      throw new NotFoundException(`Thanh toán với ID ${paymentId} không tồn tại`);
     }
   
     if (!payment.paymentOSId) {
-      throw new BadRequestException('Payment does not have a valid PayOS paymentId');
+      throw new BadRequestException('Thanh toán không có ID PayOS hợp lệ');
     }
   
     if (amount > payment.amount) {
-      throw new BadRequestException('Refund amount cannot be greater than original payment amount');
+      throw new BadRequestException('Số tiền hoàn trả không thể lớn hơn số tiền thanh toán');
     }
   
     try {
@@ -108,7 +108,7 @@ export class RefundService {
       await this.paymentRepository.save(payment);
   
       return {
-        message: 'Refund successful',
+        message: 'Hoàn trả thành công',
         data: {
           refundId: refund.id,
           amount: refundResponse.amount,
@@ -117,7 +117,7 @@ export class RefundService {
       };
     } catch (error) {
       console.error('Refund error:', error?.response?.data || error.message || error);
-      throw new InternalServerErrorException(`Refund failed: ${error.message}`);
+      throw new InternalServerErrorException(`Hoàn trả thất bại: ${error.message}`);
     }
   }
   

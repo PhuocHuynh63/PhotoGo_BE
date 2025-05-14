@@ -39,7 +39,7 @@ export class ServicePackageService {
       relations: ['vendor'],
     });
     if (!servicePackage) {
-      throw new NotFoundException(`Service package with ID ${id} not found`);
+      throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
     }
     return servicePackage;
   }
@@ -71,7 +71,7 @@ export class ServicePackageService {
       relations: ['servicePackage'],
     });
     if (!metadata) {
-      throw new NotFoundException(`Service package metadata with ID ${id} not found`);
+      throw new NotFoundException(`Metadata gói dịch vụ với ID ${id} không tồn tại`);
     }
     return metadata;
   }
@@ -104,7 +104,7 @@ export class ServicePackageService {
       relations: ['servicePackage'],
     });
     if (!priceOverride) {
-      throw new NotFoundException(`Service package price override with ID ${id} not found`);
+      throw new NotFoundException(`Giá gói dịch vụ với ID ${id} không tồn tại`);
     }
     return priceOverride;
   }
@@ -137,7 +137,7 @@ export class ServicePackageService {
       relations: ['servicePackage'],
     });
     if (!serviceType) {
-      throw new NotFoundException(`Service package service type with ID ${servicePackageId} and ${serviceTypeId} not found`);
+      throw new NotFoundException(`Loại dịch vụ gói dịch vụ với ID ${servicePackageId} và ${serviceTypeId} không tồn tại`);
     }
     return serviceType;
   }
@@ -170,7 +170,7 @@ export class ServicePackageService {
       relations: ['servicePackageServiceTypes'],
     });
     if (!serviceType) {
-      throw new NotFoundException(`Service type with ID ${id} not found`);
+      throw new NotFoundException(`Loại dịch vụ với ID ${id} không tồn tại`);
     }
     return serviceType;
   }

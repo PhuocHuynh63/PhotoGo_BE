@@ -5,9 +5,9 @@ export enum VendorStatus {
 }
 
 export enum VendorManagerRole {
-  OWNER = 'owner',
-  MANAGER = 'manager',
-  STAFF = 'staff',
+  OWNER = 'chủ sở hữu',
+  MANAGER = 'quản lý',
+  STAFF = 'nhân viên',
 }
 
 export enum VendorSortField {

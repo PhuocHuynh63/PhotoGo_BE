@@ -14,9 +14,9 @@ export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new notification (Protected)' })
-  @ApiResponse({ status: 201, description: 'Notification created successfully', type: Notification })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo thông báo mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Thông báo được tạo thành công', type: Notification })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ResponseMessage('Tạo thông báo thành công')
   async create(@Body() createNotificationDto: CreateNotificationDto): Promise<Notification> {
     return this.notificationService.create(createNotificationDto);
@@ -24,10 +24,10 @@ export class NotificationController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all notifications (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả thông báo (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'List of notifications with pagination',
+    description: 'Danh sách thông báo với phân trang',
     type: [Notification],
   })
   @ResponseMessage('Lấy danh sách thông báo thành công')
@@ -45,26 +45,26 @@ export class NotificationController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a notification by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Notification found', type: Notification })
-  @ApiResponse({ status: 404, description: 'Notification not found' })
+  @ApiOperation({ summary: 'Lấy thông báo theo ID (Public)' })
+  @ApiResponse({ status: 200, description: 'Thông báo được tìm thấy', type: Notification })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy thông báo' })
   @ResponseMessage('Lấy thông tin thông báo thành công')
   async findOne(@Param('id') id: string): Promise<Notification> {
     return this.notificationService.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a notification by ID' })
-  @ApiResponse({ status: 200, description: 'Notification updated successfully', type: Notification })
-  @ApiResponse({ status: 404, description: 'Notification not found' })
+  @ApiOperation({ summary: 'Cập nhật thông báo theo ID' })
+  @ApiResponse({ status: 200, description: 'Thông báo được cập nhật thành công', type: Notification })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy thông báo' })
   async update(@Param('id') id: string, @Body() updateNotificationDto: UpdateNotificationDto): Promise<Notification> {
     return this.notificationService.update(id, updateNotificationDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a notification by ID' })
-  @ApiResponse({ status: 200, description: 'Notification deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Notification not found' })
+  @ApiOperation({ summary: 'Xóa thông báo theo ID' })
+  @ApiResponse({ status: 200, description: 'Thông báo được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy thông báo' })
   async remove(@Param('id') id: string): Promise<void> {
     return this.notificationService.remove(id);
   }

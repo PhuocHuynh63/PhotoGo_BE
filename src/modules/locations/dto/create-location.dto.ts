@@ -6,7 +6,7 @@ export class CreateLocationDto {
   @IsNotEmpty()
   @ApiProperty({
     example: '321 Phạm Văn Đồng',
-    description: 'Address of the location',
+    description: 'Địa chỉ của vị trí',
   })
   address: string;
 
@@ -14,7 +14,7 @@ export class CreateLocationDto {
   @IsNotEmpty()
   @ApiProperty({
     example: 'Thủ Đức',
-    description: 'District of the location',
+    description: 'Quận của vị trí',
   })
   district: string;
 
@@ -22,7 +22,7 @@ export class CreateLocationDto {
   @IsNotEmpty()
   @ApiProperty({
     example: 'Linh Tây',
-    description: 'Ward of the location',
+    description: 'Phường của vị trí',
   })
   ward: string;
 
@@ -31,7 +31,7 @@ export class CreateLocationDto {
   @Length(1, 50)
   @ApiProperty({
     example: 'Hồ Chí Minh',
-    description: 'City of the location',
+    description: 'Thành phố của vị trí',
   })
   city: string;
 
@@ -40,7 +40,7 @@ export class CreateLocationDto {
   @Length(1, 50)
   @ApiProperty({
     example: 'Hồ Chí Minh',
-    description: 'Province of the location',
+    description: 'Tỉnh của vị trí',
   })
   province: string;
 
@@ -48,7 +48,7 @@ export class CreateLocationDto {
   @IsOptional()
   @ApiProperty({
     example: 10.849100,
-    description: 'Latitude of the location',
+    description: 'Vĩ độ của vị trí',
     required: false,
   })
   latitude?: number;
@@ -57,7 +57,7 @@ export class CreateLocationDto {
   @IsOptional()
   @ApiProperty({
     example: 106.772400,
-    description: 'Longitude of the location',
+    description: 'Kinh độ của vị trí',
     required: false,
   })
   longitude?: number;

@@ -17,9 +17,9 @@ export class SupportTicketController {
 
   @Post()
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Create a new support ticket (Protected)' })
-  @ApiResponse({ status: 201, description: 'Support ticket created successfully', type: SupportTicket })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo vé hỗ trợ mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Vé hỗ trợ đã được tạo thành công', type: SupportTicket })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   async create(
     @Body() createSupportTicketDto: CreateSupportTicketDto,
     @CurrentUser() user: User,
@@ -29,10 +29,10 @@ export class SupportTicketController {
 
   @Get()
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Get all support tickets (Protected)' })
+  @ApiOperation({ summary: 'Lấy tất cả vé hỗ trợ (Protected)' })
   @ApiResponse({
     status: 200,
-    description: 'List of support tickets with pagination',
+    description: 'Danh sách vé hỗ trợ với phân trang',
     type: [SupportTicket],
   })
   async findAll(@Query() query: FindSupportTicketDto): Promise<{
@@ -49,26 +49,26 @@ export class SupportTicketController {
 
   @Get(':id')
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Get a support ticket by ID (Protected)' })
-  @ApiResponse({ status: 200, description: 'Support ticket found', type: SupportTicket })
-  @ApiResponse({ status: 404, description: 'Support ticket not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Lấy vé hỗ trợ theo ID (Protected)' })
+  @ApiResponse({ status: 200, description: 'Vé hỗ trợ đã được tìm thấy', type: SupportTicket })
+  @ApiResponse({ status: 404, description: 'Vé hỗ trợ không tồn tại' })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   async findOne(@Param('id') id: string): Promise<SupportTicket> {
     return this.supportTicketService.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a support ticket by ID' })
-  @ApiResponse({ status: 200, description: 'Support ticket updated successfully', type: SupportTicket })
-  @ApiResponse({ status: 404, description: 'Support ticket not found' })
+  @ApiOperation({ summary: 'Cập nhật vé hỗ trợ theo ID' })
+  @ApiResponse({ status: 200, description: 'Vé hỗ trợ đã được cập nhật thành công', type: SupportTicket })
+  @ApiResponse({ status: 404, description: 'Vé hỗ trợ không tồn tại' })
   async updateSupportTicket(@Param('id') id: string, @Body() updateSupportTicketDto: UpdateSupportTicketDto): Promise<SupportTicket> {
     return await this.supportTicketService.updateSupportTicket(id, updateSupportTicketDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a support ticket by ID' })
-  @ApiResponse({ status: 200, description: 'Support ticket deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Support ticket not found' })
+  @ApiOperation({ summary: 'Xóa vé hỗ trợ theo ID' })
+  @ApiResponse({ status: 200, description: 'Vé hỗ trợ đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Vé hỗ trợ không tồn tại' })
   async deleteSupportTicket(@Param('id') id: string): Promise<void> {
     return await this.supportTicketService.deleteSupportTicket(id);
   }

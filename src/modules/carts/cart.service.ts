@@ -26,7 +26,7 @@ export class CartService {
     // Kiểm tra quyền sở hữu giỏ hàng
     const cart = await this.cartRepository.findOne({ where: { id: data.cartId, userId: data.userId } });
     if (!cart) {
-      throw new NotFoundException('Cart not found or you do not have permission');
+      throw new NotFoundException('Giỏ hàng không tồn tại hoặc bạn không có quyền truy cập');
     }
   
     // Kiểm tra trùng lặp service_package_id
@@ -34,7 +34,7 @@ export class CartService {
       where: { cartId: data.cartId, servicePackageId: data.servicePackageId },
     });
     if (existingItem) {
-      throw new BadRequestException('This service package is already in the cart');
+      throw new BadRequestException('Gói dịch vụ này đã tồn tại trong giỏ hàng');
     }
   
     // Tạo cart item mới
@@ -52,7 +52,7 @@ export class CartService {
     });
 
     if (!cart) {
-      throw new NotFoundException(`Cart with ID ${id} not found`);
+      throw new NotFoundException(`Giỏ hàng với ID ${id} không tồn tại`);
     }
 
     return cart;
@@ -66,7 +66,7 @@ export class CartService {
     const cart = await this.cartRepository.findOne({ where: { id: cartId }, relations: ['items'] });
 
     if (!cart) {
-      throw new NotFoundException(`Cart with ID ${cartId} not found`);
+      throw new NotFoundException(`Giỏ hàng với ID ${cartId} không tồn tại`);
     }
 
     return cart.items;
@@ -79,7 +79,7 @@ export class CartService {
     });
 
     if (!cart) {
-      throw new NotFoundException(`Cart with user ID ${userId} not found`);
+      throw new NotFoundException(`Giỏ hàng với ID ${userId} không tồn tại`);
     }
 
     return cart.items;
@@ -89,7 +89,7 @@ export class CartService {
     const cart = await this.cartRepository.findOne({ where: { id } });
 
     if (!cart) {
-      throw new NotFoundException(`Cart with ID ${id} not found`);
+      throw new NotFoundException(`Giỏ hàng với ID ${id} không tồn tại`);
     }
 
     Object.assign(cart, updateCartDto);
@@ -100,7 +100,7 @@ export class CartService {
     const cart = await this.cartRepository.findOne({ where: { id } });
 
     if (!cart) {
-      throw new NotFoundException(`Cart with ID ${id} not found`);
+      throw new NotFoundException(`Giỏ hàng với ID ${id} không tồn tại`);
     }
 
     await this.cartRepository.remove(cart);
@@ -109,12 +109,12 @@ export class CartService {
   async removeCartItem(cartId: string, itemId: string): Promise<void> {
     const cart = await this.cartRepository.findOne({ where: { id: cartId } });
     if (!cart) {
-      throw new NotFoundException(`Cart with ID ${cartId} not found`);
+      throw new NotFoundException(`Giỏ hàng với ID ${cartId} không tồn tại`);
     }
 
     const cartItem = await this.cartItemRepository.findOne({ where: { id: itemId, cartId } });
     if (!cartItem) {
-      throw new NotFoundException(`Cart item with ID ${itemId} not found in cart ${cartId}`);
+      throw new NotFoundException(`Mục giỏ hàng với ID ${itemId} không tồn tại trong giỏ hàng ${cartId}`);
     }
 
     await this.cartItemRepository.remove(cartItem);

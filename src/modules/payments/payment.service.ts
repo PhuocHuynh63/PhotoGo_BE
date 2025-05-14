@@ -50,7 +50,7 @@ export class PaymentService {
     });
 
     if (!payment) {
-      throw new NotFoundException(`Payment with ID ${id} not found`);
+      throw new NotFoundException(`Thanh toán với ID ${id} không tồn tại`);
     }
 
     return payment;
@@ -64,7 +64,7 @@ export class PaymentService {
     });
     
     if (!invoice) {
-      throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+      throw new NotFoundException(`Hóa đơn với ID ${invoiceId} không tồn tại`);
     }
 
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
@@ -109,7 +109,7 @@ export class PaymentService {
       };
     } catch (error) {
       console.error('PayOS error:', error);
-      throw new Error('Failed to create payment link');
+      throw new Error('Lỗi khi tạo liên kết thanh toán');
     }
   }
 
@@ -120,7 +120,7 @@ export class PaymentService {
     const invoice = await this.invoiceRepo.findOne({ where: { id: payment.invoiceId } });
 
     if (!payment) {
-      throw new NotFoundException(`Payment with transaction ID ${transactionId} not found`);
+      throw new NotFoundException(`Thanh toán với ID ${transactionId} không tồn tại`);
     }
 
     if (status === 'COMPLETED') {

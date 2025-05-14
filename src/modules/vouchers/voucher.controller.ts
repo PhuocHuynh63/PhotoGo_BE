@@ -18,19 +18,19 @@ export class VoucherController {
 
   //#region Voucher Endpoints
   @Post()
-  @ApiOperation({ summary: 'Create a new voucher (Protected)' })
-  @ApiResponse({ status: 201, description: 'Voucher created successfully', type: Voucher })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo một mã giảm giá mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Mã giảm giá đã được tạo thành công', type: Voucher })
+  @ApiResponse({ status: 401, description: 'Không được phép' })
   async createVoucher(@Body() createVoucherDto: CreateVoucherDto): Promise<Voucher> {
     return this.voucherService.createVoucher(createVoucherDto);
   }
 
   @Public()
   @Get('user')
-  @ApiOperation({ summary: 'Get all voucher-user mappings (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả các bản ghi voucher-user (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'List of voucher-user mappings with pagination',
+    description: 'Danh sách các bản ghi voucher-user với phân trang',
     type: [VoucherUser],
   })
   async findAllVoucherUsers(@Query() query: FindVoucherUserDto): Promise<{
@@ -47,19 +47,19 @@ export class VoucherController {
 
   @Public()
   @Get('user/:voucherId/:userId')
-  @ApiOperation({ summary: 'Get a voucher-user mapping by voucherId and userId (Public)' })
-  @ApiResponse({ status: 200, description: 'VoucherUser found', type: VoucherUser })
-  @ApiResponse({ status: 404, description: 'VoucherUser not found' })
+  @ApiOperation({ summary: 'Lấy bản ghi voucher-user bằng voucherId và userId (Public)' })
+  @ApiResponse({ status: 200, description: 'VoucherUser đã được tìm thấy', type: VoucherUser })
+  @ApiResponse({ status: 404, description: 'VoucherUser không tồn tại' })
   async findOneVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<VoucherUser> {
     return this.voucherService.findOneVoucherUser(voucherId, userId);
   }
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all vouchers (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả các mã giảm giá (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'List of vouchers with pagination',
+    description: 'Danh sách các mã giảm giá với phân trang',
     type: [Voucher],
   })
   async findAllVouchers(@Query() query: FindVoucherDto): Promise<{
@@ -76,25 +76,25 @@ export class VoucherController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a voucher by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Voucher found', type: Voucher })
-  @ApiResponse({ status: 404, description: 'Voucher not found' })
+  @ApiOperation({ summary: 'Lấy một mã giảm giá bằng ID (Public)' })
+  @ApiResponse({ status: 200, description: 'Mã giảm giá đã được tìm thấy', type: Voucher })
+  @ApiResponse({ status: 404, description: 'Mã giảm giá không tồn tại' })
   async findOneVoucher(@Param('id') id: string): Promise<Voucher> {
     return this.voucherService.findOneVoucher(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a voucher by ID' })
-  @ApiResponse({ status: 200, description: 'Voucher updated successfully', type: Voucher })
-  @ApiResponse({ status: 404, description: 'Voucher not found' })
+  @ApiOperation({ summary: 'Cập nhật một mã giảm giá bằng ID' })
+  @ApiResponse({ status: 200, description: 'Mã giảm giá đã được cập nhật thành công', type: Voucher })
+  @ApiResponse({ status: 404, description: 'Mã giảm giá không tồn tại' })
   async updateVoucher(@Param('id') id: string, @Body() updateVoucherDto: UpdateVoucherDto): Promise<Voucher> {
     return await this.voucherService.updateVoucher(id, updateVoucherDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a voucher by ID' })
-  @ApiResponse({ status: 200, description: 'Voucher deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Voucher not found' })
+  @ApiOperation({ summary: 'Xóa một mã giảm giá bằng ID' })
+  @ApiResponse({ status: 200, description: 'Mã giảm giá đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Mã giảm giá không tồn tại' })
   async deleteVoucher(@Param('id') id: string): Promise<void> {
     return await this.voucherService.deleteVoucher(id);
   }
@@ -102,26 +102,26 @@ export class VoucherController {
 
   //#region VoucherUser Endpoints
   @Post('user')
-  @ApiOperation({ summary: 'Assign a voucher to a user (Protected)' })
-  @ApiResponse({ status: 201, description: 'Voucher assigned successfully', type: VoucherUser })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Gán một mã giảm giá cho một người dùng (Protected)' })
+  @ApiResponse({ status: 201, description: 'Mã giảm giá đã được gán thành công', type: VoucherUser })
+  @ApiResponse({ status: 401, description: 'Không được phép' })
   async createVoucherUser(@Query ('userId') userId: string, @Query('voucherId') voucherId: string,
                           @Body() createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
     return this.voucherService.createVoucherUser(userId,voucherId,createVoucherUserDto);
   }
 
   @Post('user/:voucherId/:userId/use')
-  @ApiOperation({ summary: 'Use a voucher for a user (Protected)' })
-  @ApiResponse({ status: 200, description: 'Voucher used successfully', type: VoucherUser })
-  @ApiResponse({ status: 400, description: 'Voucher is not valid or has been used' })
+  @ApiOperation({ summary: 'Sử dụng một mã giảm giá cho một người dùng (Protected)' })
+  @ApiResponse({ status: 200, description: 'Mã giảm giá đã được sử dụng thành công', type: VoucherUser })
+  @ApiResponse({ status: 400, description: 'Mã giảm giá không hợp lệ hoặc đã được sử dụng' })
   async useVoucher(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<VoucherUser> {
     return this.voucherService.useVoucher(voucherId, userId);
   }
 
   @Delete('user/:voucherId/:userId')
-  @ApiOperation({ summary: 'Delete a voucher-user mapping by voucherId and userId (Protected)' })
-  @ApiResponse({ status: 200, description: 'VoucherUser deleted successfully' })
-  @ApiResponse({ status: 404, description: 'VoucherUser not found' })
+  @ApiOperation({ summary: 'Xóa bản ghi voucher-user bằng voucherId và userId (Protected)' })
+  @ApiResponse({ status: 200, description: 'Bản ghi voucher-user đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Bản ghi voucher-user không tồn tại' })
   async deleteVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<void> {
     return this.voucherService.deleteVoucherUser(voucherId, userId);
   }

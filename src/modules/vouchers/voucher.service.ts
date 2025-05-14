@@ -84,7 +84,7 @@ export class VoucherService {
   async deleteVoucher(id: string): Promise<void> {
     const result = await this.voucherRepository.delete(id);
     if (result.affected === 0) {
-      throw new NotFoundException(`Voucher with ID ${id} not found`);
+      throw new NotFoundException(`Mã giảm giá với ID ${id} không tồn tại`);
     }
   }
   //#endregion Voucher Operations
@@ -93,19 +93,19 @@ export class VoucherService {
   async createVoucherUser(userId: string, voucherId: string,createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
     const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
-      throw new NotFoundException(`Voucher with ID ${voucherId} not found`);
+      throw new NotFoundException(`Mã giảm giá với ID ${voucherId} không tồn tại`);
     }
 
     const currentDate = new Date();
     if (voucher.status !== VoucherStatusEnum.ACTIVE || currentDate < new Date(voucher.start_date) || currentDate > new Date(voucher.end_date)) {
-      throw new BadRequestException('Voucher is not valid or has expired');
+      throw new BadRequestException('Mã giảm giá không hợp lệ hoặc đã hết hạn');
     }
 
     const existingVoucherUser = await this.voucherUserRepository.findOne({
       where: { user_id: userId, voucher_id: voucherId},
     });
     if (existingVoucherUser) {
-      throw new BadRequestException('User already has this voucher');
+      throw new BadRequestException('Người dùng đã có mã giảm giá này');
     }
 
     const voucherUser = this.voucherUserRepository.create({
@@ -180,7 +180,7 @@ export class VoucherService {
       relations: ['user', 'voucher'],
     });
     if (!voucherUser) {
-      throw new NotFoundException(`VoucherUser with voucher_id ${voucherId} and user_id ${userId} not found`);
+      throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
     }
 
     const currentDate = new Date();
@@ -202,11 +202,11 @@ export class VoucherService {
     const voucherUser = await this.findOneVoucherUser(voucherId, userId);
 
     if (voucherUser.status === VoucherUserStatusEnum.USED) {
-      throw new BadRequestException('Voucher has already been used');
+      throw new BadRequestException('Mã giảm giá đã được sử dụng');
     }
 
     if (!voucherUser['is_valid']) {
-      throw new BadRequestException('Voucher is not valid or has expired');
+      throw new BadRequestException('Mã giảm giá không hợp lệ hoặc đã hết hạn');
     }
 
     voucherUser.status = VoucherUserStatusEnum.USED;
@@ -217,7 +217,7 @@ export class VoucherService {
   async deleteVoucherUser(voucherId: string, userId: string): Promise<void> {
     const result = await this.voucherUserRepository.delete({ voucher_id: voucherId, user_id: userId });
     if (result.affected === 0) {
-      throw new NotFoundException(`VoucherUser with voucher_id ${voucherId} and user_id ${userId} not found`);
+      throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
     }
   }
   //#endregion VoucherUser Operations
