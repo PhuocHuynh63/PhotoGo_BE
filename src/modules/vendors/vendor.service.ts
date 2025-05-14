@@ -474,17 +474,57 @@ export class VendorService {
 
     // Add price filters
     if (params.minPrice !== undefined) {
-      query += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex} AND sp.status = 'hoạt động'
+      query += ` AND (
+        CASE 
+          WHEN $${paramIndex} > 0 THEN
+            EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price < $${paramIndex}
+            )
+          ELSE
+            NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price < $${paramIndex}
+            )
+        END
       )`;
       queryParams.push(params.minPrice);
       paramIndex++;
     }
     if (params.maxPrice !== undefined) {
-      query += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex} AND sp.status = 'hoạt động'
+      query += ` AND (
+        CASE 
+          WHEN $${paramIndex} > 0 THEN
+            EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > $${paramIndex}
+            )
+          ELSE
+            NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > $${paramIndex}
+            )
+        END
       )`;
       queryParams.push(params.maxPrice);
       paramIndex++;
@@ -503,7 +543,7 @@ export class VendorService {
     }
 
     query += `) 
-    SELECT DISTINCT ON (vd.id)
+    SELECT 
       vd.*,
       sp.id as service_package_id,
       sp.name as service_package_name,
@@ -539,10 +579,18 @@ export class VendorService {
 
     // Get total count
     let countQuery = `
+      WITH vendor_ratings AS (
+        SELECT 
+          v.id,
+          COALESCE(AVG(r.rating), 0) as avg_rating
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      )
       SELECT COUNT(DISTINCT v.id)
       FROM vendors v
       LEFT JOIN locations l ON l.vendor_id = v.id
-      LEFT JOIN review r ON r.vendor_id = v.id
+      LEFT JOIN vendor_ratings vr ON vr.id = v.id
       WHERE v.status = 'hoạt động'
     `;
 
@@ -563,29 +611,69 @@ export class VendorService {
     }
 
     if (params.minPrice !== undefined) {
-      countQuery += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${countParamIndex} AND sp.status = 'hoạt động'
+      countQuery += ` AND (
+        CASE 
+          WHEN $${countParamIndex} > 0 THEN
+            EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price < $${countParamIndex}
+            )
+          ELSE
+            NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price < $${countParamIndex}
+            )
+        END
       )`;
       countParams.push(params.minPrice);
       countParamIndex++;
     }
     if (params.maxPrice !== undefined) {
-      countQuery += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${countParamIndex} AND sp.status = 'hoạt động'
+      countQuery += ` AND (
+        CASE 
+          WHEN $${countParamIndex} > 0 THEN
+            EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > $${countParamIndex}
+            )
+          ELSE
+            NOT EXISTS (
+              SELECT 1 FROM service_package sp 
+              WHERE sp.vendor_id = v.id 
+              AND sp.status = 'hoạt động'
+              AND sp.price > $${countParamIndex}
+            )
+        END
       )`;
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
 
     if (params.minRating !== undefined) {
-      countQuery += ` AND COALESCE(AVG(r.rating), 0) >= $${countParamIndex}`;
+      countQuery += ` AND vr.avg_rating >= $${countParamIndex}`;
       countParams.push(params.minRating);
       countParamIndex++;
     }
     if (params.maxRating !== undefined) {
-      countQuery += ` AND COALESCE(AVG(r.rating), 0) <= $${countParamIndex}`;
+      countQuery += ` AND vr.avg_rating <= $${countParamIndex}`;
       countParams.push(params.maxRating);
       countParamIndex++;
     }
