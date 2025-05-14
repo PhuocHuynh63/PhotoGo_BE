@@ -16,7 +16,7 @@ import { TeamMemberModule } from './modules/team-members/team-member.module';
 import { CategoryModule } from './modules/categories/category.module';
 import { NotificationModule } from './modules/notifications/notification.module';
 import { LocationModule } from './modules/locations/location.module';
-import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { PointModule } from './modules/points/point.module';
 import { VoucherModule } from './modules/vouchers/voucher.module';
 import { WalletModule } from './modules/wallets/wallet.module';
@@ -130,7 +130,7 @@ if (!fs.existsSync(templateDir)) {
     LocationModule,
     CommentModule,
     TeamMemberModule,
-    SubscriptionPlanModule,
+    SubscriptionModule,
     VoucherModule,
     PointModule,
     BookingModule,
