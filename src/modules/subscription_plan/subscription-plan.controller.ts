@@ -14,9 +14,9 @@ export class SubscriptionPlanController {
   constructor(private readonly subscriptionPlanService: SubscriptionPlanService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new subscription plan (Protected)' })
-  @ApiResponse({ status: 201, description: 'Subscription Plan created successfully', type: SubscriptionPlan })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo gói đăng ký mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Gói đăng ký đã được tạo thành công', type: SubscriptionPlan })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ResponseMessage('Tạo gói đăng ký thành công')
   async create(@Body() createSubscriptionPlanDto: CreateSubscriptionPlanDto): Promise<SubscriptionPlan> {
     return this.subscriptionPlanService.create(createSubscriptionPlanDto);
@@ -24,10 +24,10 @@ export class SubscriptionPlanController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all subscription plans (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả gói đăng ký (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'List of subscription plans with pagination',
+    description: 'Danh sách gói đăng ký với phân trang',
     type: [SubscriptionPlan],
   })
   @ResponseMessage('Lấy danh sách gói đăng ký thành công')
@@ -45,26 +45,26 @@ export class SubscriptionPlanController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a subscription plan by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Subscription Plan found', type: SubscriptionPlan })
-  @ApiResponse({ status: 404, description: 'Subscription Plan not found' })
+  @ApiOperation({ summary: 'Lấy gói đăng ký theo ID (Public)' })
+  @ApiResponse({ status: 200, description: 'Gói đăng ký đã được tìm thấy', type: SubscriptionPlan })
+  @ApiResponse({ status: 404, description: 'Gói đăng ký không tồn tại' })
   @ResponseMessage('Lấy thông tin gói đăng ký thành công')
   async findOne(@Param('id') id: string): Promise<SubscriptionPlan> {
     return this.subscriptionPlanService.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a subscription plan by ID' })
-  @ApiResponse({ status: 200, description: 'Subscription plan updated successfully', type: SubscriptionPlan })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
+  @ApiOperation({ summary: 'Cập nhật gói đăng ký theo ID' })
+  @ApiResponse({ status: 200, description: 'Gói đăng ký đã được cập nhật thành công', type: SubscriptionPlan })
+  @ApiResponse({ status: 404, description: 'Gói đăng ký không tồn tại' })
   async updateSubscriptionPlan(@Param('id') id: string, @Body() updateSubscriptionPlanDto: UpdateSubscriptionPlanDto): Promise<SubscriptionPlan> {
     return await this.subscriptionPlanService.updateSubscriptionPlan(id, updateSubscriptionPlanDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a subscription plan by ID' })
-  @ApiResponse({ status: 200, description: 'Subscription plan deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
+  @ApiOperation({ summary: 'Xóa gói đăng ký theo ID' })
+  @ApiResponse({ status: 200, description: 'Gói đăng ký đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Gói đăng ký không tồn tại' })
   async deleteSubscriptionPlan(@Param('id') id: string): Promise<void> {
     return await this.subscriptionPlanService.deleteSubscriptionPlan(id);
   }

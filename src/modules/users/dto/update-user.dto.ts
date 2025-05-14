@@ -6,7 +6,7 @@ export class UpdateUserDto {
     @IsEmail()
     @ApiProperty({
         example: 'user@example.com',
-        description: 'User email address',
+        description: 'Địa chỉ email của người dùng',
     })
     email?: string;
 
@@ -15,7 +15,7 @@ export class UpdateUserDto {
     @Length(6, 50)
     @ApiProperty({
         example: 'newpassword123',
-        description: 'New password for the user',
+        description: 'Mật khẩu mới cho người dùng',
         minLength: 6,
         maxLength: 50,
     })
@@ -26,7 +26,7 @@ export class UpdateUserDto {
     @Length(6, 50)
     @ApiProperty({
         example: 'newpassword123',
-        description: 'Confirm New password for the user',
+        description: 'Xác nhận mật khẩu mới cho người dùng',
         minLength: 6,
         maxLength: 50,
     })
@@ -36,7 +36,7 @@ export class UpdateUserDto {
     @IsString()
     @ApiProperty({
         example: 'oldpassword123',
-        description: 'Old password for verification',
+        description: 'Mật khẩu cũ để xác thực',
     })
     oldPasswordHash?: string; // Mật khẩu cũ để so sánh
 
@@ -44,7 +44,7 @@ export class UpdateUserDto {
     @IsString()
     @ApiProperty({
         example: 'John Doe',
-        description: 'Full name of the user',
+        description: 'Tên đầy đủ của người dùng',
     })
     fullName?: string;
 
@@ -52,7 +52,7 @@ export class UpdateUserDto {
     @IsString()
     @ApiProperty({
         example: '0986056438',
-        description: 'User phone number',
+        description: 'Số điện thoại của người dùng',
     })
     phoneNumber?: string;
 

@@ -59,8 +59,8 @@ export class VendorService {
         const uploadResult = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
         vendorData.logo = uploadResult;
       } catch (error) {
-        this.logger.error(`Failed to upload logo: ${error.message}`);
-        throw new BadRequestException(`Failed to upload logo: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên logo: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên logo: ${error.message}`);
       }
     }
 
@@ -71,8 +71,8 @@ export class VendorService {
         const uploadResult = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
         vendorData.banner = uploadResult;
       } catch (error) {
-        this.logger.error(`Failed to upload banner: ${error.message}`);
-        throw new BadRequestException(`Failed to upload banner: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên banner: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên banner: ${error.message}`);
       }
     }
 
@@ -89,7 +89,7 @@ export class VendorService {
           where: { id: createVendorDto.category_id },
         });
         if (!category) {
-          throw new NotFoundException(`Category with ID ${createVendorDto.category_id} not found`);
+          throw new NotFoundException(`Danh mục với ID ${createVendorDto.category_id} không tồn tại`);
         }
 
         this.logger.log('Generating unique slug');
@@ -110,7 +110,7 @@ export class VendorService {
 
           const locations = createVendorDto.locations.map((locationDto, index) => {
             if (!locationDto.address) {
-              throw new BadRequestException(`Address is required for location at index ${index}`);
+              throw new BadRequestException(`Địa chỉ là bắt buộc cho vị trí thứ ${index}`);
             }
             const location = locationRepo.create({
               address: locationDto.address,
@@ -128,7 +128,7 @@ export class VendorService {
           this.logger.log(`Mapped locations for saving: ${JSON.stringify(locations)}`);
           await locationRepo.save(locations);
         } else {
-          this.logger.warn('No valid locations provided');
+          this.logger.warn('Không có vị trí hợp lệ được cung cấp');
         }
 
         this.logger.log('Fetching saved vendor with relations');
@@ -137,10 +137,10 @@ export class VendorService {
           relations: ['category', 'locations'],
         });
 
-        this.logger.log(`Create vendor completed in ${Date.now() - startTime}ms`);
+        this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
         return result;
       } catch (error) {
-        this.logger.error(`Transaction failed: ${error.message}`);
+        this.logger.error(`Giao dịch thất bại: ${error.message}`);
         throw error;
       }
     });
@@ -154,7 +154,7 @@ export class VendorService {
       relations: ['category', 'locations', 'servicePackages'],
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
     return vendor;
   }
@@ -260,7 +260,7 @@ export class VendorService {
     });
   
     if (!vendor) {
-      throw new NotFoundException(`Vendor with slug ${slug} not found`);
+      throw new NotFoundException(`Nhà cung cấp với slug ${slug} không tồn tại`);
     }
 
     return this.getVendorResponse(vendor.id, this.reviewService);
@@ -294,7 +294,7 @@ export class VendorService {
     const vendor = await this.vendorRepository.findOne({ where: { id } });
   
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
   
     // Update các field đơn giản nếu được truyền vào
@@ -330,7 +330,7 @@ export class VendorService {
   async remove(id: string): Promise<void> {
     const vendor = await this.vendorRepository.findOne({ where: { id } });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
 
     await this.vendorRepository.remove(vendor);

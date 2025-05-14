@@ -19,10 +19,10 @@ export class UserController {
 
   @Public()
   @Get('export')
-  @ApiOperation({ summary: 'Export users to Excel (Public)' })
+  @ApiOperation({ summary: 'Xuất danh sách người dùng sang file Excel (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'Export users to Excel file',
+    description: 'Xuất danh sách người dùng sang file Excel',
   })
   async exportUsers(@Query() query: FindAllUserDto, @Res() res: Response) {
     // Lấy danh sách người dùng từ service

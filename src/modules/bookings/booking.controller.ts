@@ -16,11 +16,11 @@ export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new booking' })
+  @ApiOperation({ summary: 'Tạo mới booking' })
   @ApiBody({ type: CreateBookingDto })
-  @ApiResponse({ status: 201, description: 'Booking created successfully', type: Booking })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiResponse({ status: 201, description: 'Tạo booking thành công', type: Booking })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
   create(@Body() createBookingDto: CreateBookingDto,
          @Query('userId') userId: string,
          @Query('servicePackageId') servicePackageId: string): Promise<Booking> {
@@ -28,19 +28,19 @@ export class BookingController {
   }
 
   @Get()
-  @ApiResponse({ status: 200, description: 'List of all bookings', type: [Booking] })
-  @ApiResponse({ status: 404, description: 'No bookings found' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiOperation({ summary: 'Get all bookings' })
+  @ApiResponse({ status: 200, description: 'Danh sách tất cả booking', type: [Booking] })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy tất cả booking' })
   findAll(): Promise<Booking[]> {
     return this.bookingService.findAll();
   }
 
   @Get(':id')
-  @ApiResponse({ status: 200, description: 'Booking found', type: Booking })
-  @ApiResponse({ status: 404, description: 'Booking not found' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiOperation({ summary: 'Get a booking by ID' })
+  @ApiResponse({ status: 200, description: 'Tìm thấy booking', type: Booking })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy booking theo ID' })
   findOne(@Param('id') id: string): Promise<Booking> {
     return this.bookingService.findOne(id);
   }

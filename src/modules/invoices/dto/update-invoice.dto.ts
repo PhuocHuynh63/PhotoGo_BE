@@ -5,6 +5,6 @@ import { InvoiceStatus } from 'src/constants/booking.enum';
 export class UpdateInvoiceDto {
 @IsEnum(InvoiceStatus)
   @IsOptional()
-  @ApiProperty({ description: 'Status of the invoice', enum: InvoiceStatus, example: InvoiceStatus.PAID })
+  @ApiProperty({ description: 'Trạng thái hóa đơn', enum: InvoiceStatus, example: InvoiceStatus.PAID })
   status?: InvoiceStatus;
 }

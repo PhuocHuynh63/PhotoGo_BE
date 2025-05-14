@@ -6,7 +6,7 @@ export class FindSubscriptionPlanDto {
   @IsOptional()
   @ApiProperty({
     example: '1',
-    description: 'Page number for pagination',
+    description: 'Trang hiện tại',
     required: false,
   })
   current?: string;
@@ -15,7 +15,7 @@ export class FindSubscriptionPlanDto {
   @IsOptional()
   @ApiProperty({
     example: '10',
-    description: 'Number of items per page for pagination',
+    description: 'Số lượng mục trên mỗi trang',
     required: false,
   })
   pageSize?: string;
@@ -24,7 +24,7 @@ export class FindSubscriptionPlanDto {
   @IsOptional()
   @ApiProperty({
     example: 'basic',
-    description: 'Search term for filtering subscription plans',
+    description: 'Từ khóa tìm kiếm',
     required: false,
   })
   term?: string;
@@ -33,7 +33,7 @@ export class FindSubscriptionPlanDto {
   @IsOptional()
   @ApiProperty({
     example: 'id',
-    description: 'Field to sort by',
+    description: 'Trường để sắp xếp',
     required: false,
   })
   sortBy?: string;
@@ -42,7 +42,7 @@ export class FindSubscriptionPlanDto {
   @IsOptional()
   @ApiProperty({
     example: 'asc',
-    description: 'Sort direction (asc or desc)',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';

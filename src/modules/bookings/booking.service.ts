@@ -32,7 +32,7 @@ export class BookingService {
     });
 
     if (!servicePackage) {
-      throw new NotFoundException(`Service Package with ID ${servicePackageId} not found`);
+      throw new NotFoundException(`Gói dịch vụ với ID ${servicePackageId} không tìm thấy`);
     }
 
     const vendorId = servicePackage.vendorId;
@@ -68,7 +68,7 @@ export class BookingService {
       where: { id },
     });
     if (!booking) {
-      throw new NotFoundException(`Booking with ID ${id} not found`);
+      throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
     return booking;
   }
@@ -79,7 +79,7 @@ export class BookingService {
     if (updateBookingDto.status) {
       booking.status = updateBookingDto.status;
 
-      // Cập Nhật lịch sử thay đổi trạng thái
+      // Cập nhật lịch sử thay đổi trạng thái
       const history = this.bookingHistoryRepository.create({
         bookingId: booking.id,
         status: updateBookingDto.status,

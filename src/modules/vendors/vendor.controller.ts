@@ -34,8 +34,8 @@ export class VendorController {
 
   //#region Create Vendor
   @Post()
-  @ApiOperation({ summary: 'Create a new vendor (Protected)' })
-  @ApiResponse({ status: 201, description: 'Vendor created successfully', type: Vendor })
+  @ApiOperation({ summary: 'Tạo mới một nhà cung cấp (Protected)' })
+  @ApiResponse({ status: 201, description: 'Nhà cung cấp đã được tạo thành công', type: Vendor })
   @ResponseMessage('Tạo nhà cung cấp thành công')
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'logo', maxCount: 1 },
@@ -43,7 +43,7 @@ export class VendorController {
   ]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Vendor data and files',
+    description: 'Dữ liệu và tệp của nhà cung cấp',
     schema: {
       type: 'object',
       properties: {
@@ -77,35 +77,35 @@ export class VendorController {
   //#region Filter / Search
   @Public()
   @Get('filter')
-  @ApiOperation({ summary: 'Filter vendors (Public)' })
-  @ApiResponse({ status: 200, description: 'Filtered vendors list' })
+  @ApiOperation({ summary: 'Lọc nhà cung cấp (Public)' })
+  @ApiResponse({ status: 200, description: 'Danh sách nhà cung cấp đã được lọc' })
   async filterVendors(@Query() filterDto: FilterVendorDto) {
     const result = await this.vendorService.filterVendors(filterDto);
     return {
-      message: 'Vendors filtered successfully',
+      message: 'Nhà cung cấp đã được lọc thành công',
       ...result,
     };
   }
 
   @Public()
   @Get('search/locations')
-  @ApiOperation({ summary: 'Search vendors by location with city (Public)' })
-  @ApiQuery({ name: 'term', required: true, description: 'Location search term', example: 'Hồ Chí Minh' })
-  @ApiResponse({ status: 200, description: 'Matching vendors' })
+  @ApiOperation({ summary: 'Tìm kiếm nhà cung cấp theo vị trí với thành phố (Public)' })
+  @ApiQuery({ name: 'term', required: true, description: 'Từ tìm kiếm vị trí', example: 'Hồ Chí Minh' })
+  @ApiResponse({ status: 200, description: 'Nhà cung cấp khớp' })
   async searchLocations(@Query('term') term: string) {
     const result = await this.vendorService.searchLocationsWithCity(term);
     return {
-      message: 'Vendors found by location search',
+      message: 'Nhà cung cấp đã được tìm kiếm thành công',
       ...result,
     };
   }
 
   @Get('available')
-  @ApiOperation({ summary: 'Find available vendors by date/time' })
+  @ApiOperation({ summary: 'Tìm kiếm nhà cung cấp có sẵn theo ngày/thời gian' })
   @ApiQuery({ name: 'date', required: true, example: '2025-05-10' })
   @ApiQuery({ name: 'startTime', required: true, example: '09:00' })
   @ApiQuery({ name: 'endTime', required: true, example: '11:00' })
-  @ApiResponse({ status: 200, description: 'Available vendors' })
+  @ApiResponse({ status: 200, description: 'Nhà cung cấp có sẵn' })
   async findAllWithAvailability(
     @Query('date') date: string,
     @Query('startTime') startTime: string,
@@ -113,7 +113,7 @@ export class VendorController {
   ) {
     const vendors = await this.vendorService.findAllWithAvailability(date, startTime, endTime);
     return {
-      message: 'Vendors fetched with availability filter',
+      message: 'Nhà cung cấp đã được tìm kiếm thành công',
       data: vendors,
     };
   }
@@ -121,16 +121,16 @@ export class VendorController {
   //#region Get by slug and all
   @Public()
   @Get('slug/:slug')
-  @ApiOperation({ summary: 'Get a vendor by slug (Public)' })
+  @ApiOperation({ summary: 'Lấy một nhà cung cấp theo slug (Public)' })
   @ApiResponse({ status: 200, type: VendorResponseDto })
-  @ApiResponse({ status: 404, description: 'Vendor not found' })
+  @ApiResponse({ status: 404, description: 'Nhà cung cấp không tồn tại' })
   async findBySlug(@Param('slug') slug: string): Promise<VendorResponseDto> {
     return this.vendorService.findBySlug(slug);
   }
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all vendors (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả nhà cung cấp (Public)' })
   @ApiResponse({ status: 200, type: [Vendor] })
   @ResponseMessage('Lấy danh sách nhà cung cấp thành công')
   async findAll(@Query() query: FindVendorDto) {
@@ -140,7 +140,7 @@ export class VendorController {
   //#region Get by ID (last)
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a vendor by ID (Public)' })
+  @ApiOperation({ summary: 'Lấy một nhà cung cấp theo ID (Public)' })
   @ApiResponse({ status: 200, type: VendorResponseDto })
   async findOne(@Param('id') id: string): Promise<VendorResponseDto> {
     return this.vendorService.getVendorResponse(id, this.reviewService);
@@ -148,16 +148,16 @@ export class VendorController {
 
   //#region Update / Delete
   @Put(':id')
-  @ApiOperation({ summary: 'Update a vendor by ID (multipart/form-data)' })
+  @ApiOperation({ summary: 'Cập nhật một nhà cung cấp theo ID (multipart/form-data)' })
   @ApiResponse({ status: 200, type: Vendor })
-  @ApiResponse({ status: 404, description: 'Vendor not found' })
+  @ApiResponse({ status: 404, description: 'Nhà cung cấp không tồn tại' })
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'logo', maxCount: 1 },
     { name: 'banner', maxCount: 1 },
   ]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Update vendor data and files',
+    description: 'Cập nhật dữ liệu và tệp của nhà cung cấp',
     schema: {
       type: 'object',
       properties: {
@@ -182,33 +182,33 @@ export class VendorController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a vendor by ID' })
-  @ApiResponse({ status: 200, description: 'Vendor deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Vendor not found' })
+  @ApiOperation({ summary: 'Xóa một nhà cung cấp theo ID' })
+  @ApiResponse({ status: 200, description: 'Nhà cung cấp đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Nhà cung cấp không tồn tại' })
   async remove(@Param('id') id: string): Promise<void> {
     return this.vendorService.remove(id);
   }
 
   //#region VendorManager
   @Post('managers')
-  @ApiOperation({ summary: 'Add a manager to a vendor (Protected)' })
-  @ApiResponse({ status: 201, description: 'Vendor manager added successfully' })
+  @ApiOperation({ summary: 'Thêm một quản lý cho một nhà cung cấp (Protected)' })
+  @ApiResponse({ status: 201, description: 'Quản lý nhà cung cấp đã được thêm thành công' })
   async addManager(@Body() createVendorManagerDto: CreateVendorManagerDto): Promise<void> {
     return this.vendorService.addManager(createVendorManagerDto);
   }
 
   //#region VendorLike
   @Post('likes')
-  @ApiOperation({ summary: 'Like a vendor (Protected)' })
-  @ApiResponse({ status: 201, description: 'Vendor liked successfully' })
+  @ApiOperation({ summary: 'Thích một nhà cung cấp (Protected)' })
+  @ApiResponse({ status: 201, description: 'Nhà cung cấp đã được thích thành công' })
   async likeVendor(@Body() createVendorLikeDto: CreateVendorLikeDto): Promise<void> {
     return this.vendorService.likeVendor(createVendorLikeDto);
   }
 
   //#region VendorAvailability
   @Post('availabilities')
-  @ApiOperation({ summary: 'Add availability for a vendor (Protected)' })
-  @ApiResponse({ status: 201, description: 'Vendor availability added successfully' })
+  @ApiOperation({ summary: 'Thêm khả năng có sẵn cho một nhà cung cấp (Protected)' })
+  @ApiResponse({ status: 201, description: 'Khả năng có sẵn của nhà cung cấp đã được thêm thành công' })
   async addAvailability(@Body() createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
     return this.vendorService.addAvailability(createVendorAvailabilityDto);
   }

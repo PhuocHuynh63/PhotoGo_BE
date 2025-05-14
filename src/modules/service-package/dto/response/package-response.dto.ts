@@ -4,10 +4,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class ServicePackageDto{
     
-    @ApiProperty({ example: 'Basic Package' })
+    @ApiProperty({ example: 'Gói dịch vụ cơ bản' })
     name: string;
     
-    @ApiProperty({ example: 'This is a basic service package.' })
+    @ApiProperty({ example: 'Mô tả gói dịch vụ cơ bản' })
     description: string;
     
     @ApiProperty({ example: 100 })

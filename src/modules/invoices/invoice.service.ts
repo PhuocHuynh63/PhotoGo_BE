@@ -26,13 +26,13 @@ export class InvoiceService {
     // Kiểm tra xem bookingId có tồn tại trong bảng Booking không
     const booking = await this.bookingService.findOne(bookingId);
     if (!booking) {
-      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+      throw new NotFoundException(`Đơn hàng với ID ${bookingId} không tồn tại`);
     }
 
     // Lấy servicePackage từ booking
     const servicePackage = await this.servicePackageService.findOne(booking.servicePackageId);
     if (!servicePackage) {
-      throw new NotFoundException(`Service Package with ID ${booking.servicePackageId} not found`);
+      throw new NotFoundException(`Gói dịch vụ với ID ${booking.servicePackageId} không tồn tại`);
     }
 
     //1. Lay originalPrice tu servicePackage
@@ -44,7 +44,7 @@ export class InvoiceService {
     if (voucherId) {
       voucher = await this.voucherService.findOneVoucher(voucherId);
       if (!voucher) {
-        throw new NotFoundException(`Voucher with ID ${voucherId} not found`);
+        throw new NotFoundException(`Voucher với ID ${voucherId} không tồn tại`);
       }
     
       // Kiểm tra voucher còn hiệu lực không
@@ -52,7 +52,7 @@ export class InvoiceService {
       const startDate = new Date(voucher.startDate);
       const endDate = new Date(voucher.endDate);
       if (now > startDate || now < endDate || voucher.status !== VoucherStatusEnum.ACTIVE) {
-        throw new NotFoundException(`Voucher with ID ${voucherId} is not valid`);
+        throw new NotFoundException(`Voucher với ID ${voucherId} không hợp lệ`);
       }
 
       // Tính toán discountAmount dựa trên voucher
@@ -114,7 +114,7 @@ export class InvoiceService {
     });
 
     if (!invoice) {
-      throw new NotFoundException(`Invoice with ID ${id} not found`);
+      throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
     }
 
     return invoice;
@@ -128,7 +128,7 @@ export class InvoiceService {
   async deleteInvoice(id: string): Promise<void> {
     const result = await this.invoiceRepository.delete(id);
     if (result.affected === 0) {
-      throw new NotFoundException(`Invoice with ID ${id} not found`);
+      throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
     }
   }
 }
