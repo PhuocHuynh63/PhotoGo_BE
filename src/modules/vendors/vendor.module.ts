@@ -9,9 +9,10 @@ import { VendorController } from './vendor.controller';
 import { ServicePackage } from '../service-package/entities/service-package.entity';
 import { UploadModule } from '../../3rdService/upload/upload.module'; // Import UploadModule
 import { ReviewModule } from '../reviews/reviews.module';
+import { Location } from '../locations/entities/location.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, VendorAvailability, ServicePackage]), UploadModule, ReviewModule],
+  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, VendorAvailability, ServicePackage, Location]), UploadModule, ReviewModule],
   providers: [VendorService],
   controllers: [VendorController],
   exports: [VendorService],

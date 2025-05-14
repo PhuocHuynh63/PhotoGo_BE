@@ -30,10 +30,11 @@ export class VendorService {
     private readonly vendorLikeRepository: Repository<VendorLike>,
     @InjectRepository(VendorAvailability)
     private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
-
   ) { }
 
   //#region CreateVendor
@@ -388,37 +389,15 @@ export class VendorService {
   }
   //#endregion Utility
 
-  //#region SearchLocations
-  async searchLocations(searchTerm: string): Promise<{
-    data: Vendor[];
-    pagination: {
-      totalItem: number;
-    };
-  }> {
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
-    queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-
-    // Search in location fields
-    queryBuilder.andWhere(
-      `(unaccent(locations.address) ILIKE unaccent(:term) OR 
-        unaccent(locations.district) ILIKE unaccent(:term) OR 
-        unaccent(locations.ward) ILIKE unaccent(:term) OR 
-        unaccent(locations.city) ILIKE unaccent(:term) OR 
-        unaccent(locations.province) ILIKE unaccent(:term))`,
-      { term: `%${searchTerm}%` }
-    );
-
-    const [data, totalItem] = await queryBuilder.getManyAndCount();
-
-    return {
-      data,
-      pagination: {
-        totalItem,
-      },
-    };
+  //#region SearchLocations with City only link with vendor
+  async searchLocationsWithCity(city: string): Promise<Location[]> {
+    const locations = await this.locationRepository.find({
+      where: { city },
+      relations: ['vendor', 'vendor.category', 'vendor.servicePackages', 'vendor.reviews'],
+    });
+    return locations;
   }
-  //#endregion SearchLocations
+  //#endregion SearchLocations with City only link with vendor
 
   //#region filterVendors
   async filterVendors(params: {
@@ -450,13 +429,13 @@ export class VendorService {
       WITH vendor_stats AS (
         SELECT 
           v.id,
-          AVG(r.rating) as avg_rating
+          COALESCE(AVG(r.rating), 0) as avg_rating
         FROM vendors v
         LEFT JOIN review r ON r.vendor_id = v.id
         GROUP BY v.id
       ),
       vendor_data AS (
-        SELECT 
+        SELECT DISTINCT
           v.*,
           vs.avg_rating,
           l.id as location_id,
@@ -473,7 +452,7 @@ export class VendorService {
         LEFT JOIN vendor_stats vs ON vs.id = v.id
         LEFT JOIN locations l ON l.vendor_id = v.id
         LEFT JOIN category c ON c.id = v.category_id
-        WHERE 1=1
+        WHERE v.status = 'hoạt động'
     `;
 
     const queryParams: any[] = [];
@@ -488,15 +467,7 @@ export class VendorService {
 
     // Add location filter
     if (params.location) {
-      query += `
-        AND (
-          unaccent(l.address) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.district) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.ward) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.city) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.province) ILIKE unaccent($${paramIndex})
-        )
-      `;
+      query += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
       queryParams.push(`%${params.location}%`);
       paramIndex++;
     }
@@ -505,7 +476,7 @@ export class VendorService {
     if (params.minPrice !== undefined) {
       query += ` AND EXISTS (
         SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex}
+        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex} AND sp.status = 'hoạt động'
       )`;
       queryParams.push(params.minPrice);
       paramIndex++;
@@ -513,7 +484,7 @@ export class VendorService {
     if (params.maxPrice !== undefined) {
       query += ` AND EXISTS (
         SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex}
+        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex} AND sp.status = 'hoạt động'
       )`;
       queryParams.push(params.maxPrice);
       paramIndex++;
@@ -532,7 +503,7 @@ export class VendorService {
     }
 
     query += `) 
-    SELECT 
+    SELECT DISTINCT ON (vd.id)
       vd.*,
       sp.id as service_package_id,
       sp.name as service_package_name,
@@ -544,22 +515,22 @@ export class VendorService {
       r.rating as review_rating,
       r.comment as review_comment
     FROM vendor_data vd
-    LEFT JOIN service_package sp ON sp.vendor_id = vd.id
+    LEFT JOIN service_package sp ON sp.vendor_id = vd.id AND sp.status = 'hoạt động'
     LEFT JOIN review r ON r.vendor_id = vd.id`;
 
     // Add sorting
     switch (params.sortBy) {
       case VendorSortField.PRICE:
-        query += ` ORDER BY sp.price ${sortDirection} NULLS LAST, vd.id`;
+        query += ` ORDER BY vd.id, COALESCE(sp.price, 0) ${sortDirection} NULLS LAST`;
         break;
       case VendorSortField.RATING:
-        query += ` ORDER BY vd.avg_rating ${sortDirection} NULLS LAST, vd.id`;
+        query += ` ORDER BY vd.id, vd.avg_rating ${sortDirection} NULLS LAST`;
         break;
       case VendorSortField.NAME:
-        query += ` ORDER BY vd.name ${sortDirection}, vd.id`;
+        query += ` ORDER BY vd.id, vd.name ${sortDirection}`;
         break;
       default:
-        query += ` ORDER BY vd.created_at DESC, vd.id`;
+        query += ` ORDER BY vd.id, vd.created_at DESC`;
     }
 
     // Add pagination
@@ -568,19 +539,11 @@ export class VendorService {
 
     // Get total count
     let countQuery = `
-      WITH vendor_stats AS (
-        SELECT 
-          v.id,
-          AVG(r.rating) as avg_rating
-        FROM vendors v
-        LEFT JOIN review r ON r.vendor_id = v.id
-        GROUP BY v.id
-      )
       SELECT COUNT(DISTINCT v.id)
       FROM vendors v
-      LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN locations l ON l.vendor_id = v.id
-      WHERE 1=1
+      LEFT JOIN review r ON r.vendor_id = v.id
+      WHERE v.status = 'hoạt động'
     `;
 
     const countParams: any[] = [];
@@ -594,15 +557,7 @@ export class VendorService {
     }
 
     if (params.location) {
-      countQuery += `
-        AND (
-          unaccent(l.address) ILIKE unaccent($${countParamIndex}) OR
-          unaccent(l.district) ILIKE unaccent($${countParamIndex}) OR
-          unaccent(l.ward) ILIKE unaccent($${countParamIndex}) OR
-          unaccent(l.city) ILIKE unaccent($${countParamIndex}) OR
-          unaccent(l.province) ILIKE unaccent($${countParamIndex})
-        )
-      `;
+      countQuery += ` AND unaccent(l.city) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.location}%`);
       countParamIndex++;
     }
@@ -610,7 +565,7 @@ export class VendorService {
     if (params.minPrice !== undefined) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${countParamIndex}
+        WHERE sp.vendor_id = v.id AND sp.price >= $${countParamIndex} AND sp.status = 'hoạt động'
       )`;
       countParams.push(params.minPrice);
       countParamIndex++;
@@ -618,18 +573,19 @@ export class VendorService {
     if (params.maxPrice !== undefined) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${countParamIndex}
+        WHERE sp.vendor_id = v.id AND sp.price <= $${countParamIndex} AND sp.status = 'hoạt động'
       )`;
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
+
     if (params.minRating !== undefined) {
-      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
+      countQuery += ` AND COALESCE(AVG(r.rating), 0) >= $${countParamIndex}`;
       countParams.push(params.minRating);
       countParamIndex++;
     }
     if (params.maxRating !== undefined) {
-      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
+      countQuery += ` AND COALESCE(AVG(r.rating), 0) <= $${countParamIndex}`;
       countParams.push(params.maxRating);
       countParamIndex++;
     }
