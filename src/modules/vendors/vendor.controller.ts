@@ -89,11 +89,11 @@ export class VendorController {
 
   @Public()
   @Get('search/locations')
-  @ApiOperation({ summary: 'Search vendors by location (Public)' })
-  @ApiQuery({ name: 'term', required: true, description: 'Location search term', example: 'Thủ Đức' })
+  @ApiOperation({ summary: 'Search vendors by location with city (Public)' })
+  @ApiQuery({ name: 'term', required: true, description: 'Location search term', example: 'Hồ Chí Minh' })
   @ApiResponse({ status: 200, description: 'Matching vendors' })
   async searchLocations(@Query('term') term: string) {
-    const result = await this.vendorService.searchLocations(term);
+    const result = await this.vendorService.searchLocationsWithCity(term);
     return {
       message: 'Vendors found by location search',
       ...result,
