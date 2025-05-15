@@ -425,7 +425,8 @@ export class VendorService {
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
-    let query = `
+    // Base query for vendor filtering
+    let baseQuery = `
       WITH vendor_stats AS (
         SELECT 
           v.id,
@@ -434,163 +435,108 @@ export class VendorService {
         LEFT JOIN review r ON r.vendor_id = v.id
         GROUP BY v.id
       ),
-      vendor_data AS (
-        SELECT DISTINCT
-          v.*,
-          vs.avg_rating,
-          l.id as location_id,
-          l.address,
-          l.district,
-          l.ward,
-          l.city,
-          l.province,
-          l.latitude,
-          l.longitude,
-          c.id as category_id,
-          c.name as category_name
+      vendor_prices AS (
+        SELECT 
+          v.id,
+          MIN(sp.price) as min_price
         FROM vendors v
-        LEFT JOIN vendor_stats vs ON vs.id = v.id
-        LEFT JOIN locations l ON l.vendor_id = v.id
-        LEFT JOIN category c ON c.id = v.category_id
-        WHERE v.status = 'hoạt động'
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+        GROUP BY v.id
+      )
+      SELECT DISTINCT v.id, v.created_at, v.name, vs.avg_rating, vp.min_price
+      FROM vendors v
+      LEFT JOIN locations l ON l.vendor_id = v.id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_prices vp ON vp.id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
+      WHERE v.status = 'hoạt động'
     `;
 
-    const queryParams: any[] = [];
+    const baseParams: any[] = [];
     let paramIndex = 1;
 
-    // Add name filter
+    // Add filters to base query
     if (params.name) {
-      query += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
-      queryParams.push(`%${params.name}%`);
+      baseQuery += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
+      baseParams.push(`%${params.name}%`);
       paramIndex++;
     }
 
-    // Add location filter
     if (params.location) {
-      query += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
-      queryParams.push(`%${params.location}%`);
+      baseQuery += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
+      baseParams.push(`%${params.location}%`);
       paramIndex++;
     }
 
     // Add price filters
     if (params.minPrice !== undefined) {
-      query += ` AND (
-        CASE 
-          WHEN $${paramIndex} > 0 THEN
-            EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price < $${paramIndex}
-            )
-          ELSE
-            NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price < $${paramIndex}
-            )
-        END
-      )`;
-      queryParams.push(params.minPrice);
+      baseQuery += ` AND vp.min_price >= $${paramIndex}`;
+      baseParams.push(params.minPrice);
       paramIndex++;
     }
+    
     if (params.maxPrice !== undefined) {
-      query += ` AND (
-        CASE 
-          WHEN $${paramIndex} > 0 THEN
-            EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > $${paramIndex}
-            )
-          ELSE
-            NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > $${paramIndex}
-            )
-        END
-      )`;
-      queryParams.push(params.maxPrice);
+      baseQuery += ` AND vp.min_price <= $${paramIndex}`;
+      baseParams.push(params.maxPrice);
       paramIndex++;
     }
 
     // Add rating filters
     if (params.minRating !== undefined) {
-      query += ` AND vs.avg_rating >= $${paramIndex}`;
-      queryParams.push(params.minRating);
+      baseQuery += ` AND vs.avg_rating >= $${paramIndex}`;
+      baseParams.push(params.minRating);
       paramIndex++;
     }
+    
     if (params.maxRating !== undefined) {
-      query += ` AND vs.avg_rating <= $${paramIndex}`;
-      queryParams.push(params.maxRating);
+      baseQuery += ` AND vs.avg_rating <= $${paramIndex}`;
+      baseParams.push(params.maxRating);
       paramIndex++;
     }
-
-    query += `) 
-    SELECT 
-      vd.*,
-      sp.id as service_package_id,
-      sp.name as service_package_name,
-      sp.description as service_package_description,
-      sp.price as service_package_price,
-      sp.duration as service_package_duration,
-      sp.status as service_package_status,
-      r.id as review_id,
-      r.rating as review_rating,
-      r.comment as review_comment
-    FROM vendor_data vd
-    LEFT JOIN service_package sp ON sp.vendor_id = vd.id AND sp.status = 'hoạt động'
-    LEFT JOIN review r ON r.vendor_id = vd.id`;
 
     // Add sorting
     switch (params.sortBy) {
       case VendorSortField.PRICE:
-        query += ` ORDER BY vd.id, COALESCE(sp.price, 0) ${sortDirection} NULLS LAST`;
+        baseQuery += ` ORDER BY vp.min_price ${sortDirection} NULLS LAST`;
         break;
       case VendorSortField.RATING:
-        query += ` ORDER BY vd.id, vd.avg_rating ${sortDirection} NULLS LAST`;
+        baseQuery += ` ORDER BY vs.avg_rating ${sortDirection} NULLS LAST`;
         break;
       case VendorSortField.NAME:
-        query += ` ORDER BY vd.id, vd.name ${sortDirection}`;
+        baseQuery += ` ORDER BY v.name ${sortDirection}`;
         break;
       default:
-        query += ` ORDER BY vd.id, vd.created_at DESC`;
+        baseQuery += ` ORDER BY v.created_at ${sortDirection}`;
     }
 
-    // Add pagination
-    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(pageSize, skip);
+    // Add pagination to base query
+    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    baseParams.push(pageSize, skip);
 
-    // Get total count
+    // Get total count query
     let countQuery = `
-      WITH vendor_ratings AS (
+      WITH vendor_stats AS (
         SELECT 
           v.id,
           COALESCE(AVG(r.rating), 0) as avg_rating
         FROM vendors v
         LEFT JOIN review r ON r.vendor_id = v.id
         GROUP BY v.id
+      ),
+      vendor_prices AS (
+        SELECT 
+          v.id,
+          MIN(sp.price) as min_price
+        FROM vendors v
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+        GROUP BY v.id
       )
       SELECT COUNT(DISTINCT v.id)
       FROM vendors v
       LEFT JOIN locations l ON l.vendor_id = v.id
-      LEFT JOIN vendor_ratings vr ON vr.id = v.id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_prices vp ON vp.id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
       WHERE v.status = 'hoạt động'
     `;
 
@@ -611,84 +557,85 @@ export class VendorService {
     }
 
     if (params.minPrice !== undefined) {
-      countQuery += ` AND (
-        CASE 
-          WHEN $${countParamIndex} > 0 THEN
-            EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price < $${countParamIndex}
-            )
-          ELSE
-            NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price < $${countParamIndex}
-            )
-        END
-      )`;
+      countQuery += ` AND vp.min_price >= $${countParamIndex}`;
       countParams.push(params.minPrice);
       countParamIndex++;
     }
+    
     if (params.maxPrice !== undefined) {
-      countQuery += ` AND (
-        CASE 
-          WHEN $${countParamIndex} > 0 THEN
-            EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > $${countParamIndex}
-            )
-          ELSE
-            NOT EXISTS (
-              SELECT 1 FROM service_package sp 
-              WHERE sp.vendor_id = v.id 
-              AND sp.status = 'hoạt động'
-              AND sp.price > $${countParamIndex}
-            )
-        END
-      )`;
+      countQuery += ` AND vp.min_price <= $${countParamIndex}`;
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
 
     if (params.minRating !== undefined) {
-      countQuery += ` AND vr.avg_rating >= $${countParamIndex}`;
+      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
       countParams.push(params.minRating);
       countParamIndex++;
     }
+    
     if (params.maxRating !== undefined) {
-      countQuery += ` AND vr.avg_rating <= $${countParamIndex}`;
+      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
       countParams.push(params.maxRating);
       countParamIndex++;
     }
 
     // Execute queries
-    const [data, totalItem] = await Promise.all([
-      this.dataSource.query(query, queryParams),
-      this.dataSource.query(countQuery, countParams)
+    const [vendorIds, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
     ]);
 
-    const totalPage = Math.ceil(totalItem[0].count / pageSize);
+    if (vendorIds.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
 
-    // Group service packages and reviews by vendor
+    // Fetch complete vendor data
+    const vendorDataQuery = `
+      SELECT 
+        v.*,
+        (SELECT COALESCE(AVG(r.rating), 0) FROM review r WHERE r.vendor_id = v.id) as avg_rating,
+        l.id as location_id,
+        l.address,
+        l.district,
+        l.ward,
+        l.city,
+        l.province,
+        l.latitude,
+        l.longitude,
+        c.id as category_id,
+        c.name as category_name,
+        sp.id as service_package_id,
+        sp.name as service_package_name,
+        sp.description as service_package_description,
+        sp.price as service_package_price,
+        sp.duration as service_package_duration,
+        sp.status as service_package_status,
+        r.id as review_id,
+        r.rating as review_rating,
+        r.comment as review_comment
+      FROM vendors v
+      LEFT JOIN locations l ON l.vendor_id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
+      LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+      LEFT JOIN review r ON r.vendor_id = v.id
+      WHERE v.id = ANY($1)
+      ORDER BY v.id, sp.id, r.id
+    `;
+
+    const vendorData = await this.dataSource.query(vendorDataQuery, [vendorIds.map(v => v.id)]);
+
+    // Group data by vendor
     const vendorMap = new Map();
-    data.forEach(row => {
+    vendorData.forEach((row: any) => {
       if (!vendorMap.has(row.id)) {
         vendorMap.set(row.id, {
           id: row.id,
@@ -700,49 +647,55 @@ export class VendorService {
           slug: row.slug,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
-          averageRating: row.avg_rating || 0,
-          locations: row.location_id ? [{
-            id: row.location_id,
-            address: row.address,
-            district: row.district,
-            ward: row.ward,
-            city: row.city,
-            province: row.province,
-            latitude: row.latitude,
-            longitude: row.longitude
-          }] : [],
+          averageRating: parseFloat(row.avg_rating) || 0,
+          locations: row.location_id
+            ? [
+                {
+                  id: row.location_id,
+                  address: row.address,
+                  district: row.district,
+                  ward: row.ward,
+                  city: row.city,
+                  province: row.province,
+                  latitude: row.latitude,
+                  longitude: row.longitude,
+                },
+              ]
+            : [],
           servicePackages: [],
-          category: row.category_id ? {
-            id: row.category_id,
-            name: row.category_name
-          } : null,
-          reviews: []
+          category: row.category_id
+            ? {
+                id: row.category_id,
+                name: row.category_name,
+              }
+            : null,
+          reviews: [],
         });
       }
 
       const vendor = vendorMap.get(row.id);
-      
-      // Add service package if it exists and not already added
-      if (row.service_package_id && !vendor.servicePackages.some(sp => sp.id === row.service_package_id)) {
+
+      if (row.service_package_id && !vendor.servicePackages.some((sp: any) => sp.id === row.service_package_id)) {
         vendor.servicePackages.push({
           id: row.service_package_id,
           name: row.service_package_name,
           description: row.service_package_description,
           price: row.service_package_price,
           duration: row.service_package_duration,
-          status: row.service_package_status
+          status: row.service_package_status,
         });
       }
 
-      // Add review if it exists and not already added
-      if (row.review_id && !vendor.reviews.some(r => r.id === row.review_id)) {
+      if (row.review_id && !vendor.reviews.some((r: any) => r.id === row.review_id)) {
         vendor.reviews.push({
           id: row.review_id,
           rating: row.review_rating,
-          comment: row.review_comment
+          comment: row.review_comment,
         });
       }
     });
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
 
     return {
       data: Array.from(vendorMap.values()),
@@ -750,8 +703,8 @@ export class VendorService {
         current: currentPage,
         pageSize,
         totalPage,
-        totalItem: Number(totalItem[0].count)
-      }
+        totalItem: Number(totalItem[0].count),
+      },
     };
   }
   //#endregion filterVendors
