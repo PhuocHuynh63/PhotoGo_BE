@@ -171,6 +171,7 @@ export class VendorService {
     const averageRating = await reviewService.getAverageRatingByVendorId(id);
   
     const response = new VendorResponseDto();
+    response.id = vendor.id;
     response.name = vendor.name;
     response.slug = vendor.slug;
     response.description = vendor.description;
