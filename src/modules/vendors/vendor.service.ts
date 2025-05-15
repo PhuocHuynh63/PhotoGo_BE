@@ -180,6 +180,7 @@ export class VendorService {
     response.status = vendor.status;
     response.category = vendor.category;
     response.locations = vendor.locations.map(loc => ({
+      id: loc.id,
       address: loc.address,
       district: loc.district,
       ward: loc.ward,
@@ -189,6 +190,7 @@ export class VendorService {
       longitude: loc.longitude,
     }));
     response.servicePackages = vendor.servicePackages.map(pkg => ({
+      id: pkg.id,
       name: pkg.name,
       description: pkg.description,
       price: pkg.price,
@@ -273,16 +275,24 @@ export class VendorService {
     const vendors = await this.vendorRepository
       .createQueryBuilder('vendor')
       .leftJoinAndSelect('vendor.availabilities', 'vendor_availability', 
-        'vendor_availability.date = :date AND vendor_availability.isAvailable = true AND vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :endTime',
+        `vendor_availability.date = :date 
+         AND vendor_availability.isAvailable = true 
+         AND (
+           (vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :startTime)
+           OR (vendor_availability.startTime <= :endTime AND vendor_availability.endTime >= :endTime)
+           OR (vendor_availability.startTime >= :startTime AND vendor_availability.endTime <= :endTime)
+         )`,
         { date, startTime, endTime }
       )
       .getMany();
   
-    // Optionally: map isAvailable
-    return vendors.map(vendor => ({
-      ...vendor,
-      isAvailable: vendor.availabilities.length > 0,
-    }));
+    // Filter out vendors without availabilities
+    return vendors
+      .filter(vendor => vendor.availabilities && vendor.availabilities.length > 0)
+      .map(vendor => ({
+        ...vendor,
+        isAvailable: true
+      }));
   }
   //#endregion findAllWithAvailability  
 
