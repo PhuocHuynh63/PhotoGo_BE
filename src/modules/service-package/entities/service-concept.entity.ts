@@ -27,7 +27,7 @@ export class ServiceConcept {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true, name: 'image_url' })
+  @Column({ type: 'text', nullable: true, name: 'image_url' })
   image?: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.0, nullable: false })
