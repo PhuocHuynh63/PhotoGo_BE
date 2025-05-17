@@ -7,5 +7,5 @@ export class AddWishlistItemDto {
 
   @IsUUID()
   @IsNotEmpty()
-  servicePackageId: string;
+  serviceConceptId: string;
 }

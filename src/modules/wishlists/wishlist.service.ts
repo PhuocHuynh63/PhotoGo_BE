@@ -37,7 +37,7 @@ export class WishlistService {
   async findWishlistById(id: string): Promise<Wishlist> {
     const wishlist = await this.wishlistRepository.findOne({
       where: { id },
-      relations: ['items', 'items.servicePackage'],
+      relations: ['items', 'items.serviceConcept'],
     });
 
     if (!wishlist) {
@@ -48,7 +48,7 @@ export class WishlistService {
   }
 
     async findAllWishlists(): Promise<Wishlist[]> {
-        return await this.wishlistRepository.find({ relations: ['items', 'items.servicePackage'] });
+        return await this.wishlistRepository.find({ relations: ['items', 'items.serviceConcept'] });
     }
 
   async updateWishlist(id: string, updateWishlistDto: UpdateWishlistDto): Promise<Wishlist> {

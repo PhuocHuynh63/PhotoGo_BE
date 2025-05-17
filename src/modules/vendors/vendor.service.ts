@@ -134,7 +134,7 @@ export class VendorService {
         this.logger.log('Fetching saved vendor with relations');
         const result = await vendorRepo.findOne({
           where: { id: savedVendor.id },
-          relations: ['category', 'locations'],
+          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType'],
         });
 
         this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
@@ -151,7 +151,7 @@ export class VendorService {
   async findOne(id: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { id },
-      relations: ['category', 'locations', 'servicePackages'],
+      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType'],
     });
     if (!vendor) {
       throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
@@ -165,7 +165,7 @@ export class VendorService {
     const vendor = await this.findOne(id);
   
     const totalPrice = vendor.servicePackages.reduce(
-      (acc, pkg) => acc + Number(pkg.price), 0,
+      (acc, pkg) => acc + Number(pkg.serviceConcepts.reduce((acc, concept) => acc + Number(concept.price), 0)), 0,
     );
   
     const averageRating = await reviewService.getAverageRatingByVendorId(id);
@@ -193,8 +193,23 @@ export class VendorService {
       id: pkg.id,
       name: pkg.name,
       description: pkg.description,
-      price: pkg.price,
-      duration: pkg.duration,
+      image: pkg.image,
+      status: pkg.status,
+      vendorId: pkg.vendorId,
+      serviceConcepts: pkg.serviceConcepts.map(concept => ({
+        id: concept.id,
+        name: concept.name,
+        description: concept.description,
+        price: concept.price,
+        duration: concept.duration,
+        serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
+          id: sct.serviceType.id,
+          name: sct.serviceType.name,
+          description: sct.serviceType.description
+        }))
+      })),
+      created_at: pkg.created_at,
+      updated_at: pkg.updated_at
     }));
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
@@ -220,7 +235,8 @@ export class VendorService {
     const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
     queryBuilder.leftJoinAndSelect('vendor.category', 'category');
     queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-    queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'service_package');
+    queryBuilder.leftJoin('vendor.servicePackages', 'service_package');
+    queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept'); 
 
     if (query.term) {
       queryBuilder.andWhere(
@@ -259,7 +275,7 @@ export class VendorService {
   async findBySlug(slug: string): Promise<VendorResponseDto> {
     const vendor = await this.vendorRepository.findOne({
       where: { slug },
-      relations: ['category', 'locations', 'servicePackages', 'reviews'],
+      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'reviews'],
     });
   
     if (!vendor) {
@@ -402,10 +418,15 @@ export class VendorService {
 
   //#region SearchLocations with City only link with vendor
   async searchLocationsWithCity(city: string): Promise<Location[]> {
-    const locations = await this.locationRepository.find({
-      where: { city },
-      relations: ['vendor', 'vendor.category', 'vendor.servicePackages', 'vendor.reviews'],
-    });
+    const locations = await this.locationRepository
+      .createQueryBuilder('location')
+      .leftJoinAndSelect('location.vendor', 'vendor')
+      .leftJoinAndSelect('vendor.category', 'category')
+      .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
+      .leftJoinAndSelect('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoinAndSelect('vendor.reviews', 'reviews')
+      .where('location.city ILIKE :city', { city: `%${city}%` })
+      .getMany();
     return locations;
   }
   //#endregion SearchLocations with City only link with vendor
@@ -441,7 +462,8 @@ export class VendorService {
       WITH vendor_stats AS (
         SELECT 
           v.id,
-          COALESCE(AVG(r.rating), 0) as avg_rating
+          COALESCE(AVG(r.rating), 0) as avg_rating,
+          COUNT(r.id) as review_count
         FROM vendors v
         LEFT JOIN review r ON r.vendor_id = v.id
         GROUP BY v.id
@@ -449,12 +471,37 @@ export class VendorService {
       vendor_prices AS (
         SELECT 
           v.id,
-          MIN(sp.price) as min_price
+          MIN(sc.price) as min_price,
+          MAX(sc.price) as max_price
         FROM vendors v
         LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         GROUP BY v.id
       )
-      SELECT DISTINCT v.id, v.created_at, v.name, vs.avg_rating, vp.min_price
+      SELECT DISTINCT 
+        v.id,
+        v.name,
+        v.description,
+        v.logo,
+        v.banner,
+        v.status,
+        v.slug,
+        v.created_at,
+        v.updated_at,
+        vs.avg_rating,
+        vs.review_count,
+        vp.min_price,
+        vp.max_price,
+        c.id as category_id,
+        c.name as category_name,
+        l.id as location_id,
+        l.address,
+        l.district,
+        l.ward,
+        l.city,
+        l.province,
+        l.latitude,
+        l.longitude
       FROM vendors v
       LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN vendor_stats vs ON vs.id = v.id
@@ -487,7 +534,7 @@ export class VendorService {
     }
     
     if (params.maxPrice !== undefined) {
-      baseQuery += ` AND vp.min_price <= $${paramIndex}`;
+      baseQuery += ` AND vp.max_price <= $${paramIndex}`;
       baseParams.push(params.maxPrice);
       paramIndex++;
     }
@@ -537,9 +584,11 @@ export class VendorService {
       vendor_prices AS (
         SELECT 
           v.id,
-          MIN(sp.price) as min_price
+          MIN(sc.price) as min_price,
+          MAX(sc.price) as max_price
         FROM vendors v
         LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         GROUP BY v.id
       )
       SELECT COUNT(DISTINCT v.id)
@@ -574,7 +623,7 @@ export class VendorService {
     }
     
     if (params.maxPrice !== undefined) {
-      countQuery += ` AND vp.min_price <= $${countParamIndex}`;
+      countQuery += ` AND vp.max_price <= $${countParamIndex}`;
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
@@ -592,12 +641,12 @@ export class VendorService {
     }
 
     // Execute queries
-    const [vendorIds, totalItem] = await Promise.all([
+    const [vendorData, totalItem] = await Promise.all([
       this.dataSource.query(baseQuery, baseParams),
       this.dataSource.query(countQuery, countParams),
     ]);
 
-    if (vendorIds.length === 0) {
+    if (vendorData.length === 0) {
       return {
         data: [],
         pagination: {
@@ -609,107 +658,111 @@ export class VendorService {
       };
     }
 
-    // Fetch complete vendor data
-    const vendorDataQuery = `
-      SELECT 
-        v.*,
-        (SELECT COALESCE(AVG(r.rating), 0) FROM review r WHERE r.vendor_id = v.id) as avg_rating,
-        l.id as location_id,
-        l.address,
-        l.district,
-        l.ward,
-        l.city,
-        l.province,
-        l.latitude,
-        l.longitude,
-        c.id as category_id,
-        c.name as category_name,
-        sp.id as service_package_id,
-        sp.name as service_package_name,
-        sp.description as service_package_description,
-        sp.price as service_package_price,
-        sp.duration as service_package_duration,
-        sp.status as service_package_status,
-        r.id as review_id,
-        r.rating as review_rating,
-        r.comment as review_comment
-      FROM vendors v
-      LEFT JOIN locations l ON l.vendor_id = v.id
-      LEFT JOIN category c ON c.id = v.category_id
-      LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
-      LEFT JOIN review r ON r.vendor_id = v.id
-      WHERE v.id = ANY($1)
-      ORDER BY v.id, sp.id, r.id
-    `;
+    // Fetch service packages and reviews for the filtered vendors
+    const vendorIds = vendorData.map(v => v.id);
+    const [servicePackages, reviews] = await Promise.all([
+      this.dataSource.query(`
+        SELECT 
+          sp.*,
+          sc.id as service_concept_id,
+          sc.name as service_concept_name,
+          sc.description as service_concept_description,
+          sc.price as service_concept_price,
+          sc.duration as service_concept_duration
+        FROM service_package sp
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        WHERE sp.vendor_id = ANY($1) AND sp.status = 'hoạt động'
+        ORDER BY sp.id, sc.id
+      `, [vendorIds]),
+      this.dataSource.query(`
+        SELECT *
+        FROM review
+        WHERE vendor_id = ANY($1)
+        ORDER BY created_at DESC
+      `, [vendorIds])
+    ]);
 
-    const vendorData = await this.dataSource.query(vendorDataQuery, [vendorIds.map(v => v.id)]);
+    // Group service packages and reviews by vendor
+    const servicePackagesByVendor = new Map();
+    const reviewsByVendor = new Map();
 
-    // Group data by vendor
-    const vendorMap = new Map();
-    vendorData.forEach((row: any) => {
-      if (!vendorMap.has(row.id)) {
-        vendorMap.set(row.id, {
+    servicePackages.forEach((row: any) => {
+      if (!servicePackagesByVendor.has(row.vendor_id)) {
+        servicePackagesByVendor.set(row.vendor_id, new Map());
+      }
+      const vendorPackages = servicePackagesByVendor.get(row.vendor_id);
+      
+      if (!vendorPackages.has(row.id)) {
+        vendorPackages.set(row.id, {
           id: row.id,
           name: row.name,
           description: row.description,
-          logo: row.logo,
-          banner: row.banner,
           status: row.status,
-          slug: row.slug,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-          averageRating: parseFloat(row.avg_rating) || 0,
-          locations: row.location_id
-            ? [
-                {
-                  id: row.location_id,
-                  address: row.address,
-                  district: row.district,
-                  ward: row.ward,
-                  city: row.city,
-                  province: row.province,
-                  latitude: row.latitude,
-                  longitude: row.longitude,
-                },
-              ]
-            : [],
-          servicePackages: [],
-          category: row.category_id
-            ? {
-                id: row.category_id,
-                name: row.category_name,
-              }
-            : null,
-          reviews: [],
+          serviceConcepts: []
         });
       }
 
-      const vendor = vendorMap.get(row.id);
-
-      if (row.service_package_id && !vendor.servicePackages.some((sp: any) => sp.id === row.service_package_id)) {
-        vendor.servicePackages.push({
-          id: row.service_package_id,
-          name: row.service_package_name,
-          description: row.service_package_description,
-          price: row.service_package_price,
-          duration: row.service_package_duration,
-          status: row.service_package_status,
-        });
-      }
-
-      if (row.review_id && !vendor.reviews.some((r: any) => r.id === row.review_id)) {
-        vendor.reviews.push({
-          id: row.review_id,
-          rating: row.review_rating,
-          comment: row.review_comment,
+      if (row.service_concept_id) {
+        const pkg = vendorPackages.get(row.id);
+        pkg.serviceConcepts.push({
+          id: row.service_concept_id,
+          name: row.service_concept_name,
+          description: row.service_concept_description,
+          price: row.service_concept_price,
+          duration: row.service_concept_duration
         });
       }
     });
 
+    reviews.forEach((review: any) => {
+      if (!reviewsByVendor.has(review.vendor_id)) {
+        reviewsByVendor.set(review.vendor_id, []);
+      }
+      reviewsByVendor.get(review.vendor_id).push({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        created_at: review.created_at
+      });
+    });
+
+    // Combine all data
+    const vendors = vendorData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      logo: row.logo,
+      banner: row.banner,
+      status: row.status,
+      slug: row.slug,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      averageRating: parseFloat(row.avg_rating) || 0,
+      reviewCount: parseInt(row.review_count) || 0,
+      minPrice: row.min_price,
+      maxPrice: row.max_price,
+      locations: row.location_id ? [{
+        id: row.location_id,
+        address: row.address,
+        district: row.district,
+        ward: row.ward,
+        city: row.city,
+        province: row.province,
+        latitude: row.latitude,
+        longitude: row.longitude
+      }] : [],
+      servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
+      category: row.category_id ? {
+        id: row.category_id,
+        name: row.category_name
+      } : null,
+      reviews: reviewsByVendor.get(row.id) || []
+    }));
+
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
 
     return {
-      data: Array.from(vendorMap.values()),
+      data: vendors,
       pagination: {
         current: currentPage,
         pageSize,

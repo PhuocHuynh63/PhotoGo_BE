@@ -21,10 +21,12 @@ export class BookingController {
   @ApiResponse({ status: 201, description: 'Tạo booking thành công', type: Booking })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
-  create(@Body() createBookingDto: CreateBookingDto,
-         @Query('userId') userId: string,
-         @Query('servicePackageId') servicePackageId: string): Promise<Booking> {
-    return this.bookingService.create(createBookingDto, userId, servicePackageId);
+  create(
+    @Body() createBookingDto: CreateBookingDto,
+    @Query('userId') userId: string,
+    @Query('serviceConceptId') serviceConceptId: string
+  ): Promise<Booking> {
+    return this.bookingService.create(createBookingDto, userId, serviceConceptId);
   }
 
   @Get()
@@ -46,11 +48,19 @@ export class BookingController {
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Cập nhật booking' })
+  @ApiResponse({ status: 200, description: 'Cập nhật booking thành công', type: Booking })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
   update(@Param('id') id: string, @Body() updateBookingDto: UpdateBookingDto): Promise<Booking> {
     return this.bookingService.update(id, updateBookingDto);
   }
   
   @Delete(':id')
+  @ApiOperation({ summary: 'Xóa booking' })
+  @ApiResponse({ status: 200, description: 'Xóa booking thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
   remove(@Param('id') id: string): Promise<void> {
     return this.bookingService.remove(id);
   }

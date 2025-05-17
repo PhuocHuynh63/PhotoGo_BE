@@ -60,7 +60,7 @@ export class PaymentService {
     console.log(`Received invoiceId: ${invoiceId}`);
     const invoice = await this.invoiceRepo.findOne({ 
       where: { id: invoiceId },
-      relations: ['booking', 'booking.user', 'booking.servicePackage'],
+      relations: ['booking', 'booking.user', 'booking.serviceConcept'],
     });
     
     if (!invoice) {
@@ -68,7 +68,7 @@ export class PaymentService {
     }
 
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
-    const servicePackage = invoice.booking?.servicePackage;
+    const serviceConcept = invoice.booking?.serviceConcept;
     const orderCode = Date.now(); // Sử dụng timestamp để đảm bảo unique
     const description = `PG#${orderCode}`;
     const paymentLinkData = {
@@ -81,9 +81,9 @@ export class PaymentService {
       buyerName,
       items: [
         {
-          name: servicePackage?.name || 'Dịch vụ không xác định',
+          name: serviceConcept?.name || 'Dịch vụ không xác định',
           quantity: 1,
-          price: Number(servicePackage?.price) || 0,
+          price: Number(serviceConcept?.price) || 0,
         },
       ],
     };
