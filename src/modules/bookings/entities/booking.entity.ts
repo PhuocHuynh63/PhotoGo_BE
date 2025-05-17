@@ -1,13 +1,11 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Vendor } from '../../vendors/entities/vendor.entity';
-import { ServicePackage } from '../../service-package/entities/service-package.entity';
+import { ServiceConcept } from '../../service-package/entities/service-concept.entity';
 import { BookingHistory } from './booking-history.entity';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { Dispute } from '../../disputes/entities/dispute.entity';
 import { BookingStatus, BookingSourceType, BookingDepositType } from '../../../constants/booking.enum';
-
-
 
 @Entity('booking')
 export class Booking {
@@ -28,12 +26,12 @@ export class Booking {
   @Column({ type: 'uuid', name: 'vendor_id' })
   vendorId: string;
 
-  @ManyToOne(() => ServicePackage, { nullable: false })
-  @JoinColumn({ name: 'service_package_id' })
-  servicePackage: ServicePackage;
+  @ManyToOne(() => ServiceConcept, { nullable: false })
+  @JoinColumn({ name: 'service_concept_id' })
+  serviceConcept: ServiceConcept;
 
-  @Column({ type: 'uuid', name: 'service_package_id' })
-  servicePackageId: string;
+  @Column({ type: 'uuid', name: 'service_concept_id' })
+  serviceConceptId: string;
 
   @Column({ type: 'date' })
   date: Date;
@@ -44,16 +42,16 @@ export class Booking {
   @Column({ type: 'enum', enum: BookingStatus, default: BookingStatus.PENDING })
   status: BookingStatus;
 
-  @Column({ type: 'enum', enum: BookingSourceType, nullable: false, name: 'source_type' }) // Thêm name: 'source_type'
+  @Column({ type: 'enum', enum: BookingSourceType, nullable: false, name: 'source_type' })
   sourceType: BookingSourceType;
 
-  @Column({ type: 'uuid', nullable: true, name: 'source_id' }) // Thêm name: 'source_id'
+  @Column({ type: 'uuid', nullable: true, name: 'source_id' })
   sourceId: string;
 
-  @Column({ type: 'enum', enum: BookingDepositType, default: BookingDepositType.PERCENTAGE, nullable: false, name: 'deposit_type' }) // Thêm name: 'deposit_type'
+  @Column({ type: 'enum', enum: BookingDepositType, default: BookingDepositType.PERCENTAGE, nullable: false, name: 'deposit_type' })
   depositType: BookingDepositType;
 
-  @Column({ type: 'text', nullable: true , name: 'user_note'})
+  @Column({ type: 'text', nullable: true, name: 'user_note' })
   userNote: string;
 
   @CreateDateColumn({ type: 'timestamptz' })

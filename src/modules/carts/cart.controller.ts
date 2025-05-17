@@ -21,16 +21,16 @@ export class CartController {
     return await this.cartService.createCart(createCartDto);
   }
 
-  @Post(':user_id/:cart_id/:service_package_id/items')
+  @Post(':user_id/:cart_id/:service_concept_id/items')
   @ApiOperation({ summary: 'Thêm một mục vào giỏ hàng' })
   @ApiResponse({ status: 201, description: 'Mục được thêm vào giỏ hàng thành công', type: CartItem })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giỏ hàng' })
   async addCartItem(
-    @Param('service_package_id') servicePackageId: string,
+    @Param('service_concept_id') serviceConceptId: string,
     @Param('cart_id') cartId: string,
     @Param('user_id') userId: string,
   ): Promise<CartItem> {
-    return await this.cartService.addCartItem({ servicePackageId, cartId, userId });
+    return await this.cartService.addCartItem({ serviceConceptId, cartId, userId });
   }
 
   @Get()

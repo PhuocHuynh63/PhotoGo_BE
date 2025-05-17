@@ -1,25 +1,27 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { ServicePackageService } from './service-package.service';
 import {
   CreateServicePackageDto,
   CreateServicePackageMetadataDto,
-  CreateServicePackagePriceOverrideDto,
-  CreateServicePackageServiceTypeDto,
-  CreateServiceTypeDto
+  CreateServiceConceptServiceTypeDto,
+  CreateServiceTypeDto,
+  CreateServiceConceptDto
 } from './dto/create-service-package.dto';
 import {
   UpdateServicePackageDto,
   UpdateServicePackageMetadataDto,
-  UpdateServicePackagePriceOverrideDto,
-  UpdateServicePackageServiceTypeDto,
-  UpdateServiceTypeDto
+  UpdateServiceConceptServiceTypeDto,
+  UpdateServiceTypeDto,
+  UpdateServiceConceptDto
 } from './dto/update-service-package.dto';
 import { ServicePackage } from './entities/service-package.entity';
 import { ServicePackageMetadata } from './entities/service-package-metadata.entity';
-import { ServicePackagePriceOverride } from './entities/service-package-price-override.entity';
-import { ServicePackageServiceType } from './entities/service-package-service-type.entity';
+import { ServiceConceptServiceType } from './entities/service-concept-service-type.entity';
 import { ServiceType } from './entities/service-type.entity';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ServiceConcept } from './entities/service-concept.entity';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 
 @ApiTags('Service Packages')
 @Controller('service-packages')
@@ -72,102 +74,57 @@ export class ServicePackageController {
   }
   //#endregion ServicePackageMetadata
 
-  //#region ServicePackagePriceOverride
-  @Post('price-override')
-  @ApiOperation({ summary: 'Tạo giá ghi đè cho gói dịch vụ' })
-  @ApiResponse({ status: 201, description: 'Giá ghi đè đã được tạo thành công', type: ServicePackagePriceOverride })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async createPriceOverride(@Body() dto: CreateServicePackagePriceOverrideDto): Promise<ServicePackagePriceOverride> {
-    return this.servicePackageService.createPriceOverride(dto);
-  }
-
-  @Get('price-override')
-  @ApiOperation({ summary: 'Lấy danh sách tất cả giá ghi đè' })
-  @ApiResponse({ status: 200, description: 'Danh sách giá ghi đè đã được lấy thành công', type: [ServicePackagePriceOverride] })
-  async findAllPriceOverrides(): Promise<ServicePackagePriceOverride[]> {
-    return this.servicePackageService.findAllPriceOverrides();
-  }
-
-  @Get('price-override/:id')
-  @ApiOperation({ summary: 'Lấy giá ghi đè theo ID' })
-  @ApiResponse({ status: 200, description: 'Giá ghi đè đã được tìm thấy', type: ServicePackagePriceOverride })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy giá ghi đè' })
-  async findPriceOverride(@Param('id') id: string): Promise<ServicePackagePriceOverride> {
-    return this.servicePackageService.findPriceOverride(id);
-  }
-
-  @Patch('price-override/:id')
-  @ApiOperation({ summary: 'Cập nhật giá ghi đè theo ID' })
-  @ApiResponse({ status: 200, description: 'Giá ghi đè đã được cập nhật thành công', type: ServicePackagePriceOverride })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy giá ghi đè' })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async updatePriceOverride(
-    @Param('id') id: string,
-    @Body() dto: UpdateServicePackagePriceOverrideDto,
-  ): Promise<ServicePackagePriceOverride> {
-    return this.servicePackageService.updatePriceOverride(id, dto);
-  }
-
-  @Delete('price-override/:id')
-  @ApiOperation({ summary: 'Xóa giá ghi đè theo ID' })
-  @ApiResponse({ status: 200, description: 'Giá ghi đè đã được xóa thành công' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy giá ghi đè' })
-  async removePriceOverride(@Param('id') id: string): Promise<void> {
-    return this.servicePackageService.removePriceOverride(id);
-  }
-  //#endregion ServicePackagePriceOverride
-
-  //#region ServicePackageServiceType
-  @Post('service-package-service-type')
+  //#region ServiceConceptServiceType
+  @Post('service-concept-service-type')
   @ApiOperation({ summary: 'Tạo liên kết gói dịch vụ với loại dịch vụ' })
-  @ApiResponse({ status: 201, description: 'Liên kết đã được tạo thành công', type: ServicePackageServiceType })
+  @ApiResponse({ status: 201, description: 'Liên kết đã được tạo thành công', type: ServiceConceptServiceType })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async createServicePackageServiceType(@Body() dto: CreateServicePackageServiceTypeDto): Promise<ServicePackageServiceType> {
-    return this.servicePackageService.createServicePackageServiceType(dto);
+  async createServiceConceptServiceType(@Body() dto: CreateServiceConceptServiceTypeDto): Promise<ServiceConceptServiceType> {
+    return this.servicePackageService.createServiceConceptServiceType(dto);
   }
 
-  @Get('service-package-service-type')
+  @Get('service-concept-service-type')
   @ApiOperation({ summary: 'Lấy danh sách tất cả liên kết gói dịch vụ với loại dịch vụ' })
-  @ApiResponse({ status: 200, description: 'Danh sách liên kết đã được lấy thành công', type: [ServicePackageServiceType] })
-  async findAllServicePackageServiceType(): Promise<ServicePackageServiceType[]> {
-    return this.servicePackageService.findAllServicePackageServiceType();
+  @ApiResponse({ status: 200, description: 'Danh sách liên kết đã được lấy thành công', type: [ServiceConceptServiceType] })
+  async findAllServiceConceptServiceType(): Promise<ServiceConceptServiceType[]> {
+    return this.servicePackageService.findAllServiceConceptServiceType();
   }
 
-  @Get('service-package-service-type/:servicePackageId/:serviceTypeId')
+  @Get('service-concept-service-type/:serviceConceptId/:serviceTypeId')
   @ApiOperation({ summary: 'Lấy liên kết gói dịch vụ với loại dịch vụ theo ID' })
-  @ApiResponse({ status: 200, description: 'Liên kết đã được tìm thấy', type: ServicePackageServiceType })
+  @ApiResponse({ status: 200, description: 'Liên kết đã được tìm thấy', type: ServiceConceptServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy liên kết' })
-  async findServicePackageServiceType(
-    @Param('servicePackageId') servicePackageId: string,
+  async findServiceConceptServiceType(
+    @Param('serviceConceptId') serviceConceptId: string,
     @Param('serviceTypeId') serviceTypeId: string,
-  ): Promise<ServicePackageServiceType> {
-    return this.servicePackageService.findServicePackageServiceType(servicePackageId, serviceTypeId);
+  ): Promise<ServiceConceptServiceType> {
+    return this.servicePackageService.findServiceConceptServiceType(serviceConceptId, serviceTypeId);
   }
 
-  @Patch('service-package-service-type/:servicePackageId/:serviceTypeId')
+  @Patch('service-concept-service-type/:serviceConceptId/:serviceTypeId')
   @ApiOperation({ summary: 'Cập nhật liên kết gói dịch vụ với loại dịch vụ' })
-  @ApiResponse({ status: 200, description: 'Liên kết đã được cập nhật thành công', type: ServicePackageServiceType })
+  @ApiResponse({ status: 200, description: 'Liên kết đã được cập nhật thành công', type: ServiceConceptServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy liên kết' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async updateServicePackageServiceType(
-    @Param('servicePackageId') servicePackageId: string,
+  async updateServiceConceptServiceType(
+    @Param('serviceConceptId') serviceConceptId: string,
     @Param('serviceTypeId') serviceTypeId: string,
-    @Body() dto: UpdateServicePackageServiceTypeDto,
-  ): Promise<ServicePackageServiceType> {
-    return this.servicePackageService.updateServicePackageServiceType(servicePackageId, serviceTypeId, dto);
+    @Body() dto: UpdateServiceConceptServiceTypeDto,
+  ): Promise<ServiceConceptServiceType> {
+    return this.servicePackageService.updateServiceConceptServiceType(serviceConceptId, serviceTypeId, dto);
   }
 
-  @Delete('service-package-service-type/:servicePackageId/:serviceTypeId')
+  @Delete('service-concept-service-type/:serviceConceptId/:serviceTypeId')
   @ApiOperation({ summary: 'Xóa liên kết gói dịch vụ với loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Liên kết đã được xóa thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy liên kết' })
-  async removeServicePackageServiceType(
-    @Param('servicePackageId') servicePackageId: string,
+  async removeServiceConceptServiceType(
+    @Param('serviceConceptId') serviceConceptId: string,
     @Param('serviceTypeId') serviceTypeId: string,
   ): Promise<void> {
-    return this.servicePackageService.removeServicePackageServiceType(servicePackageId, serviceTypeId);
+    return this.servicePackageService.removeServiceConceptServiceType(serviceConceptId, serviceTypeId);
   }
-  //#endregion ServicePackageServiceType
+  //#endregion ServiceConceptServiceType
 
   //#region ServiceType
   @Post('service-type')
@@ -214,13 +171,141 @@ export class ServicePackageController {
   }
   //#endregion ServiceType
 
+  //#region ServiceConcept
+  @Post('service-concept')
+  @ApiOperation({ summary: 'Tạo khái niệm dịch vụ mới' })
+  @ApiResponse({ status: 201, description: 'Khái niệm dịch vụ đã được tạo thành công', type: ServiceConcept })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'image', maxCount: 1 },
+  ]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dữ liệu và tệp của khái niệm dịch vụ',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },
+        description: { type: 'string', nullable: true },
+        price: { type: 'number', example: 1000000 },
+        duration: { type: 'number', example: 60 },
+        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },
+        serviceTypeIds: { 
+          type: 'array',
+          items: { type: 'string' },
+          example: ['uuid1', 'uuid2'],
+          nullable: true
+        },
+        image: { type: 'string', format: 'binary' },
+      },
+      required: ['name', 'price', 'duration'],
+    },
+  })
+  async createServiceConcept(
+    @Body() createServiceConceptDto: CreateServiceConceptDto,
+    @UploadedFiles() files: { image?: Express.Multer.File[] },
+  ): Promise<ServiceConcept> {
+    const fileMap = {
+      image: files.image?.[0],
+    };
+    return this.servicePackageService.createServiceConcept(createServiceConceptDto, fileMap);
+  }
+
+  @Get('service-concept')
+  @ApiOperation({ summary: 'Lấy danh sách tất cả khái niệm dịch vụ' })
+  @ApiResponse({ status: 200, description: 'Danh sách khái niệm dịch vụ đã được lấy thành công', type: [ServiceConcept] })
+  async findAllServiceConcepts(): Promise<ServiceConcept[]> {
+    return this.servicePackageService.findAllServiceConcepts();
+  }
+
+  @Get('service-concept/:id')
+  @ApiOperation({ summary: 'Lấy khái niệm dịch vụ theo ID' })
+  @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được tìm thấy', type: ServiceConcept })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
+  async findServiceConcept(@Param('id') id: string): Promise<ServiceConcept> {
+    return this.servicePackageService.findServiceConcept(id);
+  }
+
+  @Patch('service-concept/:id')
+  @ApiOperation({ summary: 'Cập nhật khái niệm dịch vụ theo ID' })
+  @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được cập nhật thành công', type: ServiceConcept })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'image', maxCount: 1 },
+  ]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Cập nhật dữ liệu và tệp của khái niệm dịch vụ',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },
+        description: { type: 'string', nullable: true },
+        price: { type: 'number', example: 1000000 },
+        duration: { type: 'number', example: 60 },
+        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },
+        serviceTypeIds: { 
+          type: 'array',
+          items: { type: 'string' },
+          example: ['uuid1', 'uuid2'],
+          nullable: true
+        },
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async updateServiceConcept(
+    @Param('id') id: string,
+    @Body() updateServiceConceptDto: UpdateServiceConceptDto,
+    @UploadedFiles() files: { image?: Express.Multer.File[] },
+  ): Promise<ServiceConcept> {
+    const fileMap = {
+      image: files.image?.[0],
+    };
+    return this.servicePackageService.updateServiceConcept(id, updateServiceConceptDto, fileMap);
+  }
+
+  @Delete('service-concept/:id')
+  @ApiOperation({ summary: 'Xóa khái niệm dịch vụ theo ID' })
+  @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
+  async removeServiceConcept(@Param('id') id: string): Promise<void> {
+    return this.servicePackageService.removeServiceConcept(id);
+  }
+  //#endregion ServiceConcept
+
   //#region ServicePackage
   @Post()
   @ApiOperation({ summary: 'Tạo gói dịch vụ mới' })
   @ApiResponse({ status: 201, description: 'Gói dịch vụ đã được tạo thành công', type: ServicePackage })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async create(@Body() createServicePackageDto: CreateServicePackageDto): Promise<ServicePackage> {
-    return this.servicePackageService.create(createServicePackageDto);
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'image', maxCount: 1 },
+  ]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dữ liệu và tệp của gói dịch vụ',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Gói dịch vụ cơ bản' },
+        description: { type: 'string', nullable: true },
+        vendorId: { type: 'string', example: 'uuid' },
+        status: { type: 'string', enum: Object.values(ServicePackageStatus), nullable: true },
+        image: { type: 'string', format: 'binary' },
+      },
+      required: ['name', 'vendorId'],
+    },
+  })
+  async create(
+    @Body() createServicePackageDto: CreateServicePackageDto,
+    @UploadedFiles() files: { image?: Express.Multer.File[] },
+  ): Promise<ServicePackage> {
+    const fileMap = {
+      logo: files.image?.[0],
+    };
+    return this.servicePackageService.create(createServicePackageDto, fileMap);
   }
 
   @Get()

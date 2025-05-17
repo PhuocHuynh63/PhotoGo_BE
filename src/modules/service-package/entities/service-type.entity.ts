@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
-import { ServicePackageServiceType } from './service-package-service-type.entity';
+import { ServiceConceptServiceType } from './service-concept-service-type.entity';
 
 @Entity('service_type')
 export class ServiceType {
@@ -25,6 +25,6 @@ export class ServiceType {
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
 
-  @OneToMany(() => ServicePackageServiceType, (servicePackageServiceType) => servicePackageServiceType.serviceType)
-  servicePackageServiceTypes: ServicePackageServiceType[];
+  @OneToMany(() => ServiceConceptServiceType, (serviceConceptServiceType) => serviceConceptServiceType.serviceType)
+  serviceConceptServiceTypes: ServiceConceptServiceType[];
 }

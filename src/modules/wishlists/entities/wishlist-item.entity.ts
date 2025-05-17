@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { Wishlist } from './wishlist.entity';
-import { ServicePackage } from '../../service-package/entities/service-package.entity';
+import { ServiceConcept } from '../../service-package/entities/service-concept.entity';
 
 @Entity('wishlist_item')
 export class WishlistItem {
@@ -14,12 +14,12 @@ export class WishlistItem {
   @Column({ type: 'uuid', nullable: false, name: 'wishlist_id' })
   wishlistId: string;
 
-  @ManyToOne(() => ServicePackage, { nullable: false })
-  @JoinColumn({ name: 'service_package_id' })
-  servicePackage: ServicePackage;
+  @ManyToOne(() => ServiceConcept, { nullable: false })
+  @JoinColumn({ name: 'service_concept_id' })
+  serviceConcept: ServiceConcept;
 
-  @Column({ type: 'uuid', nullable: false, name: 'service_package_id' })
-  servicePackageId: string;
+  @Column({ type: 'uuid', nullable: false, name: 'service_concept_id' })
+  serviceConceptId: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

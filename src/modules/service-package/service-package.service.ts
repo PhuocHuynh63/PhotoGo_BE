@@ -1,42 +1,103 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ServicePackage } from './entities/service-package.entity';
 import { ServicePackageMetadata } from './entities/service-package-metadata.entity';
-import { ServicePackagePriceOverride } from './entities/service-package-price-override.entity';
-import { ServicePackageServiceType } from './entities/service-package-service-type.entity';
+import { ServiceConceptServiceType } from './entities/service-concept-service-type.entity';
 import { ServiceType } from './entities/service-type.entity';
-import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServicePackagePriceOverrideDto, CreateServicePackageServiceTypeDto, CreateServiceTypeDto } from './dto/create-service-package.dto';
-import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateServicePackagePriceOverrideDto, UpdateServicePackageServiceTypeDto, UpdateServiceTypeDto } from './dto/update-service-package.dto';
+import { ServiceConcept } from './entities/service-concept.entity';
+import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServiceConceptServiceTypeDto, CreateServiceTypeDto, CreateServiceConceptDto } from './dto/create-service-package.dto';
+import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateServiceConceptServiceTypeDto, UpdateServiceTypeDto, UpdateServiceConceptDto } from './dto/update-service-package.dto';
+import { UploadService } from 'src/3rdService/upload/upload.service';
 
 @Injectable()
 export class ServicePackageService {
+  private readonly logger = new Logger(ServicePackageService.name);
+
   constructor(
     @InjectRepository(ServicePackage)
     private readonly servicePackageRepository: Repository<ServicePackage>,
     @InjectRepository(ServicePackageMetadata)
     private readonly servicePackageMetadataRepository: Repository<ServicePackageMetadata>,
-    @InjectRepository(ServicePackagePriceOverride)
-    private readonly servicePackagePriceOverrideRepository: Repository<ServicePackagePriceOverride>,
-    @InjectRepository(ServicePackageServiceType)
-    private readonly servicePackageServiceTypeRepository: Repository<ServicePackageServiceType>,
+    @InjectRepository(ServiceConceptServiceType)
+    private readonly serviceConceptServiceTypeRepository: Repository<ServiceConceptServiceType>,
     @InjectRepository(ServiceType)
     private readonly serviceTypeRepository: Repository<ServiceType>,
+    @InjectRepository(ServiceConcept)
+    private readonly serviceConceptRepository: Repository<ServiceConcept>,
+    private readonly uploadService: UploadService,
   ) {}
 
-  async create(createServicePackageDto: CreateServicePackageDto): Promise<ServicePackage> {
-    const servicePackage = this.servicePackageRepository.create(createServicePackageDto);
-    return this.servicePackageRepository.save(servicePackage);
+  async create(
+    createServicePackageDto: CreateServicePackageDto,
+    files: { logo?: Express.Multer.File },
+  ): Promise<ServicePackage> {
+    const startTime = Date.now();
+    this.logger.log('Tạo gói dịch vụ');
+
+    const servicePackageData: Partial<ServicePackage> = {
+      name: createServicePackageDto.name,
+      description: createServicePackageDto.description,
+      vendorId: createServicePackageDto.vendorId,
+      status: createServicePackageDto.status,
+    };
+
+    // Upload image if provided
+    if (files.logo) {
+      this.logger.log('Tải lên ảnh');
+      try {
+        const uploadResult = await this.uploadService.uploadImage(files.logo, 'service-packages/images');
+        servicePackageData.image = uploadResult;
+      } catch (error) {
+        this.logger.error(`Lỗi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi tải lên ảnh: ${error.message}`);
+      }
+    }
+
+    // Create the service package first
+    const servicePackage = this.servicePackageRepository.create(servicePackageData);
+    const savedServicePackage = await this.servicePackageRepository.save(servicePackage);
+
+    // If service concept IDs are provided, link them to the package
+    if (createServicePackageDto.serviceConceptIds && createServicePackageDto.serviceConceptIds.length > 0) {
+      this.logger.log('Liên kết khái niệm dịch vụ với gói dịch vụ');
+      try {
+        // Verify all service concepts exist
+        const serviceConcepts = await this.serviceConceptRepository.findByIds(createServicePackageDto.serviceConceptIds);
+        if (serviceConcepts.length !== createServicePackageDto.serviceConceptIds.length) {
+          throw new NotFoundException('Một hoặc nhiều khái niệm dịch vụ không tồn tại');
+        }
+
+        // Update each service concept to link to this package
+        for (const serviceConcept of serviceConcepts) {
+          serviceConcept.servicePackage = savedServicePackage;
+          await this.serviceConceptRepository.save(serviceConcept);
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi liên kết khái niệm dịch vụ: ${error.message}`);
+        throw error;
+      }
+    }
+
+    this.logger.log(`Gói dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
+    
+    // Return the package with its service concepts
+    return this.servicePackageRepository.findOne({
+      where: { id: savedServicePackage.id },
+      relations: ['serviceConcepts'],
+    });
   }
 
   async findAll(): Promise<ServicePackage[]> {
-    return this.servicePackageRepository.find({ relations: ['vendor'] });
+    return this.servicePackageRepository.find({ 
+      relations: ['vendor', 'serviceConcepts'] 
+    });
   }
 
   async findOne(id: string): Promise<ServicePackage> {
     const servicePackage = await this.servicePackageRepository.findOne({
       where: { id },
-      relations: ['vendor'],
+      relations: ['vendor', 'serviceConcepts'],
     });
     if (!servicePackage) {
       throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
@@ -88,71 +149,38 @@ export class ServicePackageService {
   }
   //#endregion ServicePackageMetadata
 
-  //#region ServicePackagePriceOverride
-  async createPriceOverride(dto: CreateServicePackagePriceOverrideDto): Promise<ServicePackagePriceOverride> {
-    const priceOverride = this.servicePackagePriceOverrideRepository.create(dto);
-    return this.servicePackagePriceOverrideRepository.save(priceOverride);
+  //#region ServiceConceptServiceType
+  async createServiceConceptServiceType(dto: CreateServiceConceptServiceTypeDto): Promise<ServiceConceptServiceType> {
+    const serviceType = this.serviceConceptServiceTypeRepository.create(dto);
+    return this.serviceConceptServiceTypeRepository.save(serviceType);
   }
 
-  async findAllPriceOverrides(): Promise<ServicePackagePriceOverride[]> {
-    return this.servicePackagePriceOverrideRepository.find({ relations: ['servicePackage'] });
+  async findAllServiceConceptServiceType(): Promise<ServiceConceptServiceType[]> {
+    return this.serviceConceptServiceTypeRepository.find({ relations: ['serviceConcept'] });
   }
 
-  async findPriceOverride(id: string): Promise<ServicePackagePriceOverride> {
-    const priceOverride = await this.servicePackagePriceOverrideRepository.findOne({
-      where: { id },
-      relations: ['servicePackage'],
-    });
-    if (!priceOverride) {
-      throw new NotFoundException(`Giá gói dịch vụ với ID ${id} không tồn tại`);
-    }
-    return priceOverride;
-  }
-
-  async updatePriceOverride(id: string, dto: UpdateServicePackagePriceOverrideDto): Promise<ServicePackagePriceOverride> {
-    const priceOverride = await this.findPriceOverride(id);
-    Object.assign(priceOverride, dto);
-    return this.servicePackagePriceOverrideRepository.save(priceOverride);
-  }
-
-  async removePriceOverride(id: string): Promise<void> {
-    const priceOverride = await this.findPriceOverride(id);
-    await this.servicePackagePriceOverrideRepository.remove(priceOverride);
-  }
-  //#endregion ServicePackagePriceOverride
-
-  //#region ServicePackageServiceType
-  async createServicePackageServiceType(dto: CreateServicePackageServiceTypeDto): Promise<ServicePackageServiceType> {
-    const serviceType = this.servicePackageServiceTypeRepository.create(dto);
-    return this.servicePackageServiceTypeRepository.save(serviceType);
-  }
-
-  async findAllServicePackageServiceType(): Promise<ServicePackageServiceType[]> {
-    return this.servicePackageServiceTypeRepository.find({ relations: ['servicePackage'] });
-  }
-
-  async findServicePackageServiceType(servicePackageId: string, serviceTypeId: string): Promise<ServicePackageServiceType> {
-    const serviceType = await this.servicePackageServiceTypeRepository.findOne({
-      where: { servicePackageId, serviceTypeId },
-      relations: ['servicePackage'],
+  async findServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string): Promise<ServiceConceptServiceType> {
+    const serviceType = await this.serviceConceptServiceTypeRepository.findOne({
+      where: { serviceConceptId, serviceTypeId },
+      relations: ['serviceConcept'],
     });
     if (!serviceType) {
-      throw new NotFoundException(`Loại dịch vụ gói dịch vụ với ID ${servicePackageId} và ${serviceTypeId} không tồn tại`);
+      throw new NotFoundException(`Loại dịch vụ gói dịch vụ với ID ${serviceConceptId} và ${serviceTypeId} không tồn tại`);
     }
     return serviceType;
   }
 
-  async updateServicePackageServiceType(servicePackageId: string, serviceTypeId: string, dto: UpdateServicePackageServiceTypeDto): Promise<ServicePackageServiceType> {
-    const servicePackageServiceType = await this.findServicePackageServiceType(servicePackageId, serviceTypeId);
-    Object.assign(servicePackageServiceType, dto);
-    return this.servicePackageServiceTypeRepository.save(servicePackageServiceType);
+  async updateServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string, dto: UpdateServiceConceptServiceTypeDto): Promise<ServiceConceptServiceType> {
+    const serviceConceptServiceType = await this.findServiceConceptServiceType(serviceConceptId, serviceTypeId);
+    Object.assign(serviceConceptServiceType, dto);
+    return this.serviceConceptServiceTypeRepository.save(serviceConceptServiceType);
   }
 
-  async removeServicePackageServiceType(servicePackageId: string, serviceTypeId: string): Promise<void> {
-    const servicePackageServiceType = await this.findServicePackageServiceType(servicePackageId, serviceTypeId);
-    await this.servicePackageServiceTypeRepository.remove(servicePackageServiceType);
+  async removeServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string): Promise<void> {
+    const serviceConceptServiceType = await this.findServiceConceptServiceType(serviceConceptId, serviceTypeId);
+    await this.serviceConceptServiceTypeRepository.remove(serviceConceptServiceType);
   }
-  //#endregion ServicePackageServiceType
+  //#endregion ServiceConceptServiceType
 
   //#region ServiceType
   async createServiceType(dto: CreateServiceTypeDto): Promise<ServiceType> {
@@ -161,13 +189,13 @@ export class ServicePackageService {
   }
 
   async findAllServiceTypes(): Promise<ServiceType[]> {
-    return this.serviceTypeRepository.find({ relations: ['servicePackageServiceTypes'] });
+    return this.serviceTypeRepository.find({ relations: ['serviceConceptServiceTypes'] });
   }
 
   async findServiceType(id: string): Promise<ServiceType> {
     const serviceType = await this.serviceTypeRepository.findOne({
       where: { id },
-      relations: ['servicePackageServiceTypes'],
+      relations: ['serviceConceptServiceTypes'],
     });
     if (!serviceType) {
       throw new NotFoundException(`Loại dịch vụ với ID ${id} không tồn tại`);
@@ -186,4 +214,149 @@ export class ServicePackageService {
     await this.serviceTypeRepository.remove(serviceType);
   }
   //#endregion ServiceType
+
+  //#region ServiceConcept
+  async createServiceConcept(
+    createServiceConceptDto: CreateServiceConceptDto,
+    files: { image?: Express.Multer.File },
+  ): Promise<ServiceConcept> {
+    const startTime = Date.now();
+    this.logger.log('Tạo khái niệm dịch vụ');
+
+    const serviceConceptData: Partial<ServiceConcept> = {
+      name: createServiceConceptDto.name,
+      description: createServiceConceptDto.description,
+      price: createServiceConceptDto.price,
+      duration: createServiceConceptDto.duration,
+      status: createServiceConceptDto.status,
+    };
+
+    // Upload image if provided
+    if (files.image) {
+      this.logger.log('Tải lên ảnh');
+      try {
+        const uploadResult = await this.uploadService.uploadImage(files.image, 'service-concepts/images');
+        serviceConceptData.image = uploadResult;
+      } catch (error) {
+        this.logger.error(`Lỗi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi tải lên ảnh: ${error.message}`);
+      }
+    }
+
+    // Create the service concept first
+    const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
+    const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
+
+    // If service type IDs are provided, link them to the concept
+    if (createServiceConceptDto.serviceTypeIds && createServiceConceptDto.serviceTypeIds.length > 0) {
+      this.logger.log('Liên kết loại dịch vụ với khái niệm dịch vụ');
+      try {
+        // Verify all service types exist
+        const serviceTypes = await this.serviceTypeRepository.findByIds(createServiceConceptDto.serviceTypeIds);
+        if (serviceTypes.length !== createServiceConceptDto.serviceTypeIds.length) {
+          throw new NotFoundException('Một hoặc nhiều loại dịch vụ không tồn tại');
+        }
+
+        // Create service concept service type relationships
+        for (const serviceType of serviceTypes) {
+          const serviceConceptServiceType = this.serviceConceptServiceTypeRepository.create({
+            serviceConceptId: savedServiceConcept.id,
+            serviceTypeId: serviceType.id,
+          });
+          await this.serviceConceptServiceTypeRepository.save(serviceConceptServiceType);
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi liên kết loại dịch vụ: ${error.message}`);
+        throw error;
+      }
+    }
+
+    this.logger.log(`Khái niệm dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
+    
+    // Return the concept with its service types
+    return this.serviceConceptRepository.findOne({
+      where: { id: savedServiceConcept.id },
+      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType'],
+    });
+  }
+
+  async findAllServiceConcepts(): Promise<ServiceConcept[]> {
+    return this.serviceConceptRepository.find({
+      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType'],
+    });
+  }
+
+  async findServiceConcept(id: string): Promise<ServiceConcept> {
+    const serviceConcept = await this.serviceConceptRepository.findOne({
+      where: { id },
+      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType'],
+    });
+    if (!serviceConcept) {
+      throw new NotFoundException(`Khái niệm dịch vụ với ID ${id} không tồn tại`);
+    }
+    return serviceConcept;
+  }
+
+  async updateServiceConcept(
+    id: string,
+    updateServiceConceptDto: UpdateServiceConceptDto,
+    files: { image?: Express.Multer.File },
+  ): Promise<ServiceConcept> {
+    const serviceConcept = await this.findServiceConcept(id);
+
+    // Update basic fields
+    if (updateServiceConceptDto.name) serviceConcept.name = updateServiceConceptDto.name;
+    if (updateServiceConceptDto.description !== undefined) serviceConcept.description = updateServiceConceptDto.description;
+    if (updateServiceConceptDto.price !== undefined) serviceConcept.price = updateServiceConceptDto.price;
+    if (updateServiceConceptDto.duration !== undefined) serviceConcept.duration = updateServiceConceptDto.duration;
+    if (updateServiceConceptDto.status !== undefined) serviceConcept.status = updateServiceConceptDto.status;
+
+    // Upload new image if provided
+    if (files.image) {
+      this.logger.log('Tải lên ảnh mới');
+      try {
+        const uploadResult = await this.uploadService.uploadImage(files.image, 'service-concepts/images');
+        serviceConcept.image = uploadResult;
+      } catch (error) {
+        this.logger.error(`Lỗi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi tải lên ảnh: ${error.message}`);
+      }
+    }
+
+    // Update service types if provided
+    if (updateServiceConceptDto.serviceTypeIds) {
+      this.logger.log('Cập nhật liên kết loại dịch vụ');
+      try {
+        // Remove existing relationships
+        await this.serviceConceptServiceTypeRepository.delete({ serviceConceptId: id });
+
+        // Verify all service types exist
+        const serviceTypes = await this.serviceTypeRepository.findByIds(updateServiceConceptDto.serviceTypeIds);
+        if (serviceTypes.length !== updateServiceConceptDto.serviceTypeIds.length) {
+          throw new NotFoundException('Một hoặc nhiều loại dịch vụ không tồn tại');
+        }
+
+        // Create new relationships
+        for (const serviceType of serviceTypes) {
+          const serviceConceptServiceType = this.serviceConceptServiceTypeRepository.create({
+            serviceConceptId: id,
+            serviceTypeId: serviceType.id,
+          });
+          await this.serviceConceptServiceTypeRepository.save(serviceConceptServiceType);
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi cập nhật liên kết loại dịch vụ: ${error.message}`);
+        throw error;
+      }
+    }
+
+    const updatedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
+    return this.findServiceConcept(updatedServiceConcept.id);
+  }
+
+  async removeServiceConcept(id: string): Promise<void> {
+    const serviceConcept = await this.findServiceConcept(id);
+    await this.serviceConceptRepository.remove(serviceConcept);
+  }
+  //#endregion ServiceConcept
 }

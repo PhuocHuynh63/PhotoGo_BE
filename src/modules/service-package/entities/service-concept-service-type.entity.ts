@@ -7,18 +7,19 @@ import {
 } from 'typeorm';
 import { ServicePackage } from './service-package.entity';
 import { ServiceType } from './service-type.entity';
+import { ServiceConcept } from './service-concept.entity';
 
-@Entity('service_package_service_type')
-export class ServicePackageServiceType {
+@Entity('service_concept_service_type')
+export class ServiceConceptServiceType {
   @PrimaryColumn({ type: 'uuid' })
-  servicePackageId: string;
+  serviceConceptId: string;
 
   @PrimaryColumn({ type: 'uuid' })
   serviceTypeId: string;
 
-  @ManyToOne(() => ServicePackage, { nullable: false, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'service_package_id' })
-  servicePackage: ServicePackage;
+  @ManyToOne(() => ServiceConcept, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'service_concept_id' })
+  serviceConcept: ServiceConcept;
 
   @ManyToOne(() => ServiceType, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'service_type_id' })

@@ -29,15 +29,15 @@ export class InvoiceService {
       throw new NotFoundException(`Đơn hàng với ID ${bookingId} không tồn tại`);
     }
 
-    // Lấy servicePackage từ booking
-    const servicePackage = await this.servicePackageService.findOne(booking.servicePackageId);
-    if (!servicePackage) {
-      throw new NotFoundException(`Gói dịch vụ với ID ${booking.servicePackageId} không tồn tại`);
+    // Lấy serviceConcept từ booking
+    const serviceConcept = await this.servicePackageService.findServiceConcept(booking.serviceConceptId);
+    if (!serviceConcept) {
+      throw new NotFoundException(`Gói dịch vụ với ID ${booking.serviceConceptId} không tồn tại`);
     }
 
-    //1. Lay originalPrice tu servicePackage
-    const originalPrice = Math.round(servicePackage.price);
-
+    //1. Lay originalPrice tu serviceConcept
+    const originalPrice = Math.round(serviceConcept.price);
+    
     //2. Tinh discountAmount
     let discountAmount = 0;
     let voucher = null;

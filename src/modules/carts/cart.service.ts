@@ -22,7 +22,7 @@ export class CartService {
     return await this.cartRepository.save(cart);
   }
 
-  async addCartItem(data: { servicePackageId: string; cartId: string; userId: string }): Promise<CartItem> {
+  async addCartItem(data: { serviceConceptId: string; cartId: string; userId: string }): Promise<CartItem> {
     // Kiểm tra quyền sở hữu giỏ hàng
     const cart = await this.cartRepository.findOne({ where: { id: data.cartId, userId: data.userId } });
     if (!cart) {
@@ -31,7 +31,7 @@ export class CartService {
   
     // Kiểm tra trùng lặp service_package_id
     const existingItem = await this.cartItemRepository.findOne({
-      where: { cartId: data.cartId, servicePackageId: data.servicePackageId },
+      where: { cartId: data.cartId, serviceConceptId: data.serviceConceptId },
     });
     if (existingItem) {
       throw new BadRequestException('Gói dịch vụ này đã tồn tại trong giỏ hàng');
@@ -40,7 +40,7 @@ export class CartService {
     // Tạo cart item mới
     const cartItem = this.cartItemRepository.create({
       cartId: data.cartId,
-      servicePackageId: data.servicePackageId,
+      serviceConceptId: data.serviceConceptId,
     });
     return await this.cartItemRepository.save(cartItem);
   }
@@ -48,7 +48,7 @@ export class CartService {
   async findCartById(id: string): Promise<Cart> {
     const cart = await this.cartRepository.findOne({
       where: { id },
-      relations: ['items', 'items.servicePackage'],
+      relations: ['items', 'items.serviceConcept'],
     });
 
     if (!cart) {
@@ -59,7 +59,7 @@ export class CartService {
   }
 
   async findAllCarts(): Promise<Cart[]> {
-    return await this.cartRepository.find({ relations: ['items', 'items.servicePackage'] });
+    return await this.cartRepository.find({ relations: ['items', 'items.serviceConcept'] });
   }
 
   async findCartItems(cartId: string): Promise<CartItem[]> {
@@ -75,7 +75,7 @@ export class CartService {
   async findCartItemsByUserId(userId: string): Promise<CartItem[]> {
     const cart = await this.cartRepository.findOne({
       where: { userId },
-      relations: ['items', 'items.servicePackage'],
+      relations: ['items', 'items.serviceConcept'],
     });
 
     if (!cart) {
