@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Like } from 'typeorm';
+import { Repository, DataSource, Like, Not, In } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
@@ -200,6 +200,7 @@ export class VendorService {
         id: concept.id,
         name: concept.name,
         description: concept.description,
+        image_url: concept.image,
         price: concept.price,
         duration: concept.duration,
         serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
@@ -347,6 +348,48 @@ export class VendorService {
     if (files.banner) {
       const uploadedBanner = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
       vendor.banner = uploadedBanner;
+    }
+
+    // Update locations
+    if (updateVendorDto.locations) {
+      // First, remove locations that are not in the update list
+      const locationIds = updateVendorDto.locations
+        .filter(loc => loc.id)
+        .map(loc => loc.id);
+      
+      await this.locationRepository.delete({
+        vendor: { id: vendor.id },
+        id: Not(In(locationIds))
+      });
+
+      // Then update or create locations
+      const locations = await Promise.all(updateVendorDto.locations.map(async loc => {
+        if (loc.id) {
+          // Update existing location
+          const existingLocation = await this.locationRepository.findOne({
+            where: { id: loc.id, vendor: { id: vendor.id } }
+          });
+          
+          if (existingLocation) {
+            existingLocation.address = loc.address;
+            existingLocation.district = loc.district;
+            existingLocation.ward = loc.ward;
+            existingLocation.city = loc.city;
+            existingLocation.province = loc.province;
+            existingLocation.latitude = loc.latitude;
+            existingLocation.longitude = loc.longitude;
+            return existingLocation;
+          }
+        }
+        
+        // Create new location
+        return this.locationRepository.create({
+          ...loc,
+          vendor: vendor
+        });
+      }));
+
+      vendor.locations = locations;
     }
   
     return this.vendorRepository.save(vendor);

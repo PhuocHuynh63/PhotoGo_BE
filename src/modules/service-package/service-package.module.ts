@@ -8,6 +8,7 @@ import { ServiceConceptServiceType } from './entities/service-concept-service-ty
 import { ServiceType } from './entities/service-type.entity';
 import { ServiceConcept } from './entities/service-concept.entity';
 import { UploadModule } from 'src/3rdService/upload/upload.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { UploadModule } from 'src/3rdService/upload/upload.module';
       ServiceConcept,
     ]),
     UploadModule,
+    AuthModule,
   ],
   providers: [ServicePackageService],
   controllers: [ServicePackageController],

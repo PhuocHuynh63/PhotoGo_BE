@@ -164,6 +164,10 @@ export class VendorController {
         name: { type: 'string', example: 'New Vendor Name' },
         description: { type: 'string', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), nullable: true },
+        locations: {
+          type: 'string',
+          example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724}]',
+        },
         logo: { type: 'string', format: 'binary' },
         banner: { type: 'string', format: 'binary' },
       },

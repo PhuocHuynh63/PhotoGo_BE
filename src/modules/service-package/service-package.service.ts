@@ -9,6 +9,8 @@ import { ServiceConcept } from './entities/service-concept.entity';
 import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServiceConceptServiceTypeDto, CreateServiceTypeDto, CreateServiceConceptDto } from './dto/create-service-package.dto';
 import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateServiceConceptServiceTypeDto, UpdateServiceTypeDto, UpdateServiceConceptDto } from './dto/update-service-package.dto';
 import { UploadService } from 'src/3rdService/upload/upload.service';
+import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
 
 @Injectable()
 export class ServicePackageService {
@@ -30,68 +32,70 @@ export class ServicePackageService {
 
   async create(
     createServicePackageDto: CreateServicePackageDto,
-    files: { logo?: Express.Multer.File },
+    files: { image?: Express.Multer.File },
   ): Promise<ServicePackage> {
     const startTime = Date.now();
-    this.logger.log('Tạo gói dịch vụ');
+    this.logger.log('Bắt đầu quá trình tạo gói dịch vụ');
 
     const servicePackageData: Partial<ServicePackage> = {
       name: createServicePackageDto.name,
       description: createServicePackageDto.description,
       vendorId: createServicePackageDto.vendorId,
-      status: createServicePackageDto.status,
+      status: createServicePackageDto.status || ServicePackageStatus.ACTIVE,
     };
 
     // Upload image if provided
-    if (files.logo) {
-      this.logger.log('Tải lên ảnh');
+    if (files.image) {
+      this.logger.log('Đang tải lên ảnh');
       try {
-        const uploadResult = await this.uploadService.uploadImage(files.logo, 'service-packages/images');
+        const uploadResult = await this.uploadService.uploadImage(files.image, 'service-packages/images');
         servicePackageData.image = uploadResult;
       } catch (error) {
-        this.logger.error(`Lỗi tải lên ảnh: ${error.message}`);
-        throw new BadRequestException(`Lỗi tải lên ảnh: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên ảnh: ${error.message}`);
       }
     }
 
-    // Create the service package first
+    // Create the service package
     const servicePackage = this.servicePackageRepository.create(servicePackageData);
     const savedServicePackage = await this.servicePackageRepository.save(servicePackage);
 
-    // If service concept IDs are provided, link them to the package
-    if (createServicePackageDto.serviceConceptIds && createServicePackageDto.serviceConceptIds.length > 0) {
-      this.logger.log('Liên kết khái niệm dịch vụ với gói dịch vụ');
-      try {
-        // Verify all service concepts exist
-        const serviceConcepts = await this.serviceConceptRepository.findByIds(createServicePackageDto.serviceConceptIds);
-        if (serviceConcepts.length !== createServicePackageDto.serviceConceptIds.length) {
-          throw new NotFoundException('Một hoặc nhiều khái niệm dịch vụ không tồn tại');
-        }
-
-        // Update each service concept to link to this package
-        for (const serviceConcept of serviceConcepts) {
-          serviceConcept.servicePackage = savedServicePackage;
-          await this.serviceConceptRepository.save(serviceConcept);
-        }
-      } catch (error) {
-        this.logger.error(`Lỗi liên kết khái niệm dịch vụ: ${error.message}`);
-        throw error;
-      }
-    }
-
     this.logger.log(`Gói dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
     
-    // Return the package with its service concepts
-    return this.servicePackageRepository.findOne({
-      where: { id: savedServicePackage.id },
-      relations: ['serviceConcepts'],
-    });
+    return savedServicePackage;
   }
 
-  async findAll(): Promise<ServicePackage[]> {
-    return this.servicePackageRepository.find({ 
-      relations: ['vendor', 'serviceConcepts'] 
-    });
+  async findAll(query?: { current?: number; pageSize?: number }): Promise<{
+    data: ServicePackage[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query?.current ? Number(query.current) : 1;
+    const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const queryBuilder = this.servicePackageRepository.createQueryBuilder('service_package');
+    queryBuilder.leftJoinAndSelect('service_package.vendor', 'vendor');
+    queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
+
+    const [data, totalItem] = await queryBuilder
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage: Math.ceil(totalItem / pageSize),
+        totalItem,
+      },
+    };
   }
 
   async findOne(id: string): Promise<ServicePackage> {
@@ -105,10 +109,32 @@ export class ServicePackageService {
     return servicePackage;
   }
 
-  async update(id: string, updateServicePackageDto: UpdateServicePackageDto): Promise<ServicePackage> {
+  async update(
+    id: string,
+    updateServicePackageDto: UpdateServicePackageDto,
+    files: { image?: Express.Multer.File },
+  ): Promise<ServicePackage> {
     const servicePackage = await this.findOne(id);
-    Object.assign(servicePackage, updateServicePackageDto);
-    return this.servicePackageRepository.save(servicePackage);
+
+    // Update basic fields
+    if (updateServicePackageDto.name) servicePackage.name = updateServicePackageDto.name;
+    if (updateServicePackageDto.description !== undefined) servicePackage.description = updateServicePackageDto.description;
+    if (updateServicePackageDto.status !== undefined) servicePackage.status = updateServicePackageDto.status;
+
+    // Upload new image if provided
+    if (files.image) {
+      this.logger.log('Đang tải lên ảnh mới');
+      try {
+        const uploadResult = await this.uploadService.uploadImage(files.image, 'service-packages/images');
+        servicePackage.image = uploadResult;
+      } catch (error) {
+        this.logger.error(`Lỗi khi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên ảnh: ${error.message}`);
+      }
+    }
+
+    const updatedServicePackage = await this.servicePackageRepository.save(servicePackage);
+    return this.findOne(updatedServicePackage.id);
   }
 
   async remove(id: string): Promise<void> {
@@ -122,8 +148,36 @@ export class ServicePackageService {
     return this.servicePackageMetadataRepository.save(metadata);
   }
 
-  async findAllMetadata(): Promise<ServicePackageMetadata[]> {
-    return this.servicePackageMetadataRepository.find({ relations: ['servicePackage'] });
+  async findAllMetadata(query?: { current?: number; pageSize?: number }): Promise<{
+    data: ServicePackageMetadata[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query?.current ? Number(query.current) : 1;
+    const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const queryBuilder = this.servicePackageMetadataRepository.createQueryBuilder('metadata');
+    queryBuilder.leftJoinAndSelect('metadata.servicePackage', 'servicePackage');
+
+    const [data, totalItem] = await queryBuilder
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage: Math.ceil(totalItem / pageSize),
+        totalItem,
+      },
+    };
   }
 
   async findMetadata(id: string): Promise<ServicePackageMetadata> {
@@ -155,8 +209,36 @@ export class ServicePackageService {
     return this.serviceConceptServiceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceConceptServiceType(): Promise<ServiceConceptServiceType[]> {
-    return this.serviceConceptServiceTypeRepository.find({ relations: ['serviceConcept'] });
+  async findAllServiceConceptServiceType(query?: { current?: number; pageSize?: number }): Promise<{
+    data: ServiceConceptServiceType[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query?.current ? Number(query.current) : 1;
+    const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const queryBuilder = this.serviceConceptServiceTypeRepository.createQueryBuilder('service_concept_service_type');
+    queryBuilder.leftJoinAndSelect('service_concept_service_type.serviceConcept', 'serviceConcept');
+
+    const [data, totalItem] = await queryBuilder
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage: Math.ceil(totalItem / pageSize),
+        totalItem,
+      },
+    };
   }
 
   async findServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string): Promise<ServiceConceptServiceType> {
@@ -188,8 +270,36 @@ export class ServicePackageService {
     return this.serviceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceTypes(): Promise<ServiceType[]> {
-    return this.serviceTypeRepository.find({ relations: ['serviceConceptServiceTypes'] });
+  async findAllServiceTypes(query?: { current?: number; pageSize?: number }): Promise<{
+    data: ServiceType[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query?.current ? Number(query.current) : 1;
+    const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const queryBuilder = this.serviceTypeRepository.createQueryBuilder('service_type');
+    queryBuilder.leftJoinAndSelect('service_type.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
+
+    const [data, totalItem] = await queryBuilder
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage: Math.ceil(totalItem / pageSize),
+        totalItem,
+      },
+    };
   }
 
   async findServiceType(id: string): Promise<ServiceType> {
@@ -221,35 +331,47 @@ export class ServicePackageService {
     files: { image?: Express.Multer.File },
   ): Promise<ServiceConcept> {
     const startTime = Date.now();
-    this.logger.log('Tạo khái niệm dịch vụ');
+    this.logger.log('Bắt đầu quá trình tạo khái niệm dịch vụ');
+
+    // Verify service package exists if provided
+    let servicePackage = null;
+    if (createServiceConceptDto.servicePackageId) {
+      servicePackage = await this.servicePackageRepository.findOne({
+        where: { id: createServiceConceptDto.servicePackageId }
+      });
+      if (!servicePackage) {
+        throw new NotFoundException(`Gói dịch vụ với ID ${createServiceConceptDto.servicePackageId} không tồn tại`);
+      }
+    }
 
     const serviceConceptData: Partial<ServiceConcept> = {
       name: createServiceConceptDto.name,
       description: createServiceConceptDto.description,
       price: createServiceConceptDto.price,
       duration: createServiceConceptDto.duration,
-      status: createServiceConceptDto.status,
+      status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
+      servicePackage: servicePackage,
     };
 
     // Upload image if provided
     if (files.image) {
-      this.logger.log('Tải lên ảnh');
+      this.logger.log('Đang tải lên ảnh');
       try {
         const uploadResult = await this.uploadService.uploadImage(files.image, 'service-concepts/images');
         serviceConceptData.image = uploadResult;
       } catch (error) {
-        this.logger.error(`Lỗi tải lên ảnh: ${error.message}`);
-        throw new BadRequestException(`Lỗi tải lên ảnh: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên ảnh: ${error.message}`);
       }
     }
 
-    // Create the service concept first
+    // Create the service concept
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
     const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
 
     // If service type IDs are provided, link them to the concept
     if (createServiceConceptDto.serviceTypeIds && createServiceConceptDto.serviceTypeIds.length > 0) {
-      this.logger.log('Liên kết loại dịch vụ với khái niệm dịch vụ');
+      this.logger.log('Đang liên kết loại dịch vụ với khái niệm dịch vụ');
       try {
         // Verify all service types exist
         const serviceTypes = await this.serviceTypeRepository.findByIds(createServiceConceptDto.serviceTypeIds);
@@ -266,7 +388,7 @@ export class ServicePackageService {
           await this.serviceConceptServiceTypeRepository.save(serviceConceptServiceType);
         }
       } catch (error) {
-        this.logger.error(`Lỗi liên kết loại dịch vụ: ${error.message}`);
+        this.logger.error(`Lỗi khi liên kết loại dịch vụ: ${error.message}`);
         throw error;
       }
     }
@@ -276,14 +398,41 @@ export class ServicePackageService {
     // Return the concept with its service types
     return this.serviceConceptRepository.findOne({
       where: { id: savedServiceConcept.id },
-      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType'],
+      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType', 'servicePackage'],
     });
   }
 
-  async findAllServiceConcepts(): Promise<ServiceConcept[]> {
-    return this.serviceConceptRepository.find({
-      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType'],
-    });
+  async findAllServiceConcepts(query?: { current?: number; pageSize?: number }): Promise<{
+    data: ServiceConcept[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query?.current ? Number(query.current) : 1;
+    const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const queryBuilder = this.serviceConceptRepository.createQueryBuilder('service_concept');
+    queryBuilder.leftJoinAndSelect('service_concept.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
+    queryBuilder.leftJoinAndSelect('serviceConceptServiceTypes.serviceType', 'serviceType');
+
+    const [data, totalItem] = await queryBuilder
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage: Math.ceil(totalItem / pageSize),
+        totalItem,
+      },
+    };
   }
 
   async findServiceConcept(id: string): Promise<ServiceConcept> {
@@ -313,19 +462,19 @@ export class ServicePackageService {
 
     // Upload new image if provided
     if (files.image) {
-      this.logger.log('Tải lên ảnh mới');
+      this.logger.log('Đang tải lên ảnh mới');
       try {
         const uploadResult = await this.uploadService.uploadImage(files.image, 'service-concepts/images');
         serviceConcept.image = uploadResult;
       } catch (error) {
-        this.logger.error(`Lỗi tải lên ảnh: ${error.message}`);
-        throw new BadRequestException(`Lỗi tải lên ảnh: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên ảnh: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên ảnh: ${error.message}`);
       }
     }
 
     // Update service types if provided
     if (updateServiceConceptDto.serviceTypeIds) {
-      this.logger.log('Cập nhật liên kết loại dịch vụ');
+      this.logger.log('Đang cập nhật liên kết loại dịch vụ');
       try {
         // Remove existing relationships
         await this.serviceConceptServiceTypeRepository.delete({ serviceConceptId: id });
@@ -345,7 +494,7 @@ export class ServicePackageService {
           await this.serviceConceptServiceTypeRepository.save(serviceConceptServiceType);
         }
       } catch (error) {
-        this.logger.error(`Lỗi cập nhật liên kết loại dịch vụ: ${error.message}`);
+        this.logger.error(`Lỗi khi cập nhật liên kết loại dịch vụ: ${error.message}`);
         throw error;
       }
     }
