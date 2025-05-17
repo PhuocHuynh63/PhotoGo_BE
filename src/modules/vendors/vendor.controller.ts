@@ -20,6 +20,7 @@ import { FindVendorDto } from './dto/find-vendor.dto';
 import { FilterVendorDto } from './dto/filter-vendor.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
+import { Location } from '../locations/entities/location.entity';
 
 @ApiTags('Vendors')
 @Controller('vendors')
@@ -49,7 +50,7 @@ export class VendorController {
       properties: {
         name: { type: 'string', example: 'Sunset Photography Studio' },
         category_id: { type: 'string', example: 'C003' },
-        slug: { type: 'string', example: 'sunset-photography-studio' },
+        // slug: { type: 'string', example: 'sunset-photography-studio' },
         description: { type: 'string', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), nullable: true },
         locations: {
@@ -124,7 +125,7 @@ export class VendorController {
   @ApiOperation({ summary: 'Lấy một nhà cung cấp theo slug (Public)' })
   @ApiResponse({ status: 200, type: VendorResponseDto })
   @ApiResponse({ status: 404, description: 'Nhà cung cấp không tồn tại' })
-  async findBySlug(@Param('slug') slug: string): Promise<VendorResponseDto> {
+  async findBySlug(@Param('slug') slug: string): Promise<{ type: 'vendor' | 'location'; data: VendorResponseDto | Location }> {
     return this.vendorService.findBySlug(slug);
   }
 
