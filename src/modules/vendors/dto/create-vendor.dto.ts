@@ -26,13 +26,13 @@ export class CreateVendorDto {
   })
   category_id: string;
 
-  @IsString()
-  @IsNotEmpty()
-  @ApiProperty({
-    example: 'studio-anh-sang',
-    description: 'Slug của nhà cung cấp',
-  })
-  slug: string;
+  // @IsString()
+  // @IsNotEmpty()
+  // @ApiProperty({
+  //   example: 'studio-anh-sang',
+  //   description: 'Slug của nhà cung cấp',
+  // })
+  // slug: string;
 
   @IsString()
   @IsOptional()

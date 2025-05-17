@@ -273,17 +273,39 @@ export class VendorService {
   //#endregion findAll
 
   //#region findBySlug
-  async findBySlug(slug: string): Promise<VendorResponseDto> {
+  async findBySlug(slug: string): Promise<{
+    type: 'vendor' | 'location';
+    data: VendorResponseDto | Location;
+  }> {
+    // First check if slug exists in vendor
     const vendor = await this.vendorRepository.findOne({
       where: { slug },
       relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'reviews'],
     });
-  
-    if (!vendor) {
-      throw new NotFoundException(`Nhà cung cấp với slug ${slug} không tồn tại`);
+
+    if (vendor) {
+      // If vendor found, return vendor response with all relations
+      return {
+        type: 'vendor',
+        data: await this.getVendorResponse(vendor.id, this.reviewService)
+      };
     }
 
-    return this.getVendorResponse(vendor.id, this.reviewService);
+    // If not found in vendor, check in locations with minimal relations
+    const location = await this.locationRepository.findOne({
+      where: { slug },
+      relations: ['vendor'],
+    });
+
+    if (!location) {
+      throw new NotFoundException(`Không tìm thấy địa điểm hoặc nhà cung cấp với slug ${slug}`);
+    }
+
+    // If location found, return just that location with its vendor
+    return {
+      type: 'location',
+      data: location
+    };
   }
   //#endregion findBySlug
 
