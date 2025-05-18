@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { Cart } from './cart.entity';
-import { ServicePackage } from '../../service-package/entities/service-package.entity';
+import { ServiceConcept } from 'src/modules/service-package/entities/service-concept.entity';
 
 @Entity('cart_item')
 export class CartItem {
@@ -14,12 +14,12 @@ export class CartItem {
   @Column({ type: 'uuid', nullable: false })
   cartId: string;
 
-  @ManyToOne(() => ServicePackage, { nullable: false })
-  @JoinColumn({ name: 'service_package_id' })
-  servicePackage: ServicePackage;
+  @ManyToOne(() => ServiceConcept, { nullable: false })
+  @JoinColumn({ name: 'service_concept_id' })
+  serviceConcept: ServiceConcept;
 
-  @Column({ type: 'uuid', nullable: false, name: 'service_package_id' })
-  servicePackageId: string;
+  @Column({ type: 'uuid', nullable: false })
+  serviceConceptId: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

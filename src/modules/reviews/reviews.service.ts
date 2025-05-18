@@ -25,19 +25,19 @@ export class ReviewService {
   async create(createReviewDto: CreateReviewDto): Promise<Review> {
     // Validate required fields
     if (!createReviewDto.rating || !createReviewDto.vendorId) {
-      throw new BadRequestException('Rating and vendorId are required');
+      throw new BadRequestException('Điểm đánh giá và vendorId là bắt buộc');
     }
 
     // Validate vendorId is a UUID
     if (!isUUID(createReviewDto.vendorId)) {
-      throw new BadRequestException('Invalid vendorId format');
+      throw new BadRequestException('Định dạng vendorId không hợp lệ');
     }
 
     try {
       const review = this.reviewRepository.create(createReviewDto);
       return await this.reviewRepository.save(review);
     } catch (error) {
-      throw new BadRequestException('Failed to create review: ' + error.message);
+      throw new BadRequestException('Không thể tạo đánh giá: ' + error.message);
     }
   }
 
@@ -51,41 +51,41 @@ export class ReviewService {
           'review.id',
           'review.rating',
           'review.comment',
-          'user.fullName', // Updated to match the likely property name
-          'vendor.name', // Updated to match the likely property name
+          'user', // Updated to match the likely property name
+          'vendor', // Updated to match the likely property name
         ])
         .getMany();
     } catch (error) {
-      throw new BadRequestException('Failed to fetch reviews: ' + error.message);
+      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
     }
   }
 
   async findByVendorId(vendorId: string): Promise<Review[]> {
     // Validate vendorId is a UUID
     if (!isUUID(vendorId)) {
-      throw new BadRequestException('Invalid vendorId format');
+      throw new BadRequestException('Định dạng vendorId không hợp lệ');
     }
 
     try {
       const reviews = await this.reviewRepository.find({
         where: { vendorId },
-        relations: ['user', 'vendor', 'booking'],
+        relations: ['vendor'],
       });
 
       if (!reviews.length) {
-        throw new NotFoundException(`No reviews found for vendor ID: ${vendorId}`);
+        throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
       }
 
       return reviews;
     } catch (error) {
-      throw new BadRequestException('Failed to fetch reviews: ' + error.message);
+      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
     }
   }
 
   async findOne(id: string): Promise<Review> {
     // Validate id is a UUID
     if (!isUUID(id)) {
-      throw new BadRequestException('Invalid review ID format');
+      throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
     }
 
     try {
@@ -95,19 +95,19 @@ export class ReviewService {
       });
 
       if (!review) {
-        throw new NotFoundException(`Review with ID ${id} not found`);
+        throw new NotFoundException(`Không tìm thấy đánh giá với ID: ${id}`);
       }
 
       return review;
     } catch (error) {
-      throw new BadRequestException('Failed to fetch review: ' + error.message);
+      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
     }
   }
 
   async update(id: string, updateReviewDto: UpdateReviewDto): Promise<Review> {
     // Validate id is a UUID
     if (!isUUID(id)) {
-      throw new BadRequestException('Invalid review ID format');
+      throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
     }
 
     try {
@@ -118,14 +118,14 @@ export class ReviewService {
       if (error instanceof NotFoundException) {
         throw error; // Re-throw NotFoundException
       }
-      throw new BadRequestException('Failed to update review: ' + error.message);
+      throw new BadRequestException('Không thể cập nhật đánh giá: ' + error.message);
     }
   }
 
   async remove(id: string): Promise<void> {
     // Validate id is a UUID
     if (!isUUID(id)) {
-      throw new BadRequestException('Invalid review ID format');
+      throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
     }
 
     try {
@@ -135,7 +135,20 @@ export class ReviewService {
       if (error instanceof NotFoundException) {
         throw error; // Re-throw NotFoundException
       }
-      throw new BadRequestException('Failed to delete review: ' + error.message);
+      throw new BadRequestException('Không thể xóa đánh giá: ' + error.message);
     }
   }
+
+  async getAverageRatingByVendorId(vendorId: string): Promise<number> {
+    const reviews = await this.reviewRepository.find({
+      where: { vendorId },
+      select: ['rating'],
+    });
+  
+    if (!reviews.length) return 0;
+  
+    const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+    return parseFloat((total / reviews.length).toFixed(2));
+  }
+  
 }

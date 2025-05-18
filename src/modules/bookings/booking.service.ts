@@ -6,6 +6,7 @@ import { BookingStatus } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { ServiceConcept } from '../service-package/entities/service-concept.entity';
 
 @Injectable()
 export class BookingService {
@@ -14,39 +15,60 @@ export class BookingService {
     private bookingRepository: Repository<Booking>,
     @InjectRepository(BookingHistory)
     private bookingHistoryRepository: Repository<BookingHistory>,
+    @InjectRepository(ServiceConcept)
+    private serviceConceptRepository: Repository<ServiceConcept>,
   ) {}
 
-  async create(createBookingDto: CreateBookingDto): Promise<Booking> {
-    const booking = this.bookingRepository.create({
-      ...createBookingDto,
-      status: BookingStatus.PENDING,
+  //#region Create Booking
+  async create(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    serviceConceptId: string,
+  ): Promise<Booking> {
+    const serviceConcept = await this.serviceConceptRepository.findOne({
+      where: { id: serviceConceptId },
+      relations: ['servicePackage', 'servicePackage.vendor'],
     });
 
-    const savedBooking = await this.bookingRepository.save(booking);
+    if (!serviceConcept) {
+      throw new NotFoundException(`Khái niệm dịch vụ với ID ${serviceConceptId} không tìm thấy`);
+    }
 
-    // Ghi lại lịch sử booking
+    const vendorId = serviceConcept.servicePackage.vendorId;
+
+    const booking = this.bookingRepository.create({
+      ...createBookingDto,
+      userId,
+      serviceConceptId,
+      vendorId,
+      status: BookingStatus.PENDING,
+    });
+  
+    const savedBooking = await this.bookingRepository.save(booking);
+  
     const history = this.bookingHistoryRepository.create({
       bookingId: savedBooking.id,
       status: BookingStatus.PENDING,
     });
     await this.bookingHistoryRepository.save(history);
-
+  
     return savedBooking;
-  }
+  }  
+  //#endregion
 
   async findAll(): Promise<Booking[]> {
     return this.bookingRepository.find({
-      relations: ['user', 'vendor', 'servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
     });
   }
 
   async findOne(id: string): Promise<Booking> {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'vendor', 'servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
     });
     if (!booking) {
-      throw new NotFoundException(`Booking with ID ${id} not found`);
+      throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
     return booking;
   }
@@ -57,7 +79,7 @@ export class BookingService {
     if (updateBookingDto.status) {
       booking.status = updateBookingDto.status;
 
-      // Ghi lại lịch sử thay đổi trạng thái
+      // Cập nhật lịch sử thay đổi trạng thái
       const history = this.bookingHistoryRepository.create({
         bookingId: booking.id,
         status: updateBookingDto.status,

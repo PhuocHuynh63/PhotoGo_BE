@@ -13,23 +13,23 @@ export class RefundController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new refund' })
-  @ApiResponse({ status: 201, description: 'Refund created successfully', type: Refund })
+  @ApiOperation({ summary: 'Tạo mới một hoàn trả' })
+  @ApiResponse({ status: 201, description: 'Hoàn trả đã được tạo thành công', type: Refund })
   async create(@Body() createRefundDto: CreateRefundDto): Promise<Refund> {
     return await this.refundService.create(createRefundDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Retrieve all refunds' })
-  @ApiResponse({ status: 200, description: 'List of refunds', type: [Refund] })
+  @ApiOperation({ summary: 'Lấy tất cả hoàn trả' })
+  @ApiResponse({ status: 200, description: 'Danh sách hoàn trả', type: [Refund] })
   async findAll(@Query() query: FindAllRefundsDto): Promise<Refund[]> {
     return await this.refundService.findAll(query);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Retrieve a refund by ID' })
-  @ApiResponse({ status: 200, description: 'Refund details', type: Refund })
-  @ApiResponse({ status: 404, description: 'Refund not found' })
+  @ApiOperation({ summary: 'Lấy hoàn trả theo ID' })
+  @ApiResponse({ status: 200, description: 'Chi tiết hoàn trả', type: Refund })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hoàn trả' })
   async findOne(@Param('id') id: string): Promise<Refund> {
     return await this.refundService.findOne(id);
   }

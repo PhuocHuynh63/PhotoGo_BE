@@ -16,7 +16,7 @@ import { TeamMemberModule } from './modules/team-members/team-member.module';
 import { CategoryModule } from './modules/categories/category.module';
 import { NotificationModule } from './modules/notifications/notification.module';
 import { LocationModule } from './modules/locations/location.module';
-import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { PointModule } from './modules/points/point.module';
 import { VoucherModule } from './modules/vouchers/voucher.module';
 import { WalletModule } from './modules/wallets/wallet.module';
@@ -40,9 +40,11 @@ import { UploadModule } from './3rdService/upload/upload.module';
 import { InvoiceModule } from './modules/invoices/invoice.module';
 import { WishlistModule } from './modules/wishlists/wishlist.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { SupportTicketsModule } from './modules/support_tickets/support_tickets.module';
+import { SupportTicketsModule } from './modules/support-tickets/support_tickets.module';
 import { ReviewModule } from './modules/reviews/reviews.module';
 import { ServicePackageModule } from './modules/service-package/service-package.module';
+import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
+import { BullQueueModule } from './3rdService/bull/bull-queue.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -116,9 +118,11 @@ if (!fs.existsSync(templateDir)) {
       }),
       inject: [ConfigService],
     }),
+    BullQueueModule,
     UserModule,
     RoleModule,
     GoogleAuthModule,
+    FacebookAuthModule,
     AuthModule,
     UploadModule,
     VendorModule,
@@ -128,7 +132,7 @@ if (!fs.existsSync(templateDir)) {
     LocationModule,
     CommentModule,
     TeamMemberModule,
-    SubscriptionPlanModule,
+    SubscriptionModule,
     VoucherModule,
     PointModule,
     BookingModule,

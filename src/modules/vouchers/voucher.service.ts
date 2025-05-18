@@ -7,7 +7,8 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { FindVoucherDto } from './dto/find-voucher.dto';
 import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
-import { VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { UpdateVoucherDto } from './dto/update-voucher.dto';
 
 @Injectable()
 export class VoucherService {
@@ -16,7 +17,7 @@ export class VoucherService {
     private readonly voucherRepository: Repository<Voucher>,
     @InjectRepository(VoucherUser)
     private readonly voucherUserRepository: Repository<VoucherUser>,
-  ) {}
+  ) { }
 
   //#region Voucher Operations
   async createVoucher(createVoucherDto: CreateVoucherDto): Promise<Voucher> {
@@ -41,7 +42,7 @@ export class VoucherService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(voucher.code ILIKE :term OR voucher.discount_type ILIKE :term OR voucher.status ILIKE :term)',
+        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -74,31 +75,45 @@ export class VoucherService {
     }
     return voucher;
   }
+
+  async updateVoucher(id: string, updateVoucherDto: Partial<UpdateVoucherDto>): Promise<Voucher> {
+    await this.voucherRepository.update(id, updateVoucherDto);
+    return this.findOneVoucher(id);
+  }
+
+  async deleteVoucher(id: string): Promise<void> {
+    const result = await this.voucherRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(`Mã giảm giá với ID ${id} không tồn tại`);
+    }
+  }
   //#endregion Voucher Operations
 
   //#region VoucherUser Operations
-  async createVoucherUser(createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
-    const voucher = await this.voucherRepository.findOne({ where: { id: createVoucherUserDto.voucher_id } });
+  async createVoucherUser(userId: string, voucherId: string,createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
-      throw new NotFoundException(`Voucher with ID ${createVoucherUserDto.voucher_id} not found`);
+      throw new NotFoundException(`Mã giảm giá với ID ${voucherId} không tồn tại`);
     }
 
     const currentDate = new Date();
-    if (voucher.status !== 'active' || currentDate < new Date(voucher.start_date) || currentDate > new Date(voucher.end_date)) {
-      throw new BadRequestException('Voucher is not valid or has expired');
+    if (voucher.status !== VoucherStatusEnum.ACTIVE || currentDate < new Date(voucher.start_date) || currentDate > new Date(voucher.end_date)) {
+      throw new BadRequestException('Mã giảm giá không hợp lệ hoặc đã hết hạn');
     }
 
     const existingVoucherUser = await this.voucherUserRepository.findOne({
-      where: { user_id: createVoucherUserDto.user_id, voucher_id: createVoucherUserDto.voucher_id },
+      where: { user_id: userId, voucher_id: voucherId},
     });
     if (existingVoucherUser) {
-      throw new BadRequestException('User already has this voucher');
+      throw new BadRequestException('Người dùng đã có mã giảm giá này');
     }
 
     const voucherUser = this.voucherUserRepository.create({
-      user_id: createVoucherUserDto.user_id,
-      voucher_id: createVoucherUserDto.voucher_id,
-      status: createVoucherUserDto.status || 'available',
+      user_id: userId,
+      voucher_id: voucherId,
+      status: VoucherUserStatusEnum.AVAILABLE,
+      assigned_at: createVoucherUserDto.assigned_at || currentDate,
+      used_at: null,
     });
     return this.voucherUserRepository.save(voucherUser);
   }
@@ -165,16 +180,15 @@ export class VoucherService {
       relations: ['user', 'voucher'],
     });
     if (!voucherUser) {
-      throw new NotFoundException(`VoucherUser with voucher_id ${voucherId} and user_id ${userId} not found`);
+      throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
     }
 
     const currentDate = new Date();
     const voucher = voucherUser.voucher;
     if (
-      voucher.status === 'active' &&
       currentDate >= new Date(voucher.start_date) &&
       currentDate <= new Date(voucher.end_date) &&
-      voucherUser.status === VoucherUserStatusEnum.ACTIVE
+      voucherUser.status === VoucherUserStatusEnum.AVAILABLE
     ) {
       voucherUser['is_valid'] = true;
     } else {
@@ -188,16 +202,23 @@ export class VoucherService {
     const voucherUser = await this.findOneVoucherUser(voucherId, userId);
 
     if (voucherUser.status === VoucherUserStatusEnum.USED) {
-      throw new BadRequestException('Voucher has already been used');
+      throw new BadRequestException('Mã giảm giá đã được sử dụng');
     }
 
     if (!voucherUser['is_valid']) {
-      throw new BadRequestException('Voucher is not valid or has expired');
+      throw new BadRequestException('Mã giảm giá không hợp lệ hoặc đã hết hạn');
     }
 
     voucherUser.status = VoucherUserStatusEnum.USED;
     voucherUser.used_at = new Date();
     return this.voucherUserRepository.save(voucherUser);
+  }
+
+  async deleteVoucherUser(voucherId: string, userId: string): Promise<void> {
+    const result = await this.voucherUserRepository.delete({ voucher_id: voucherId, user_id: userId });
+    if (result.affected === 0) {
+      throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
+    }
   }
   //#endregion VoucherUser Operations
 }

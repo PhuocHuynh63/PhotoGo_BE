@@ -4,11 +4,11 @@ import { IsUUID, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 export class CreateRefundDto {
   @IsNumber()
   @IsNotEmpty()
-  @ApiProperty({ description: 'The ID of the invoice to be refunded', example: 123 })
+  @ApiProperty({ description: 'ID của hóa đơn cần được hoàn trả', example: 123 })
   amount?: number;
 
   @IsString()
   @IsNotEmpty()
-  @ApiProperty({ description: 'The reason for the refund', example: 'Product defect' })
+  @ApiProperty({ description: 'Lý do hoàn trả', example: 'Sản phẩm lỗi' })
   reason?: string;
 }

@@ -29,7 +29,7 @@ export class WalletService {
     const wallet = await this.walletRepository.findOne({ where: { id: createWalletTransactionDto.walletId } });
 
     if (!wallet) {
-      throw new NotFoundException(`Wallet with ID ${createWalletTransactionDto.walletId} not found`);
+      throw new NotFoundException(`Ví với ID ${createWalletTransactionDto.walletId} không tồn tại`);
     }
 
     const transaction = this.walletTransactionRepository.create(createWalletTransactionDto);
@@ -51,7 +51,7 @@ export class WalletService {
     });
 
     if (!wallet) {
-      throw new NotFoundException(`Wallet with ID ${id} not found`);
+      throw new NotFoundException(`Ví với ID ${id} không tồn tại`);
     }
 
     return wallet;
@@ -61,9 +61,30 @@ export class WalletService {
         const wallet = await this.walletRepository.findOne({ where: { id: walletId }, relations: ['transactions'] });
 
         if (!wallet) {
-            throw new NotFoundException(`Wallet with ID ${walletId} not found`);
+            throw new NotFoundException(`Ví với ID ${walletId} không tồn tại`);
         }
 
         return wallet.transactions;
     }
+
+  async update(id: string, updateWalletDto: Partial<CreateWalletDto>): Promise<Wallet> {
+    const wallet = await this.walletRepository.findOne({ where: { id } });
+
+    if (!wallet) {
+      throw new NotFoundException(`Ví với ID ${id} không tồn tại`);
+    }
+
+    Object.assign(wallet, updateWalletDto);
+    return await this.walletRepository.save(wallet);
+  }
+
+  async remove(id: string): Promise<void> {
+    const wallet = await this.walletRepository.findOne({ where: { id } });
+
+    if (!wallet) {
+      throw new NotFoundException(`Ví với ID ${id} không tồn tại`);
+    }
+
+    await this.walletRepository.remove(wallet);
+  }
 }

@@ -13,9 +13,9 @@ export class TeamMemberController {
   constructor(private readonly teamMemberService: TeamMemberService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new team member (Protected)' })
-  @ApiResponse({ status: 201, description: 'Team Member created successfully', type: TeamMember })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Tạo thành viên nhóm mới (Protected)' })
+  @ApiResponse({ status: 201, description: 'Thành viên nhóm đã được tạo thành công', type: TeamMember })
+  @ApiResponse({ status: 401, description: 'Không được phép' })
   @ResponseMessage('Tạo thành viên nhóm thành công')
   async create(@Body() createTeamMemberDto: CreateTeamMemberDto): Promise<TeamMember> {
     return this.teamMemberService.create(createTeamMemberDto);
@@ -23,10 +23,10 @@ export class TeamMemberController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all team members (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả thành viên nhóm (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'List of team members with pagination',
+    description: 'Danh sách thành viên nhóm với phân trang',
     type: [TeamMember],
   })
   @ResponseMessage('Lấy danh sách thành viên nhóm thành công')
@@ -44,9 +44,9 @@ export class TeamMemberController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get a team member by ID (Public)' })
-  @ApiResponse({ status: 200, description: 'Team Member found', type: TeamMember })
-  @ApiResponse({ status: 404, description: 'Team Member not found' })
+  @ApiOperation({ summary: 'Lấy thành viên nhóm theo ID (Public)' })
+  @ApiResponse({ status: 200, description: 'Thành viên nhóm đã được tìm thấy', type: TeamMember })
+  @ApiResponse({ status: 404, description: 'Thành viên nhóm không tồn tại' })
   async findOne(@Param('id') id: string): Promise<TeamMember> {
     return this.teamMemberService.findOne(id);
   }

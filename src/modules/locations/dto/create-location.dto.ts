@@ -1,12 +1,26 @@
-import { IsString, IsNotEmpty, Length, IsNumber, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateLocationDto {
+  @IsUUID()
+  @IsNotEmpty()
+  @ApiProperty({
+    example: '97004449-52d9-4a49-b071-ce5786f7645e',
+    description: 'ID của vendor',
+    required: true,
+    name: 'vendor_id',
+    title: 'Vendor Information'
+  })
+  vendor_id: string;
+
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
     example: '321 Phạm Văn Đồng',
-    description: 'Address of the location',
+    description: 'Địa chỉ của vị trí',
+    required: true,
+    name: 'address',
+    title: 'Address Information'
   })
   address: string;
 
@@ -14,7 +28,10 @@ export class CreateLocationDto {
   @IsNotEmpty()
   @ApiProperty({
     example: 'Thủ Đức',
-    description: 'District of the location',
+    description: 'Quận của vị trí',
+    required: true,
+    name: 'district',
+    title: 'Address Information'
   })
   district: string;
 
@@ -22,7 +39,10 @@ export class CreateLocationDto {
   @IsNotEmpty()
   @ApiProperty({
     example: 'Linh Tây',
-    description: 'Ward of the location',
+    description: 'Phường của vị trí',
+    required: true,
+    name: 'ward',
+    title: 'Address Information'
   })
   ward: string;
 
@@ -31,7 +51,10 @@ export class CreateLocationDto {
   @Length(1, 50)
   @ApiProperty({
     example: 'Hồ Chí Minh',
-    description: 'City of the location',
+    description: 'Thành phố của vị trí',
+    required: true,
+    name: 'city',
+    title: 'Address Information'
   })
   city: string;
 
@@ -40,7 +63,10 @@ export class CreateLocationDto {
   @Length(1, 50)
   @ApiProperty({
     example: 'Hồ Chí Minh',
-    description: 'Province of the location',
+    description: 'Tỉnh của vị trí',
+    required: true,
+    name: 'province',
+    title: 'Address Information'
   })
   province: string;
 
@@ -48,8 +74,10 @@ export class CreateLocationDto {
   @IsOptional()
   @ApiProperty({
     example: 10.849100,
-    description: 'Latitude of the location',
+    description: 'Vĩ độ của vị trí',
     required: false,
+    name: 'latitude',
+    title: 'Coordinates'
   })
   latitude?: number;
 
@@ -57,9 +85,10 @@ export class CreateLocationDto {
   @IsOptional()
   @ApiProperty({
     example: 106.772400,
-    description: 'Longitude of the location',
+    description: 'Kinh độ của vị trí',
     required: false,
+    name: 'longitude',
+    title: 'Coordinates'
   })
   longitude?: number;
-
 }

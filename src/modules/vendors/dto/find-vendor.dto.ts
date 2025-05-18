@@ -7,7 +7,7 @@ export class FindVendorDto {
   @IsOptional()
   @ApiProperty({
     example: '1',
-    description: 'Page number for pagination',
+    description: 'Trang hiện tại cho phân trang',
     required: false,
   })
   current?: string;
@@ -16,7 +16,7 @@ export class FindVendorDto {
   @IsOptional()
   @ApiProperty({
     example: '10',
-    description: 'Number of items per page for pagination',
+    description: 'Số lượng mục trên mỗi trang cho phân trang',
     required: false,
   })
   pageSize?: string;
@@ -25,7 +25,7 @@ export class FindVendorDto {
   @IsOptional()
   @ApiProperty({
     example: 'Studio Ánh Sáng',
-    description: 'Search term for filtering vendors',
+    description: 'Từ tìm kiếm để lọc nhà cung cấp',
     required: false,
   })
   term?: string;
@@ -34,7 +34,7 @@ export class FindVendorDto {
   @IsOptional()
   @ApiProperty({
     enum: VendorStatus,
-    description: 'Status of the vendor',
+    description: 'Trạng thái của nhà cung cấp',
     example: VendorStatus.ACTIVE,
     required: false,
   })
@@ -44,7 +44,7 @@ export class FindVendorDto {
   @IsOptional()
   @ApiProperty({
     example: 'created_at',
-    description: 'Field to sort by',
+    description: 'Trường để sắp xếp',
     required: false,
   })
   sortBy?: string;
@@ -53,7 +53,7 @@ export class FindVendorDto {
   @IsOptional()
   @ApiProperty({
     example: 'asc',
-    description: 'Sort direction (asc or desc)',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
@@ -64,7 +64,7 @@ export class VendorManagerFilterDto {
   @IsOptional()
   @ApiProperty({
     example: 'uuid-of-manager',
-    description: 'Filter vendors by manager user ID',
+    description: 'Lọc nhà cung cấp theo ID người quản lý',
     required: false,
   })
   managerUserId?: string;
@@ -75,7 +75,7 @@ export class VendorLikeFilterDto {
   @IsOptional()
   @ApiProperty({
     example: 'uuid-of-user',
-    description: 'Filter vendors liked by a specific user',
+    description: 'Lọc nhà cung cấp được thích bởi một người dùng cụ thể',
     required: false,
   })
   likedByUserId?: string;
@@ -86,7 +86,7 @@ export class VendorAvailabilityFilterDto {
   @IsOptional()
   @ApiProperty({
     example: '2025-04-17',
-    description: 'Filter vendors available on a specific date',
+    description: 'Lọc nhà cung cấp có sẵn trong ngày cụ thể',
     required: false,
   })
   availableDate?: Date;
@@ -95,7 +95,7 @@ export class VendorAvailabilityFilterDto {
   @IsOptional()
   @ApiProperty({
     example: '09:00',
-    description: 'Filter vendors available starting from this time',
+    description: 'Lọc nhà cung cấp có sẵn bắt đầu từ thời gian cụ thể',
     required: false,
   })
   availableStartTime?: string;
@@ -104,7 +104,7 @@ export class VendorAvailabilityFilterDto {
   @IsOptional()
   @ApiProperty({
     example: '18:00',
-    description: 'Filter vendors available until this time',
+    description: 'Lọc nhà cung cấp có sẵn cho đến thời gian cụ thể',
     required: false,
   })
   availableEndTime?: string;

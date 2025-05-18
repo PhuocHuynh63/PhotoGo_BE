@@ -21,47 +21,47 @@ export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new review' })
-  @ApiResponse({ status: 201, description: 'Review created successfully', type: Review })
+  @ApiOperation({ summary: 'Tạo đánh giá mới' })
+  @ApiResponse({ status: 201, description: 'Đánh giá đã được tạo thành công', type: Review })
   async create(@Body() createReviewDto: CreateReviewDto): Promise<Review> {
     return this.reviewService.create(createReviewDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all reviews' })
-  @ApiResponse({ status: 200, description: 'List of all reviews', type: [Review] })
+  @ApiOperation({ summary: 'Lấy tất cả đánh giá' })
+  @ApiResponse({ status: 200, description: 'Danh sách tất cả đánh giá', type: [Review] })
   async findAll(): Promise<ReviewSummary[]> {
     return this.reviewService.findAll();
   }
 
   @Get('vendor/:vendorId')
-  @ApiOperation({ summary: 'Get reviews by vendor ID' })
-  @ApiResponse({ status: 200, description: 'List of reviews for the given vendor ID', type: [Review] })
-  @ApiResponse({ status: 404, description: 'No reviews found for the given vendor ID' })
+  @ApiOperation({ summary: 'Lấy đánh giá theo ID nhà cung cấp' })
+  @ApiResponse({ status: 200, description: 'Danh sách đánh giá cho ID nhà cung cấp đã cho', type: [Review] })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá cho ID nhà cung cấp đã cho' })
   async findByVendorId(@Param('vendorId') vendorId: string): Promise<Review[]> {
     return this.reviewService.findByVendorId(vendorId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a review by ID' })
-  @ApiResponse({ status: 200, description: 'Review found', type: Review })
-  @ApiResponse({ status: 404, description: 'Review not found' })
+  @ApiOperation({ summary: 'Lấy đánh giá theo ID' })
+  @ApiResponse({ status: 200, description: 'Đánh giá đã được tìm thấy', type: Review })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
   async findOne(@Param('id') id: string): Promise<Review> {
     return this.reviewService.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a review by ID' })
-  @ApiResponse({ status: 200, description: 'Review updated successfully', type: Review })
-  @ApiResponse({ status: 404, description: 'Review not found' })
+  @ApiOperation({ summary: 'Cập nhật đánh giá theo ID' })
+  @ApiResponse({ status: 200, description: 'Đánh giá đã được cập nhật thành công', type: Review })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
   async update(@Param('id') id: string, @Body() updateReviewDto: UpdateReviewDto): Promise<Review> {
     return this.reviewService.update(id, updateReviewDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a review by ID' })
-  @ApiResponse({ status: 200, description: 'Review deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Review not found' })
+  @ApiOperation({ summary: 'Xóa đánh giá theo ID' })
+  @ApiResponse({ status: 200, description: 'Đánh giá đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
   async remove(@Param('id') id: string): Promise<void> {
     return this.reviewService.remove(id);
   }

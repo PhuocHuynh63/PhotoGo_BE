@@ -1,48 +1,27 @@
 import { IsEnum, IsDateString, IsString, IsUUID, IsOptional } from 'class-validator';
-import { BookingSourceType, BookingDepositType } from '../../../constants/booking.enum';
+import { BookingSourceType, BookingDepositType, BookingStatus } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBookingDto {
-  
-  @IsUUID()
-  @ApiProperty({
-    description: 'User ID of the person making the booking',
-    example: '123e4567-e89b-12d3-a456-426614174000'
-  })
-  userId: string;
-
-  @IsUUID()
-  @ApiProperty({
-    description: 'Vendor ID of the service provider',
-    example: '123e4567-e89b-12d3-a456-426614174001'
-  })
-  vendorId: string;
-
-  @IsUUID()
-  @ApiProperty({
-    description: 'Service ID of the booked service',
-    example: '123e4567-e89b-12d3-a456-426614174002'
-  })
-  servicePackageId: string;
-
   @IsDateString()
   @ApiProperty({
-    description: 'Date of the booking',
+    description: 'Ngày booking',
     example: '2023-10-01'
   })
   date: string;
 
   @IsString()
   @ApiProperty({
-    description: 'Time of the booking',
+    description: 'Giờ booking',
     example: '14:00'
   })
   time: string;
 
   @IsEnum(BookingSourceType)
   @ApiProperty({
-    description: 'Source type of the booking',
     enum: BookingSourceType,
+    description: 'Nguồn booking (trực tiếp, chiến dịch, giới thiệu, nổi bật, khuyến mãi, khác)',
+    enumName: 'BookingSourceType',
     example: BookingSourceType.CAMPAIGN
   })
   sourceType: BookingSourceType;
@@ -50,7 +29,7 @@ export class CreateBookingDto {
   @IsUUID()
   @IsOptional()
   @ApiProperty({
-    description: 'Campaign ID if the booking is from a campaign',
+    description: 'ID chiến dịch nếu booking từ chiến dịch',
     example: '123e4567-e89b-12d3-a456-426614174003',
     required: false
   })
@@ -59,8 +38,9 @@ export class CreateBookingDto {
   @IsEnum(BookingDepositType)
   @IsOptional()
   @ApiProperty({
-    description: 'Deposit type for the booking',
+    description: 'loại tiền đặt cọc (phần trăm)',
     enum: BookingDepositType,
+    enumName: 'BookingDepositType',
     example: BookingDepositType.PERCENTAGE,
     required: false
   })
@@ -69,9 +49,20 @@ export class CreateBookingDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Deposit amount for the booking',
+    description: 'Số tiền đặt cọc cho booking',
     example: '100.00',
     required: false
   })
   userNote?: string;
+
+  @IsEnum(BookingStatus)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trạng thái booking (chờ xử lý, đã xác nhận, đã hủy, đã hoàn thành)',
+    enum: BookingStatus,
+    enumName: 'BookingStatus',
+    example: BookingStatus.PENDING,
+    required: false
+  })
+  status?: BookingStatus;
 }

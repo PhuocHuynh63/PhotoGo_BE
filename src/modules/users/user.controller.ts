@@ -11,6 +11,7 @@ import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 @Controller('users')
 @ApiBearerAuth('access-token')
 export class UserController {
@@ -18,12 +19,12 @@ export class UserController {
 
   @Public()
   @Get('export')
-  @ApiOperation({ summary: 'Export users to Excel (Public)' })
+  @ApiOperation({ summary: 'Xuất danh sách người dùng sang file Excel (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'Export users to Excel file',
+    description: 'Xuất danh sách người dùng sang file Excel',
   })
-  async exportUsers(@Query() query: FindUserDto, @Res() res: Response) {
+  async exportUsers(@Query() query: FindAllUserDto, @Res() res: Response) {
     // Lấy danh sách người dùng từ service
     const users = await this.userService.exportUsers(query);
 
@@ -98,7 +99,7 @@ export class UserController {
   @Public()
   @Get()
   @ResponseMessage('Lấy danh sách người dùng thành công')
-  async findAll(@Query() query: FindUserDto): Promise<{
+  async findAll(@Query() query: FindAllUserDto): Promise<{
     data: User[];
     pagination: {
       current: number;

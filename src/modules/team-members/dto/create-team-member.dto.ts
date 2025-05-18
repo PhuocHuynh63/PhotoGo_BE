@@ -5,7 +5,7 @@ export class CreateTeamMemberDto {
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
-    description: 'ID of the vendor',
+    description: 'ID của nhà cung cấp',
     example: 'V001',
   })
   vendor_id: string;
@@ -14,7 +14,7 @@ export class CreateTeamMemberDto {
   @IsNotEmpty()
   @Length(1, 100)
   @ApiProperty({
-    description: 'Full name of the team member',
+    description: 'Tên đầy đủ của thành viên đội',
     example: 'Nguyễn Văn A',
   })
   full_name: string;
@@ -23,7 +23,7 @@ export class CreateTeamMemberDto {
   @IsNotEmpty()
   @Length(1, 50)
   @ApiProperty({
-    description: 'Role of the team member',
+    description: 'Vai trò của thành viên đội',
     example: 'Nhiếp ảnh gia',
   })
   role: string;
@@ -32,7 +32,7 @@ export class CreateTeamMemberDto {
   @Length(1, 20)
   @IsNotEmpty()
   @ApiProperty({
-    description: 'Phone number of the team member',
+    description: 'Số điện thoại của thành viên đội',
     example: '0123456789',
   })
   phone_number?: string;

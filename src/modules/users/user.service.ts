@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ConsoleLogger, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { RoleService } from '../roles/role.service';
@@ -10,50 +10,102 @@ import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { FindUserDto } from './dto/admin/find-user.dto';
-import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
-import { Cron } from '@nestjs/schedule';
-import { log } from 'console';
-import { logger } from 'handlebars';
 import { UserStatus } from 'src/constants/user.enum';
-
+import { Cron } from '@nestjs/schedule';
+import { BullQueueService } from 'src/3rdService/bull/bull-queue.service';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
   constructor(
-    @InjectRepository(User) private readonly userRepository: Repository<User>, // Inject UserRepository
-    private readonly roleService: RoleService, // Inject RoleService
-    private readonly uploadService: UploadService, // Inject UploadService
-    private readonly MailService: MailService, // Inject MailService
+    @InjectRepository(User) private readonly userRepository: Repository<User>,
+    private readonly roleService: RoleService,
+    private readonly uploadService: UploadService,
+    private readonly MailService: MailService,
+    private readonly bullQueueService: BullQueueService,
+    @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
   ) { }
 
-  //#region create 
-  async create(createAuthDto: CreateAuthDto): Promise<User> {
-    const { passwordHash, ...userData } = createAuthDto;
+  // #region create 
+  // async create(createAuthDto: CreateAuthDto): Promise<User> {
+  //   const { passwordHash, ...userData } = createAuthDto;
 
-    // Enforce the strong password regex for local registration
-    let hashedPassword = '';
-    if (createAuthDto.auth === 'local') {
-      hashedPassword = await hashPasswordHelper(passwordHash);
-    }
+  //   // Enforce the strong password regex for local registration
+  //   let hashedPassword = '';
+  //   if (createAuthDto.auth === 'local') {
+  //     hashedPassword = await hashPasswordHelper(passwordHash);
+  //   }
 
-    let role = null;
-    if (!createAuthDto.roleId) {
-      role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
-    } else {
-      role = await this.roleService.findOne(createAuthDto.roleId);
-    } // Tìm role theo roleId
+  //   let role = null;
+  //   if (!createAuthDto.roleId) {
+  //     role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
+  //   } else {
+  //     role = await this.roleService.findOne(createAuthDto.roleId);
+  //   } // Tìm role theo roleId
 
 
-    const user = this.userRepository.create({
-      passwordHash: hashedPassword,
-      ...userData,
-      role, // Gán role vào user
-    });
+  //   const user = this.userRepository.create({
+  //     passwordHash: hashedPassword,
+  //     ...userData,
+  //     role, // Gán role vào user
+  //   });
 
-    return this.userRepository.save(user);
-  }
+  //   return this.userRepository.save(user);
+  // }
   //#endregion create
+
+  async create(createAuthDto: CreateAuthDto): Promise<User> {
+    try {
+      const { passwordHash, ...userData } = createAuthDto;
+
+      // Xử lý mật khẩu
+      let hashedPassword = '';
+      if (createAuthDto.auth === 'local') {
+        hashedPassword = await hashPasswordHelper(passwordHash);
+      }
+
+      // Xử lý vai trò
+      let role = null;
+      if (!createAuthDto.roleId) {
+        role = await this.roleService.getDefaultRole();
+      } else {
+        role = await this.roleService.findOne(createAuthDto.roleId);
+      }
+
+      // Tạo người dùng với trạng thái INACTIVE
+      const user = this.userRepository.create({
+        passwordHash: hashedPassword,
+        ...userData,
+        role,
+      });
+
+      // Lưu người dùng
+      const savedUser = await this.userRepository.save(user);
+
+      // Thêm tác vụ xóa vào hàng đợi
+      const jobAdded = await this.bullQueueService.addJob(this.deletionQueue, 'delete-inactive-user', { userId: savedUser.id }, {
+        delay: 5 * 60 * 1000,
+        attempts: 3,
+        backoff: { type: 'fixed', delay: 1000 },
+        removeOnComplete: true,
+        removeOnFail: true,
+      });
+
+      if (jobAdded) {
+        this.logger.log(`Đã tạo người dùng ID ${savedUser.id} và lập lịch xóa sau 5 phút`);
+      } else {
+        this.logger.warn(`Đã tạo người dùng ID ${savedUser.id} nhưng không thể lập lịch xóa do lỗi Redis`);
+      }
+
+      return savedUser;
+    } catch (error) {
+      this.logger.error(`Lỗi khi tạo người dùng: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
 
   //#region uploadImage
   async uploadImage(id: string, file: Express.Multer.File): Promise<User> {
@@ -75,17 +127,17 @@ export class UserService {
     }
 
     // Nếu có trường passwordHash, kiểm tra mật khẩu cũ trước khi cập nhật
-    if (updateUserDto.passwordHash && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
+    if (updateUserDto.password && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
       const isMatch = await bcrypt.compare(updateUserDto.oldPasswordHash, user.passwordHash);
       if (!isMatch) {
         throw new BadRequestException('Mật khẩu cũ không đúng');
       }
-      if (updateUserDto.passwordHash !== updateUserDto.confirmPassword) {
+      if (updateUserDto.password !== updateUserDto.confirmPassword) {
         throw new BadRequestException('Mật khẩu xác nhận không khớp');
       }
       updateUserDto.oldPasswordHash = user.passwordHash; // Lưu mật khẩu cũ để so sánh
       // Mã hóa mật khẩu mới
-      updateUserDto.passwordHash = await hashPasswordHelper(updateUserDto.passwordHash);
+      updateUserDto.password = await hashPasswordHelper(updateUserDto.password);
     }
 
     // Cập nhật thông tin user
@@ -213,7 +265,7 @@ export class UserService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(user.fullName ILIKE :term OR user.email ILIKE :term OR user.phoneNumber ILIKE :term)',
+        `(unaccent(user.fullName) ILIKE unaccent(:term) OR unaccent(user.email) ILIKE unaccent(:term) OR unaccent(user.phoneNumber) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -423,5 +475,29 @@ export class UserService {
   }
   //#endregion checkLastLoginForAllUsers
 
+  //#region processDeletionQueue
+  /**
+   * Xử lý tác vụ xóa người dùng chưa kích hoạt
+   * @param job Tác vụ từ hàng đợi
+   */
+  // Xử lý tác vụ xóa từ hàng đợi
+  async processDeletionQueue(job: { data: { userId: string } }): Promise<void> {
+    try {
+      const { userId } = job.data;
+      const result = await this.userRepository.delete({
+        id: userId,
+        status: UserStatus.INACTIVE,
+      });
+
+      if (result.affected) {
+        this.logger.log(`Đã xóa người dùng chưa kích hoạt ID ${userId}`);
+      } else {
+        this.logger.warn(`Không tìm thấy người dùng ID ${userId} hoặc đã kích hoạt`);
+      }
+    } catch (error) {
+      this.logger.error(`Lỗi khi xóa người dùng ID ${job.data.userId}: ${error.message}`, error.stack);
+    }
+  }
+  //#endregion processDeletionQueue
 
 }

@@ -7,7 +7,7 @@ export class UpdateUserForAdminDto {
   @IsEmail()
   @ApiProperty({
     example: 'user@example.com',
-    description: 'User email address',
+    description: 'Địa chỉ email của người dùng',
   })
   email?: string;
 
@@ -16,7 +16,7 @@ export class UpdateUserForAdminDto {
   @Length(6, 50)
   @ApiProperty({
     example: 'newpassword123',
-    description: 'New password for the user (plain text)',
+    description: 'Mật khẩu mới cho người dùng (văn bản thuần)',
     minLength: 6,
     maxLength: 50,
   })
@@ -26,7 +26,7 @@ export class UpdateUserForAdminDto {
   @IsString()
   @ApiProperty({
     example: 'John Doe',
-    description: 'Full name of the user',
+    description: 'Tên đầy đủ của người dùng',
   })
   fullName?: string;
 
@@ -34,7 +34,7 @@ export class UpdateUserForAdminDto {
   @IsString()
   @ApiProperty({
     example: '0986056438',
-    description: 'User phone number',
+    description: 'Số điện thoại của người dùng',
   })
   phoneNumber?: string;
 
@@ -42,7 +42,7 @@ export class UpdateUserForAdminDto {
   @IsString()
   @ApiProperty({
     example: 'https://example.com/avatar.jpg',
-    description: 'URL of the user avatar',
+    description: 'URL của hình ảnh người dùng',
   })
   avatarUrl?: string;
 
@@ -60,7 +60,7 @@ export class UpdateUserForAdminDto {
   @IsString()
   @ApiProperty({
     example: UserRank.UNRANK,
-    description: 'Rank of the user (e.g., Unrank, Bronze, Silver)',
+    description: 'Vai trò của người dùng (ví dụ: Unrank, Bronze, Silver)',
   })
   rank?: string;
 
@@ -68,7 +68,7 @@ export class UpdateUserForAdminDto {
   @IsString()
   @ApiProperty({
     example: 'local',
-    description: 'Authentication method (e.g., local, google, facebook)',
+    description: 'Phương thức xác thực (ví dụ: local, google, facebook)',
   })
   auth?: string;
 
@@ -76,7 +76,7 @@ export class UpdateUserForAdminDto {
   @IsString()
   @ApiProperty({
     example: '2',
-    description: 'Role ID of the user',
+    description: 'ID vai trò của người dùng',
   })
   roleId?: string;
 }

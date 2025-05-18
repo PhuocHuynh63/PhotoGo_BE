@@ -10,7 +10,7 @@ export class NotificationService {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-  ) {}
+  ) { }
 
   //#region create
   async create(createNotificationDto: CreateNotificationDto): Promise<Notification> {
@@ -43,7 +43,7 @@ export class NotificationService {
 
     if (query.term) {
       queryBuilder.andWhere(
-        '(notification.title ILIKE :term OR notification.message ILIKE :term)',
+        `(unaccent(notification.title) ILIKE unaccent(:term) OR unaccent(notification.message) ILIKE unaccent(:term))`,
         { term: `%${query.term}%` },
       );
     }
@@ -96,4 +96,18 @@ export class NotificationService {
     return notification;
   }
   //#endregion findOne
+
+  //#region update
+  async update(id: string, updateNotificationDto: Partial<CreateNotificationDto>): Promise<Notification> {
+    await this.notificationRepository.update(id, updateNotificationDto);
+    return this.findOne(id);
+  }
+  //#endregion update
+
+  //#region remove
+  async remove(id: string): Promise<void> {
+    const notification = await this.findOne(id);
+    await this.notificationRepository.remove(notification);
+  }
+  //#endregion remove
 }

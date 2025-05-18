@@ -6,10 +6,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { Vendor } from '../../vendors/entities/vendor.entity';
 
 import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { ServiceConcept } from './service-concept.entity';
 
 @Entity('service_package')
 export class ServicePackage {
@@ -29,14 +31,8 @@ export class ServicePackage {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'image_url' })
-  image: string; // URL hoặc đường dẫn đến hình ảnh của gói dịch vụ
-
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.0, nullable: false })
-  price: number;
-
-  @Column({ type: 'int', nullable: false })
-  duration: number; // Duration in minutes
+  @Column({type: 'varchar', length: 100, nullable: true, name: 'image_url'})
+  image?: string;
 
   @Column({
     type: 'enum',
@@ -50,4 +46,8 @@ export class ServicePackage {
 
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
+
+  @OneToMany(() => ServiceConcept, (serviceConcept) => serviceConcept.servicePackage)
+  serviceConcepts: ServiceConcept[];
+
 }

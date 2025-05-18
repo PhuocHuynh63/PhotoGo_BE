@@ -3,7 +3,8 @@ import { Category } from '../../categories/entities/category.entity';
 import { Location } from '../../locations/entities/location.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { ServicePackage } from '../../service-package/entities/service-package.entity';
-
+import { VendorAvailability } from './vendor-availability.entity';
+import { Review } from '../../reviews/entities/review.entity';
 @Entity('vendors')
 export class Vendor {
   @PrimaryGeneratedColumn('uuid')
@@ -21,6 +22,12 @@ export class Vendor {
 
   @Column({ type: 'text', nullable: true })
   description: string;
+  
+  @Column({type: 'varchar', length: 100, nullable: true})
+  logo?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  banner?: string;
 
   @Column({ type: 'enum', enum: VendorStatus, default: VendorStatus.ACTIVE })
   status: VendorStatus;
@@ -31,9 +38,16 @@ export class Vendor {
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'NOW()', onUpdate: 'NOW()' })
   updated_at: Date;
 
-  @OneToMany(() => Location, (location) => location.vendor)
+  @OneToMany(() => Location, (location) => location.vendor, { cascade: true })
   locations: Location[];
 
-  @OneToMany(() => ServicePackage, (servicePackage) => servicePackage.vendor)
+  @OneToMany(() => ServicePackage, (servicePackage) => servicePackage.vendor, { cascade: true })
   servicePackages: ServicePackage[];
+
+  @OneToMany(() => VendorAvailability, (availability) => availability.vendor, { cascade: true })
+  availabilities: VendorAvailability[];
+
+  @OneToMany(() => Review, (review) => review.vendor, { cascade: true } )
+  reviews: Review[];
+
 }
