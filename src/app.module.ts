@@ -24,6 +24,7 @@ import { CommentModule } from './modules/comments/comment.module';
 import { RefundModule } from './modules/refunds/refund.module';
 import { BookingModule } from './modules/bookings/booking.module';
 import { CartModule } from './modules/carts/cart.module';
+import { ChatModule } from './modules/chats/chat.module';
 import { PaymentModule } from './modules/payments/payment.module';
 import { PayosModule } from './3rdService/payos/payos.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
@@ -126,6 +127,7 @@ if (!fs.existsSync(templateDir)) {
     UploadModule,
     VendorModule,
     CategoryModule,
+    ChatModule,
     NotificationModule,
     LocationModule,
     CommentModule,
