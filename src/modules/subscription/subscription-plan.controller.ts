@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from 'src/decorator/custom';
 import { SubscriptionPlanService } from './subscription-plan.service';
 import { CreateSubscriptionPlanDto, UpdateSubscriptionPlanDto, FindSubscriptionPlanDto } from './dto/subscription-plan.dto';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
@@ -19,6 +20,7 @@ export class SubscriptionPlanController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách gói đăng ký' })
   @ApiResponse({ status: 200, description: 'Danh sách gói đăng ký đã được lấy thành công', type: [SubscriptionPlan] })
   async findAll(@Query() findSubscriptionPlanDto: FindSubscriptionPlanDto): Promise<SubscriptionPlan[]> {
@@ -26,6 +28,7 @@ export class SubscriptionPlanController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy thông tin gói đăng ký theo ID' })
   @ApiResponse({ status: 200, description: 'Gói đăng ký đã được tìm thấy', type: SubscriptionPlan })
   @ApiResponse({ status: 404, description: 'Không tìm thấy gói đăng ký' })

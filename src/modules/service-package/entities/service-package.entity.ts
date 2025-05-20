@@ -25,13 +25,13 @@ export class ServicePackage {
   @Column({ type: 'uuid', name: 'vendor_id', nullable: false }) // Đảm bảo ánh xạ đúng với vendor_id
   vendorId: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: false })
+  @Column({ type: 'text', nullable: false })
   name: string;
 
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({type: 'varchar', length: 100, nullable: true, name: 'image_url'})
+  @Column({type: 'varchar', length: 500, nullable: true, name: 'image_url'})
   image?: string;
 
   @Column({

@@ -5,6 +5,7 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { FindSubscriptionDto } from './dto/find-subscription.dto';
 import { Subscription } from './entities/subscription.entity';
+import { Public } from 'src/decorator/custom';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -21,6 +22,7 @@ export class SubscriptionController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách gói đăng ký' })
   @ApiResponse({ status: 200, description: 'Danh sách gói đăng ký đã được lấy thành công', type: [Subscription] })
   async findAll(@Query() findSubscriptionDto: FindSubscriptionDto): Promise<{
@@ -36,6 +38,7 @@ export class SubscriptionController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy thông tin gói đăng ký theo ID' })
   @ApiResponse({ status: 200, description: 'Gói đăng ký đã được tìm thấy', type: Subscription })
   @ApiResponse({ status: 404, description: 'Không tìm thấy gói đăng ký' })

@@ -1,13 +1,15 @@
-import { IsUUID, IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsUUID, IsDateString, IsEnum, IsOptional, IsEmpty, IsString, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { BillingCycle } from '../../../constants/subscription.enum';
+import { Transform } from 'class-transformer';
 
 export class CreateSubscriptionDto {
   @IsUUID()
   @ApiProperty({ description: 'ID của người dùng' })
   userId: string;
 
-  @IsUUID()
+  @IsString()
+  @Length(1, 10)
   @ApiProperty({ description: 'ID của gói đăng ký' })
   planId: string;
 

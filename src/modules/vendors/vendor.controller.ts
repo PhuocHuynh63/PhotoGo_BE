@@ -9,7 +9,7 @@ import {
   CreateVendorLikeDto, CreateVendorAvailabilityDto
 } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
-import { VendorStatus } from 'src/constants/vendor.enum';
+import { VendorStatus, VendorSortField } from 'src/constants/vendor.enum';
 import { Vendor } from './entities/vendor.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import {
@@ -17,7 +17,7 @@ import {
   ApiConsumes, ApiBody, ApiQuery
 } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
-import { FilterVendorDto } from './dto/filter-vendor.dto';
+import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
 import { Location } from '../locations/entities/location.entity';
@@ -89,6 +89,23 @@ export class VendorController {
   }
 
   @Public()
+  @Get('remarkable')
+  @ApiOperation({ summary: 'Lấy danh sách nhà cung cấp nổi bật (Public)' })
+  @ApiResponse({ status: 200, description: 'Danh sách nhà cung cấp nổi bật' })
+  async getRemarkableVendors(@Query() remarkableDto: RemarkableVendorDto) {
+    const result = await this.vendorService.filterVendors({
+      ...remarkableDto,
+      sortBy: remarkableDto.sortBy || VendorSortField.SUBSCRIPTION_COUNT,
+      sortDirection: remarkableDto.sortDirection || 'desc',
+      pageSize: remarkableDto.pageSize || '10',
+    });
+    return {
+      message: 'Danh sách nhà cung cấp nổi bật đã được lấy thành công',
+      ...result,
+    };
+  }
+
+  @Public()
   @Get('search/locations')
   @ApiOperation({ summary: 'Tìm kiếm nhà cung cấp theo vị trí với thành phố (Public)' })
   @ApiQuery({ name: 'term', required: true, description: 'Từ tìm kiếm vị trí', example: 'Hồ Chí Minh' })
@@ -125,8 +142,9 @@ export class VendorController {
   @ApiOperation({ summary: 'Lấy một nhà cung cấp theo slug (Public)' })
   @ApiResponse({ status: 200, type: VendorResponseDto })
   @ApiResponse({ status: 404, description: 'Nhà cung cấp không tồn tại' })
-  async findBySlug(@Param('slug') slug: string): Promise<{ type: 'vendor' | 'location'; data: VendorResponseDto | Location }> {
-    return this.vendorService.findBySlug(slug);
+  async findBySlug(@Param('slug') slug: string): Promise<VendorResponseDto> {
+    const vendor = await this.vendorService.findBySlug(slug);
+    return this.vendorService.getVendorResponse(vendor.id, this.reviewService);
   }
 
   @Public()

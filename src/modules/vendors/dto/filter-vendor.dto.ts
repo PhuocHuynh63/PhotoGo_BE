@@ -107,4 +107,43 @@ export class FilterVendorDto {
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
+}
+
+export class RemarkableVendorDto {
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trang hiện tại cho phân trang',
+    example: '1',
+    required: false,
+  })
+  current?: string;
+
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số lượng mục trên mỗi trang',
+    example: '10',
+    required: false,
+  })
+  pageSize?: string;
+
+  @IsEnum(VendorSortField)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trường để sắp xếp',
+    enum: VendorSortField,
+    example: VendorSortField.SUBSCRIPTION_COUNT,
+    required: false,
+  })
+  sortBy?: VendorSortField;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Hướng sắp xếp (asc hoặc desc)',
+    example: 'desc',
+    required: false,
+  })
+  sortDirection?: 'asc' | 'desc';
 } 

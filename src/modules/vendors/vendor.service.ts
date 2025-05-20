@@ -200,7 +200,7 @@ export class VendorService {
         id: concept.id,
         name: concept.name,
         description: concept.description,
-        image_url: concept.image,
+        images: concept.images || [],
         price: concept.price,
         duration: concept.duration,
         serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
@@ -236,7 +236,7 @@ export class VendorService {
     const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
     queryBuilder.leftJoinAndSelect('vendor.category', 'category');
     queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-    queryBuilder.leftJoin('vendor.servicePackages', 'service_package');
+    queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'service_package');
     queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept'); 
 
     if (query.term) {
@@ -273,39 +273,17 @@ export class VendorService {
   //#endregion findAll
 
   //#region findBySlug
-  async findBySlug(slug: string): Promise<{
-    type: 'vendor' | 'location';
-    data: VendorResponseDto | Location;
-  }> {
-    // First check if slug exists in vendor
+  async findBySlug(slug: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { slug },
-      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'reviews'],
+      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType'],
     });
 
-    if (vendor) {
-      // If vendor found, return vendor response with all relations
-      return {
-        type: 'vendor',
-        data: await this.getVendorResponse(vendor.id, this.reviewService)
-      };
+    if (!vendor) {
+      throw new NotFoundException(`Nhà cung cấp với slug ${slug} không tồn tại`);
     }
 
-    // If not found in vendor, check in locations with minimal relations
-    const location = await this.locationRepository.findOne({
-      where: { slug },
-      relations: ['vendor'],
-    });
-
-    if (!location) {
-      throw new NotFoundException(`Không tìm thấy địa điểm hoặc nhà cung cấp với slug ${slug}`);
-    }
-
-    // If location found, return just that location with its vendor
-    return {
-      type: 'location',
-      data: location
-    };
+    return vendor;
   }
   //#endregion findBySlug
 
@@ -518,10 +496,12 @@ export class VendorService {
     };
   }> {
     const currentPage = params.current ? Number(params.current) : 1;
-    const pageSize = params.pageSize ? Number(params.pageSize) : 10;
+    const pageSize = params.pageSize ? Number(params.pageSize) : 3; // Mặc định pageSize là 3
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
-
+    let paramIndex = 1;
+    const baseParams: any[] = [];
+  
     // Base query for vendor filtering
     let baseQuery = `
       WITH vendor_stats AS (
@@ -542,6 +522,26 @@ export class VendorService {
         LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
         LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         GROUP BY v.id
+      ),
+      vendor_subscriptions AS (
+        SELECT 
+          v.id,
+          COUNT(s.id) as subscription_count,
+          RANK() OVER (ORDER BY COUNT(s.id) DESC) as subscription_rank
+        FROM vendors v
+        LEFT JOIN subscription s ON s.vendor_id = v.id AND s.status = 'hoạt động'
+        GROUP BY v.id
+      ),
+      filtered_vendors AS (
+        SELECT DISTINCT v.id
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        WHERE v.status = 'hoạt động'
+        ${params.location ? `AND EXISTS (
+          SELECT 1 FROM locations l2 
+          WHERE l2.vendor_id = v.id 
+          AND unaccent(l2.city) ILIKE unaccent($${paramIndex})
+        )` : ''}
       )
       SELECT DISTINCT 
         v.id,
@@ -557,6 +557,8 @@ export class VendorService {
         vs.review_count,
         vp.min_price,
         vp.max_price,
+        vsub.subscription_count,
+        vsub.subscription_rank,
         c.id as category_id,
         c.name as category_name,
         l.id as location_id,
@@ -567,31 +569,28 @@ export class VendorService {
         l.province,
         l.latitude,
         l.longitude
-      FROM vendors v
+      FROM filtered_vendors fv
+      JOIN vendors v ON v.id = fv.id
       LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN vendor_prices vp ON vp.id = v.id
+      LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
-      WHERE v.status = 'hoạt động'
     `;
-
-    const baseParams: any[] = [];
-    let paramIndex = 1;
-
+  
     // Add filters to base query
     if (params.name) {
       baseQuery += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
       baseParams.push(`%${params.name}%`);
       paramIndex++;
     }
-
+  
     if (params.location) {
       baseQuery += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
       baseParams.push(`%${params.location}%`);
       paramIndex++;
     }
-
-    // Add price filters
+  
     if (params.minPrice !== undefined) {
       baseQuery += ` AND vp.min_price >= $${paramIndex}`;
       baseParams.push(params.minPrice);
@@ -603,8 +602,7 @@ export class VendorService {
       baseParams.push(params.maxPrice);
       paramIndex++;
     }
-
-    // Add rating filters
+  
     if (params.minRating !== undefined) {
       baseQuery += ` AND vs.avg_rating >= $${paramIndex}`;
       baseParams.push(params.minRating);
@@ -616,9 +614,12 @@ export class VendorService {
       baseParams.push(params.maxRating);
       paramIndex++;
     }
-
+  
     // Add sorting
     switch (params.sortBy) {
+      case VendorSortField.SUBSCRIPTION_COUNT:
+        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST`;
+        break;
       case VendorSortField.PRICE:
         baseQuery += ` ORDER BY vp.min_price ${sortDirection} NULLS LAST`;
         break;
@@ -629,13 +630,13 @@ export class VendorService {
         baseQuery += ` ORDER BY v.name ${sortDirection}`;
         break;
       default:
-        baseQuery += ` ORDER BY v.created_at ${sortDirection}`;
+        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
     }
-
+  
     // Add pagination to base query
     baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     baseParams.push(pageSize, skip);
-
+  
     // Get total count query
     let countQuery = `
       WITH vendor_stats AS (
@@ -664,23 +665,22 @@ export class VendorService {
       LEFT JOIN category c ON c.id = v.category_id
       WHERE v.status = 'hoạt động'
     `;
-
+  
     const countParams: any[] = [];
     let countParamIndex = 1;
-
-    // Add the same filters to count query
+  
     if (params.name) {
       countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.name}%`);
       countParamIndex++;
     }
-
+  
     if (params.location) {
       countQuery += ` AND unaccent(l.city) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.location}%`);
       countParamIndex++;
     }
-
+  
     if (params.minPrice !== undefined) {
       countQuery += ` AND vp.min_price >= $${countParamIndex}`;
       countParams.push(params.minPrice);
@@ -692,7 +692,7 @@ export class VendorService {
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
-
+  
     if (params.minRating !== undefined) {
       countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
       countParams.push(params.minRating);
@@ -704,13 +704,13 @@ export class VendorService {
       countParams.push(params.maxRating);
       countParamIndex++;
     }
-
+  
     // Execute queries
     const [vendorData, totalItem] = await Promise.all([
       this.dataSource.query(baseQuery, baseParams),
       this.dataSource.query(countQuery, countParams),
     ]);
-
+  
     if (vendorData.length === 0) {
       return {
         data: [],
@@ -722,7 +722,7 @@ export class VendorService {
         },
       };
     }
-
+  
     // Fetch service packages and reviews for the filtered vendors
     const vendorIds = vendorData.map(v => v.id);
     const [servicePackages, reviews] = await Promise.all([
@@ -733,7 +733,8 @@ export class VendorService {
           sc.name as service_concept_name,
           sc.description as service_concept_description,
           sc.price as service_concept_price,
-          sc.duration as service_concept_duration
+          sc.duration as service_concept_duration,
+          COALESCE(sc.image_url::text, '[]')::json as service_concept_images
         FROM service_package sp
         LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         WHERE sp.vendor_id = ANY($1) AND sp.status = 'hoạt động'
@@ -746,11 +747,11 @@ export class VendorService {
         ORDER BY created_at DESC
       `, [vendorIds])
     ]);
-
+  
     // Group service packages and reviews by vendor
     const servicePackagesByVendor = new Map();
     const reviewsByVendor = new Map();
-
+  
     servicePackages.forEach((row: any) => {
       if (!servicePackagesByVendor.has(row.vendor_id)) {
         servicePackagesByVendor.set(row.vendor_id, new Map());
@@ -766,7 +767,7 @@ export class VendorService {
           serviceConcepts: []
         });
       }
-
+  
       if (row.service_concept_id) {
         const pkg = vendorPackages.get(row.id);
         pkg.serviceConcepts.push({
@@ -774,11 +775,12 @@ export class VendorService {
           name: row.service_concept_name,
           description: row.service_concept_description,
           price: row.service_concept_price,
-          duration: row.service_concept_duration
+          duration: row.service_concept_duration,
+          images: Array.isArray(row.service_concept_images) ? row.service_concept_images : []
         });
       }
     });
-
+  
     reviews.forEach((review: any) => {
       if (!reviewsByVendor.has(review.vendor_id)) {
         reviewsByVendor.set(review.vendor_id, []);
@@ -790,32 +792,45 @@ export class VendorService {
         created_at: review.created_at
       });
     });
-
-    // Combine all data
+  
+    // Group locations by vendor ID before mapping
+    const locationsByVendor = new Map();
+    vendorData.forEach((row: any) => {
+      if (row.location_id) {
+        if (!locationsByVendor.has(row.id)) {
+          locationsByVendor.set(row.id, []);
+        }
+        locationsByVendor.get(row.id).push({
+          id: row.location_id,
+          address: row.address || '',
+          district: row.district || '',
+          ward: row.ward || '',
+          city: row.city || '',
+          province: row.province || '',
+          latitude: row.latitude ? Number(parseFloat(row.latitude).toFixed(6)) : null,
+          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null
+        });
+      }
+    });
+  
+    // Map vendors without filtering duplicates
     const vendors = vendorData.map((row: any) => ({
       id: row.id,
       name: row.name,
-      description: row.description,
-      logo: row.logo,
-      banner: row.banner,
+      description: row.description || '',
+      logo: row.logo || null,
+      banner: row.banner || null,
       status: row.status,
       slug: row.slug,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      averageRating: parseFloat(row.avg_rating) || 0,
+      averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
       reviewCount: parseInt(row.review_count) || 0,
-      minPrice: row.min_price,
-      maxPrice: row.max_price,
-      locations: row.location_id ? [{
-        id: row.location_id,
-        address: row.address,
-        district: row.district,
-        ward: row.ward,
-        city: row.city,
-        province: row.province,
-        latitude: row.latitude,
-        longitude: row.longitude
-      }] : [],
+      minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
+      maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+      subscriptionCount: parseInt(row.subscription_count) || 0,
+      isRemarkable: row.subscription_rank <= 3, // Vendor is remarkable if they are in top 3 by subscription count
+      locations: locationsByVendor.get(row.id) || [],
       servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
       category: row.category_id ? {
         id: row.category_id,
@@ -823,9 +838,9 @@ export class VendorService {
       } : null,
       reviews: reviewsByVendor.get(row.id) || []
     }));
-
+  
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
-
+  
     return {
       data: vendors,
       pagination: {

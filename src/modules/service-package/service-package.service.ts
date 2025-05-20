@@ -328,10 +328,22 @@ export class ServicePackageService {
   //#region ServiceConcept
   async createServiceConcept(
     createServiceConceptDto: CreateServiceConceptDto,
-    files: { image?: Express.Multer.File },
+    files: { images?: Express.Multer.File[] },
   ): Promise<ServiceConcept> {
     const startTime = Date.now();
     this.logger.log('Bắt đầu quá trình tạo khái niệm dịch vụ');
+
+    // Upload images if provided
+    let uploadedImageUrls: string[] = [];
+    if (files.images && files.images.length > 0) {
+      this.logger.log('Uploading images');
+      try {
+        uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
+      } catch (error) {
+        this.logger.error(`Error uploading images: ${error.message}`);
+        throw new BadRequestException(`Error uploading images: ${error.message}`);
+      }
+    }
 
     // Verify service package exists if provided
     let servicePackage = null;
@@ -351,19 +363,8 @@ export class ServicePackageService {
       duration: createServiceConceptDto.duration,
       status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
       servicePackage: servicePackage,
+      images: uploadedImageUrls,
     };
-
-    // Upload image if provided
-    if (files.image) {
-      this.logger.log('Đang tải lên ảnh');
-      try {
-        const uploadResult = await this.uploadService.uploadImage(files.image, 'service-concepts/images');
-        serviceConceptData.image = uploadResult;
-      } catch (error) {
-        this.logger.error(`Lỗi khi tải lên ảnh: ${error.message}`);
-        throw new BadRequestException(`Lỗi khi tải lên ảnh: ${error.message}`);
-      }
-    }
 
     // Create the service concept
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
@@ -449,9 +450,21 @@ export class ServicePackageService {
   async updateServiceConcept(
     id: string,
     updateServiceConceptDto: UpdateServiceConceptDto,
-    files: { image?: Express.Multer.File },
+    files: { images?: Express.Multer.File[] },
   ): Promise<ServiceConcept> {
     const serviceConcept = await this.findServiceConcept(id);
+
+    // Upload new images if provided
+    if (files.images && files.images.length > 0) {
+      this.logger.log('Uploading new images');
+      try {
+        const uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
+        serviceConcept.images = uploadedImageUrls;
+      } catch (error) {
+        this.logger.error(`Error uploading images: ${error.message}`);
+        throw new BadRequestException(`Error uploading images: ${error.message}`);
+      }
+    }
 
     // Update basic fields
     if (updateServiceConceptDto.name) serviceConcept.name = updateServiceConceptDto.name;
@@ -459,18 +472,6 @@ export class ServicePackageService {
     if (updateServiceConceptDto.price !== undefined) serviceConcept.price = updateServiceConceptDto.price;
     if (updateServiceConceptDto.duration !== undefined) serviceConcept.duration = updateServiceConceptDto.duration;
     if (updateServiceConceptDto.status !== undefined) serviceConcept.status = updateServiceConceptDto.status;
-
-    // Upload new image if provided
-    if (files.image) {
-      this.logger.log('Đang tải lên ảnh mới');
-      try {
-        const uploadResult = await this.uploadService.uploadImage(files.image, 'service-concepts/images');
-        serviceConcept.image = uploadResult;
-      } catch (error) {
-        this.logger.error(`Lỗi khi tải lên ảnh: ${error.message}`);
-        throw new BadRequestException(`Lỗi khi tải lên ảnh: ${error.message}`);
-      }
-    }
 
     // Update service types if provided
     if (updateServiceConceptDto.serviceTypeIds) {

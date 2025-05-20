@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/swagger';
 import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServiceConceptServiceTypeDto, CreateServiceTypeDto, CreateServiceConceptDto } from './create-service-package.dto';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsUUID, IsArray } from 'class-validator';
 import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 
 /**
@@ -60,4 +60,18 @@ export class UpdateServiceTypeDto extends PartialType(CreateServiceTypeDto) {}
  * DTO cho việc cập nhật khái niệm dịch vụ
  * Kế thừa từ CreateServiceConceptDto với tất cả các trường là tùy chọn
  */
-export class UpdateServiceConceptDto extends PartialType(CreateServiceConceptDto) {}
+export class UpdateServiceConceptDto extends PartialType(CreateServiceConceptDto) {
+  @ApiProperty({
+    description: 'Danh sách URL ảnh của concept',
+    example: [
+      'https://res.cloudinary.com/dodtzdovx/image/upload/v1747502672/service-concepts/images/stfchqa76gxrg2zave54.png',
+      'https://res.cloudinary.com/dodtzdovx/image/upload/v1747502672/service-concepts/images/another.png'
+    ],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+}

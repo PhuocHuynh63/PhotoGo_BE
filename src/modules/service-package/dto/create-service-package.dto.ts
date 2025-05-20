@@ -71,6 +71,20 @@ export class CreateServiceConceptDto {
   @IsUUID('4', { message: 'ID gói dịch vụ không hợp lệ' })
   @IsOptional()
   servicePackageId?: string;
+
+  @ApiProperty({
+    description: 'Danh sách URL ảnh của concept',
+    example: [
+      'https://res.cloudinary.com/dodtzdovx/image/upload/v1747502672/service-concepts/images/stfchqa76gxrg2zave54.png',
+      'https://res.cloudinary.com/dodtzdovx/image/upload/v1747502672/service-concepts/images/another.png'
+    ],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
 }
 
 export class CreateServicePackageDto {
