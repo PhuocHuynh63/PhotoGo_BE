@@ -77,4 +77,22 @@ export class UploadService {
       }
     });
   }
+
+  async uploadImages(files: Express.Multer.File[], folder: string): Promise<string[]> {
+    const startTime = Date.now();
+    this.logger.log(`Starting batch image upload for ${files.length} files to folder: ${folder}`);
+
+    const uploadPromises = files.map(async (file) => {
+      try {
+        return await this.uploadImage(file, folder);
+      } catch (error) {
+        this.logger.error(`Failed to upload ${file.originalname}: ${error.message}`);
+        throw error;
+      }
+    });
+
+    const urls = await Promise.all(uploadPromises);
+    this.logger.log(`Batch upload completed in ${Date.now() - startTime}ms`);
+    return urls;
+  }
 }

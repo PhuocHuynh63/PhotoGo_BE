@@ -101,45 +101,4 @@ export class LocationController {
   async deleteLocation(@Param('id') id: string): Promise<void> {
     return await this.locationService.deleteLocation(id);
   }
-
-  @Public()
-  @Get('slug/:slug')
-  @ApiOperation({ 
-    summary: 'Tìm kiếm theo slug (Public)',
-    description: 'Tìm kiếm địa điểm theo slug. Nếu slug thuộc về vendor, trả về tất cả địa điểm của vendor đó. Nếu slug thuộc về location, trả về địa điểm cụ thể đó.'
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Tìm thấy địa điểm',
-    schema: {
-      type: 'object',
-      properties: {
-        type: {
-          type: 'string',
-          enum: ['vendor', 'location'],
-          description: 'Loại kết quả tìm kiếm'
-        },
-        data: {
-          oneOf: [
-            {
-              type: 'object',
-              description: 'Thông tin một địa điểm'
-            },
-            {
-              type: 'array',
-              description: 'Danh sách địa điểm của vendor'
-            }
-          ]
-        }
-      }
-    }
-  })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Không tìm thấy địa điểm hoặc nhà cung cấp' 
-  })
-  @ResponseMessage('Tìm kiếm địa điểm thành công')
-  async findBySlug(@Param('slug') slug: string) {
-    return this.locationService.findBySlug(slug);
-  }
 }

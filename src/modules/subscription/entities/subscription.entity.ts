@@ -20,7 +20,7 @@ export class Subscription {
   @JoinColumn({ name: 'plan_id' })
   plan: SubscriptionPlan;
 
-  @Column({ type: 'uuid', name: 'plan_id' })
+  @Column({ type: 'varchar', length: 10, name: 'plan_id' })
   planId: string;
 
   @ManyToOne(() => Vendor, { nullable: false })

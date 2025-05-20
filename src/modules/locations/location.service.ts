@@ -1,12 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { Vendor } from '../vendors/entities/vendor.entity';
-import slugify from 'slugify';
 
 @Injectable()
 export class LocationService {
@@ -27,9 +26,6 @@ export class LocationService {
       throw new NotFoundException(`Vendor with id ${createLocationDto.vendor_id} not found`);
     }
 
-    // Generate unique slug using vendor's slug as base
-    const slug = await this.generateUniqueSlug(vendor.slug);
-
     // Validate coordinates if provided
     if (createLocationDto.latitude !== undefined || createLocationDto.longitude !== undefined) {
       if (createLocationDto.latitude === undefined || createLocationDto.longitude === undefined) {
@@ -45,41 +41,12 @@ export class LocationService {
 
     const location = this.locationRepository.create({
       ...createLocationDto,
-      slug,
       vendor,
     });
 
     return this.locationRepository.save(location);
   }
   //#endregion create
-
-  //#region Utility
-  private async generateUniqueSlug(baseSlug: string): Promise<string> {
-    const existingLocations = await this.locationRepository.find({
-      select: ['slug'],
-      where: { slug: Like(`${baseSlug}%`) },
-    });
-    const existingSlugs = existingLocations.map((location) => location.slug);
-
-    // If no existing locations with this base slug, add -1 to distinguish from vendor slug
-    if (existingSlugs.length === 0) {
-      return `${baseSlug}-1`;
-    }
-
-    // Find the highest number suffix
-    let maxSuffix = 0;
-    for (const slug of existingSlugs) {
-      const parts = slug.split('-');
-      const lastPart = parts[parts.length - 1];
-      const suffix = parseInt(lastPart, 10);
-      if (!isNaN(suffix)) {
-        maxSuffix = Math.max(maxSuffix, suffix);
-      }
-    }
-
-    return `${baseSlug}-${maxSuffix + 1}`;
-  }
-  //#endregion Utility
 
   //#region findAll
   async findAll(query: FindLocationDto): Promise<{
@@ -164,41 +131,4 @@ export class LocationService {
     await this.locationRepository.remove(location);
   }
   //#endregion deleteLocation
-
-  //#region findBySlug
-  async findBySlug(slug: string): Promise<{
-    type: 'vendor' | 'location';
-    data: Location | Location[];
-  }> {
-    // First check if slug exists in vendor
-    const vendor = await this.vendorRepository.findOne({
-      where: { slug },
-      relations: ['locations', 'locations.vendor'],
-    });
-
-    if (vendor) {
-      // If vendor found, return all its locations
-      return {
-        type: 'vendor',
-        data: vendor.locations
-      };
-    }
-
-    // If not found in vendor, check in locations
-    const location = await this.locationRepository.findOne({
-      where: { slug },
-      relations: ['vendor'],
-    });
-
-    if (!location) {
-      throw new NotFoundException(`Không tìm thấy địa điểm hoặc nhà cung cấp với slug ${slug}`);
-    }
-
-    // If location found, return just that location
-    return {
-      type: 'location',
-      data: location
-    };
-  }
-  //#endregion findBySlug
 }

@@ -10,9 +10,6 @@ export class Location {
   @JoinColumn({ name: 'vendor_id' })
   vendor: Vendor;
 
-  @Column({ type: 'varchar', length: 100, nullable: false })
-  slug: string;
-
   @Column({ type: 'text', nullable: false })
   address: string;
 

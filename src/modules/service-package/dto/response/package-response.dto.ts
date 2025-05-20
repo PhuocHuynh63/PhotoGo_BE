@@ -28,6 +28,9 @@ export class ServiceConceptDto {
   @ApiProperty({ example: 60 })
   duration: number; // Duration in minutes
 
+  @ApiProperty({ type: [String], example: ["https://example.com/image1.png", "https://example.com/image2.png"] })
+  images: string[];
+
   @ApiProperty({ type: [ServiceTypeDto] })
   serviceTypes: ServiceTypeDto[];
 }

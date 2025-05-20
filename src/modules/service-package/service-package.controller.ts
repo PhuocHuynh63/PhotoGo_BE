@@ -190,37 +190,8 @@ export class ServicePackageController {
   @ApiOperation({ summary: 'Tạo khái niệm dịch vụ mới' })
   @ApiResponse({ status: 201, description: 'Khái niệm dịch vụ đã được tạo thành công', type: ServiceConcept })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    description: 'Dữ liệu và tệp của khái niệm dịch vụ',
-    schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },
-        description: { type: 'string', nullable: true },
-        servicePackageId: { type: 'string', example: 'uuid', nullable: true },
-        price: { type: 'number', example: 1000000 },
-        duration: { type: 'number', example: 60 },
-        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },
-        serviceTypeIds: {
-          type: 'array',
-          items: { type: 'string' },
-          example: ['uuid1', 'uuid2'],
-          nullable: true,
-        },
-        image: { type: 'string', format: 'binary' },
-      },
-      required: ['name', 'price', 'duration'],
-    },
-  })
-  async createServiceConcept(
-    @Body() createServiceConceptDto: CreateServiceConceptDto,
-    @UploadedFiles() files: { image?: Express.Multer.File[] },
-  ): Promise<ServiceConcept> {
-    const fileMap = {
-      image: files.image?.[0],
-    };
+    @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))  @ApiConsumes('multipart/form-data')  @ApiBody({    description: 'Dữ liệu và tệp của khái niệm dịch vụ',    schema: {      type: 'object',      properties: {        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },        description: { type: 'string', nullable: true },        servicePackageId: { type: 'string', example: 'uuid', nullable: true },        price: { type: 'number', example: 1000000 },        duration: { type: 'number', example: 60 },        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },        serviceTypeIds: {          type: 'array',          items: { type: 'string' },          example: ['uuid1', 'uuid2'],          nullable: true,        },        images: {           type: 'array',          items: {            type: 'string',            format: 'binary'          },          description: 'Multiple images can be uploaded (max 10)'        },      },      required: ['name', 'price', 'duration'],    },  })
+    async createServiceConcept(    @Body() createServiceConceptDto: CreateServiceConceptDto,    @UploadedFiles() files: { images?: Express.Multer.File[] },  ): Promise<ServiceConcept> {    const fileMap = {      images: files.images,    };
     return this.servicePackageService.createServiceConcept(createServiceConceptDto, fileMap);
   }
 
@@ -246,36 +217,8 @@ export class ServicePackageController {
   @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được cập nhật thành công', type: ServiceConcept })
   @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    description: 'Cập nhật dữ liệu và tệp của khái niệm dịch vụ',
-    schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },
-        description: { type: 'string', nullable: true },
-        price: { type: 'number', example: 1000000 },
-        duration: { type: 'number', example: 60 },
-        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },
-        serviceTypeIds: {
-          type: 'array',
-          items: { type: 'string' },
-          example: ['uuid1', 'uuid2'],
-          nullable: true,
-        },
-        image: { type: 'string', format: 'binary' },
-      },
-    },
-  })
-  async updateServiceConcept(
-    @Param('id') id: string,
-    @Body() updateServiceConceptDto: UpdateServiceConceptDto,
-    @UploadedFiles() files: { image?: Express.Multer.File[] },
-  ): Promise<ServiceConcept> {
-    const fileMap = {
-      image: files.image?.[0],
-    };
+    @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))  @ApiConsumes('multipart/form-data')  @ApiBody({    description: 'Cập nhật dữ liệu và tệp của khái niệm dịch vụ',    schema: {      type: 'object',      properties: {        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },        description: { type: 'string', nullable: true },        price: { type: 'number', example: 1000000 },        duration: { type: 'number', example: 60 },        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },        serviceTypeIds: {          type: 'array',          items: { type: 'string' },          example: ['uuid1', 'uuid2'],          nullable: true,        },        images: {           type: 'array',          items: {            type: 'string',            format: 'binary'          },          description: 'Multiple images can be uploaded (max 10)'        },      },    },  })
+    async updateServiceConcept(    @Param('id') id: string,    @Body() updateServiceConceptDto: UpdateServiceConceptDto,    @UploadedFiles() files: { images?: Express.Multer.File[] },  ): Promise<ServiceConcept> {    const fileMap = {      images: files.images,    };
     return this.servicePackageService.updateServiceConcept(id, updateServiceConceptDto, fileMap);
   }
 
