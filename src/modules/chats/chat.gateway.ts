@@ -3,10 +3,11 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
-import { Socket } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { JwtService } from '@nestjs/jwt';
 
@@ -14,6 +15,8 @@ import { JwtService } from '@nestjs/jwt';
   cors: { origin: '*' },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
   constructor(
     private readonly chatService: ChatService,
     private readonly jwtService: JwtService,
@@ -116,8 +119,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const updatedChat = await this.chatService.createMessage(data.chatId, messagePayload);
 
-      // Emit the new message to all clients in the chat room.
-      client.to(data.chatId).emit('newMessage', messagePayload);
+      // Broadcast the new message to all clients in the chat room.
+      this.server.in(data.chatId).emit('newMessage', messagePayload);
 
       // Notify other members (e.g. via personal rooms) in case they are not in the chat room.
       updatedChat.members.forEach((memberId) => {
