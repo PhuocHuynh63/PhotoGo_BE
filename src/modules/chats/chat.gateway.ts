@@ -107,10 +107,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const messagePayload = {
+        chatId: data.chatId,
         sender_id,
         text: data.text,
         timestamp: data.timestamp || new Date().toISOString(),
       };
+
 
       const updatedChat = await this.chatService.createMessage(data.chatId, messagePayload);
 

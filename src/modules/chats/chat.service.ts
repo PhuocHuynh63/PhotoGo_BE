@@ -79,6 +79,21 @@ export class ChatService {
       .getOne();
   }
 
+  async getChatsByMemberSorted(
+  memberId: string,
+  page: number = 1,
+  pageSize: number = 10,
+): Promise<Chat[]> {
+  const skip = (page - 1) * pageSize;
+  return this.chatRepository
+    .createQueryBuilder('chat')
+    .where(':member = ANY(chat.members)', { member: memberId })
+    .orderBy('chat.last_updated', 'DESC')
+    .skip(skip)
+    .take(pageSize)
+    .getMany();
+}
+
   async createMessage(
     chatId: string,
     message: { sender_id: string; text: string; timestamp?: string },
