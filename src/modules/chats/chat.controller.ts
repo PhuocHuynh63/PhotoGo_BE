@@ -30,11 +30,25 @@ export class ChatController {
     const findChatDto: FindChatDto = { partnerId };
     return this.chatService.findChat(findChatDto, userId);
   }
-
+//sort
   @Get('member/:memberId')
   @ApiOperation({ summary: 'Get all chats for a member' })
   @ApiResponse({ status: 200, description: 'Chats retrieved successfully', type: [Chat] })
   async getChatsByMember(@Param('memberId') memberId: string): Promise<Chat[]> {
     return this.chatService.getChatsByMember(memberId);
+  }
+
+  @Get('member-sorted/:memberId')
+  @ApiOperation({ 
+    summary: 'Get sorted chats for a member with pagination',
+    description: 'Returns chats for the member sorted by last_updated timestamp in descending order. Paging is supported with default page 1 and 10 chats per page.'
+  })
+  @ApiResponse({ status: 200, description: 'Chats retrieved successfully', type: [Chat] })
+  async getChatsByMemberSorted(
+    @Param('memberId') memberId: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ): Promise<Chat[]> {
+    return this.chatService.getChatsByMemberSorted(memberId, page || 1, pageSize || 10);
   }
 }
