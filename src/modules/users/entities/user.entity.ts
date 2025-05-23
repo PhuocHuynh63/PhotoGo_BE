@@ -1,3 +1,4 @@
+import { UserRank, UserStatus } from 'src/constants/user.enum';
 import { Role } from 'src/modules/roles/entities/role.entity';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
@@ -24,10 +25,10 @@ export class User {
   @Column({ name: 'avatar_url', length: 255, nullable: true })
   avatarUrl?: string;
 
-  @Column({ default: 'active' })
+  @Column({ default: UserStatus.INACTIVE })
   status: string;
 
-  @Column({ default: 'Unrank' })
+  @Column({ default: UserRank.UNRANK })
   rank: string;
 
   @Column()
