@@ -45,6 +45,7 @@ import { ReviewModule } from './modules/reviews/reviews.module';
 import { ServicePackageModule } from './modules/service-package/service-package.module';
 import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
 import { BullQueueModule } from './3rdService/bull/bull-queue.module';
+import { GeminiModule } from './3rdService/gemini/gemini.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -145,7 +146,8 @@ if (!fs.existsSync(templateDir)) {
     WishlistModule,
     SupportTicketsModule,
     ReviewModule,
-    ServicePackageModule
+    ServicePackageModule,
+    GeminiModule
   ],
   controllers: [AppController],
   providers: [
