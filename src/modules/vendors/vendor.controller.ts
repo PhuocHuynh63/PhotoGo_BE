@@ -51,6 +51,7 @@ export class VendorController {
         name: { type: 'string', example: 'Sunset Photography Studio' },
         category_id: { type: 'string', example: 'C003' },
         // slug: { type: 'string', example: 'sunset-photography-studio' },
+        user_id: { type: 'uuid', example: 'uuid_of_user' },
         description: { type: 'string', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), nullable: true },
         locations: {
@@ -60,7 +61,7 @@ export class VendorController {
         logo: { type: 'string', format: 'binary' },
         banner: { type: 'string', format: 'binary' },
       },
-      required: ['name', 'category_id', 'slug'],
+      required: ['name', 'category_id', 'user_id'],
     },
   })
   async create(
@@ -182,6 +183,7 @@ export class VendorController {
       properties: {
         name: { type: 'string', example: 'New Vendor Name' },
         description: { type: 'string', nullable: true },
+        user_id: { type: 'uuid', example: 'uuid_of_user', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), nullable: true },
         locations: {
           type: 'string',

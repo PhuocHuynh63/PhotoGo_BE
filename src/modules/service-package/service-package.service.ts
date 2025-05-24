@@ -11,6 +11,8 @@ import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateService
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
+import { DataSource } from 'typeorm';
+import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 
 @Injectable()
 export class ServicePackageService {
@@ -28,6 +30,7 @@ export class ServicePackageService {
     @InjectRepository(ServiceConcept)
     private readonly serviceConceptRepository: Repository<ServiceConcept>,
     private readonly uploadService: UploadService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -509,4 +512,295 @@ export class ServicePackageService {
     await this.serviceConceptRepository.remove(serviceConcept);
   }
   //#endregion ServiceConcept
+
+  //#region filterServicePackages
+  async filterServicePackages(params: {
+    name?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    serviceTypeIds?: string[];
+    status?: ServicePackageStatus;
+    current?: number;
+    pageSize?: number;
+    sortBy?: 'name' | 'price' | 'created_at';
+    sortDirection?: 'asc' | 'desc';
+  }): Promise<PaginatedFilteredServicePackageResponseDto> {
+    const currentPage = params.current || 1;
+    const pageSize = params.pageSize || 10;
+    const actualPageSize = pageSize * 2; // Process double the requested size
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
+
+    const filterConditions: string[] = [];
+    const baseParams: any[] = [];
+
+    // Base query for service package filtering
+    let baseQuery = `
+      WITH service_package_prices AS (
+        SELECT 
+          sp.id,
+          COALESCE(MIN(sc.price), 0) as min_price,
+          COALESCE(MAX(sc.price), 0) as max_price
+        FROM service_package sp
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        WHERE sp.status = 'hoạt động'
+          AND (sc.status = 'hoạt động' OR sc.status IS NULL)
+        GROUP BY sp.id
+      ),
+      filtered_packages AS (
+        SELECT DISTINCT sp.id
+        FROM service_package sp
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
+        LEFT JOIN service_type st ON st.id = sct.service_type_id
+        LEFT JOIN service_package_prices spp ON spp.id = sp.id
+        WHERE 1=1
+    `;
+
+    // Add filters to base query dynamically
+    if (params.name) {
+      filterConditions.push(`unaccent(sp.name) ILIKE unaccent($${filterConditions.length + 1})`);
+      baseParams.push(`%${params.name}%`);
+    }
+
+    if (params.serviceTypeIds?.length) {
+      filterConditions.push(`st.id = ANY($${filterConditions.length + 1})`);
+      baseParams.push(params.serviceTypeIds);
+    }
+
+    if (params.status) {
+      filterConditions.push(`sp.status = $${filterConditions.length + 1}`);
+      baseParams.push(params.status);
+    }
+
+    if (params.minPrice !== undefined) {
+      filterConditions.push(`spp.min_price >= $${filterConditions.length + 1}`);
+      baseParams.push(params.minPrice);
+    }
+
+    if (params.maxPrice !== undefined) {
+      filterConditions.push(`spp.max_price <= $${filterConditions.length + 1}`);
+      baseParams.push(params.maxPrice);
+    }
+
+    // Append filters to the base query
+    if (filterConditions.length > 0) {
+      baseQuery += ` AND ${filterConditions.join(' AND ')}`;
+    }
+
+    baseQuery += `
+      )
+      SELECT DISTINCT
+        sp.id,
+        sp.name,
+        sp.description,
+        sp.image_url,
+        sp.status,
+        sp.created_at,
+        sp.updated_at,
+        spp.min_price,
+        spp.max_price,
+        COALESCE(spp.max_price, 0) as sort_price_desc,
+        COALESCE(spp.min_price, 0) as sort_price_asc,
+        sc.id as service_concept_id,
+        sc.name as service_concept_name,
+        sc.description as service_concept_description,
+        sc.price as service_concept_price,
+        sc.duration as service_concept_duration,
+        sc.image_url as service_concept_image_url,
+        st.id as service_type_id,
+        st.name as service_type_name,
+        st.description as service_type_description
+      FROM filtered_packages fp
+      JOIN service_package sp ON sp.id = fp.id
+      LEFT JOIN service_package_prices spp ON spp.id = sp.id
+      LEFT JOIN service_concept sc ON sc.service_package_id = sp.id AND sc.status = 'hoạt động'
+      LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
+      LEFT JOIN service_type st ON st.id = sct.service_type_id
+    `;
+
+    // Add sorting
+    switch (params.sortBy) {
+      case 'price':
+        if (sortDirection === 'DESC') {
+          baseQuery += ` ORDER BY sort_price_desc ${sortDirection}`;
+        } else {
+          baseQuery += ` ORDER BY sort_price_asc ${sortDirection}`;
+        }
+        break;
+      case 'name':
+        baseQuery += ` ORDER BY sp.name ${sortDirection}`;
+        break;
+      default:
+        baseQuery += ` ORDER BY sp.created_at ${sortDirection}`;
+    }
+
+    // Add pagination
+    baseQuery += ` LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`;
+    baseParams.push(actualPageSize, skip);
+
+    // Get total count query
+    const countFilterConditions: string[] = [];
+    const countParams: any[] = [];
+
+    let countQuery = `
+      WITH service_package_prices AS (
+        SELECT 
+          sp.id,
+          COALESCE(MIN(sc.price), 0) as min_price,
+          COALESCE(MAX(sc.price), 0) as max_price
+        FROM service_package sp
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        WHERE sp.status = 'hoạt động'
+          AND (sc.status = 'hoạt động' OR sc.status IS NULL)
+        GROUP BY sp.id
+      ),
+      filtered_packages AS (
+        SELECT DISTINCT sp.id
+        FROM service_package sp
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
+        LEFT JOIN service_type st ON st.id = sct.service_type_id
+        LEFT JOIN service_package_prices spp ON spp.id = sp.id
+        WHERE 1=1
+    `;
+
+    // Add filters to count query dynamically
+    if (params.name) {
+      countFilterConditions.push(`unaccent(sp.name) ILIKE unaccent($${countFilterConditions.length + 1})`);
+      countParams.push(`%${params.name}%`);
+    }
+
+    if (params.serviceTypeIds?.length) {
+      countFilterConditions.push(`st.id = ANY($${countFilterConditions.length + 1})`);
+      countParams.push(params.serviceTypeIds);
+    }
+
+    if (params.status) {
+      countFilterConditions.push(`sp.status = $${countFilterConditions.length + 1}`);
+      countParams.push(params.status);
+    }
+
+    if (params.minPrice !== undefined) {
+      countFilterConditions.push(`spp.min_price >= $${countFilterConditions.length + 1}`);
+      countParams.push(params.minPrice);
+    }
+
+    if (params.maxPrice !== undefined) {
+      countFilterConditions.push(`spp.max_price <= $${countFilterConditions.length + 1}`);
+      countParams.push(params.maxPrice);
+    }
+
+    // Append filters to the count query
+    if (countFilterConditions.length > 0) {
+      countQuery += ` AND ${countFilterConditions.join(' AND ')}`;
+    }
+
+    countQuery += `
+      )
+      SELECT COUNT(DISTINCT id) as count
+      FROM filtered_packages
+    `;
+
+    // Execute queries
+    const [packageData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (packageData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Group service concepts and types by package
+    const packagesByServicePackage = new Map();
+    // const serviceTypesByConcept = new Map(); // This map is not used
+
+    packageData.forEach((row: any) => {
+      if (!packagesByServicePackage.has(row.id)) {
+        packagesByServicePackage.set(row.id, {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          image: row.image_url,
+          status: row.status,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
+          maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          serviceConcepts: new Map<string, any>() // Use a Map for concepts to avoid duplicates
+        });
+      }
+
+      const servicePackage = packagesByServicePackage.get(row.id);
+
+      if (row.service_concept_id) {
+        if (!servicePackage.serviceConcepts.has(row.service_concept_id)) {
+          servicePackage.serviceConcepts.set(row.service_concept_id, {
+            id: row.service_concept_id,
+            name: row.service_concept_name,
+            description: row.service_concept_description,
+            price: Number(parseFloat(row.service_concept_price).toFixed(2)),
+            duration: row.service_concept_duration,
+            images: row.service_concept_image_url ? JSON.parse(row.service_concept_image_url) : [],
+            serviceTypes: new Map<string, any>() // Use a Map for types to avoid duplicates
+          });
+        }
+
+        if (row.service_type_id) {
+          const concept = servicePackage.serviceConcepts.get(row.service_concept_id);
+          if (!concept.serviceTypes.has(row.service_type_id)) { // Check if type already added
+            concept.serviceTypes.set(row.service_type_id, {
+              id: row.service_type_id,
+              name: row.service_type_name,
+              description: row.service_type_description
+            });
+          }
+        }
+      }
+    });
+
+    // After getting the results, slice to only show requested page size
+    const servicePackages = Array.from(packagesByServicePackage.values())
+      .map(pkg => ({
+        ...pkg,
+        serviceConcepts: Array.from(pkg.serviceConcepts.values()).map((concept: any) => ({
+          ...concept,
+          serviceTypes: Array.from(concept.serviceTypes.values())
+        }))
+      }))
+      .slice(0, pageSize); // Only show requested page size
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    return {
+      data: servicePackages.map(pkg => ({
+        id: pkg.id,
+        name: pkg.name,
+        description: pkg.description,
+        image: pkg.image,
+        status: pkg.status,
+        createdAt: pkg.createdAt,
+        updatedAt: pkg.updatedAt,
+        minPrice: pkg.minPrice,
+        maxPrice: pkg.maxPrice,
+        serviceConcepts: pkg.serviceConcepts
+      })),
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
+  }
+  //#endregion filterServicePackages
 }

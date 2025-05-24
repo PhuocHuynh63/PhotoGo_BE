@@ -1,10 +1,12 @@
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
 import { Location } from '../../locations/entities/location.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { ServicePackage } from '../../service-package/entities/service-package.entity';
 import { VendorAvailability } from './vendor-availability.entity';
 import { Review } from '../../reviews/entities/review.entity';
+import { User } from '../../users/entities/user.entity';
+
 @Entity('vendors')
 export class Vendor {
   @PrimaryGeneratedColumn('uuid')
@@ -50,4 +52,7 @@ export class Vendor {
   @OneToMany(() => Review, (review) => review.vendor, { cascade: true } )
   reviews: Review[];
 
+  @OneToOne(() => User, (user) => user.vendor)
+  @JoinColumn({ name: 'user_id' })
+  user_id: User;
 }

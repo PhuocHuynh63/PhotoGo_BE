@@ -10,21 +10,28 @@ import { UpdateLocationDto } from 'src/modules/locations/dto/update-location.dto
 export class UpdateVendorDto {
   private readonly logger = new Logger(UpdateVendorDto.name);
 
-    @IsOptional()
+  @IsOptional()
   @ApiProperty({
     description: 'Tên nhà cung cấp',
     example: 'Nhà cung cấp 1',
   })
     name?: string;
   
-    @IsOptional()
+  @IsOptional()
   @ApiProperty({
     description: 'Mô tả nhà cung cấp',
     example: 'Mô tả nhà cung cấp 1',
   })
     description?: string;
+
+  @IsOptional()
+  @ApiProperty({
+    description: 'ID người dùng của nhà cung cấp',
+    example: 'uuid_of_user',
+  })
+    user_id?: string;
   
-    @IsOptional()
+  @IsOptional()
   @ApiProperty({
     description: 'Trạng thái nhà cung cấp',
     example: VendorStatus.ACTIVE,
