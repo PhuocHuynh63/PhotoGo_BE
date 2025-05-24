@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Delete, Body, UseInterceptors, UploadedFiles, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Delete, Body, UseInterceptors, UploadedFiles, UseGuards, Query } from '@nestjs/common';
 import { ServicePackageService } from './service-package.service';
 import {
   CreateServicePackageDto,
@@ -26,6 +26,8 @@ import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 import { RolesGuard } from '../auth/passport/roles.guard';
 import { Public } from 'src/decorator/custom';
+import { FilterServicePackageDto } from './dto/filter-service-package.dto';
+import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 
 @ApiTags('Service Packages')
 @Controller('service-packages')
@@ -96,6 +98,20 @@ export class ServicePackageController {
     return this.servicePackageService.findAll();
   }
   //#endregion ServicePackage - Static Routes
+
+  @Get('filter')
+  @Public()
+  @ApiOperation({ summary: 'Lọc gói dịch vụ' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách gói dịch vụ đã được lọc',
+    type: PaginatedFilteredServicePackageResponseDto,
+  })
+  async filterServicePackages(
+    @Query() filterDto: FilterServicePackageDto,
+  ): Promise<PaginatedFilteredServicePackageResponseDto> {
+    return this.servicePackageService.filterServicePackages(filterDto);
+  }
 
   //#region ServicePackageMetadata
   @Post('metadata')
@@ -339,4 +355,6 @@ export class ServicePackageController {
     return this.servicePackageService.remove(id);
   }
   //#endregion ServicePackage - Dynamic Routes
+
+
 }
