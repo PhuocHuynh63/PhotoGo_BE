@@ -35,6 +35,14 @@ export class CreateVendorDto {
   // slug: string;
 
   @IsString()
+  @IsNotEmpty()
+  @ApiProperty({
+    example: 'uuid_of_user',
+    description: 'ID người dùng của nhà cung cấp',
+  })
+  user_id: string;
+
+  @IsString()
   @IsOptional()
   @ApiProperty({
     example: 'Studio chụp ảnh chuyên nghiệp với thiết bị hiện đại',

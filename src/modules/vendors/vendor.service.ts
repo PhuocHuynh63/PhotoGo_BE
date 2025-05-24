@@ -16,6 +16,7 @@ import { UploadService } from 'src/3rdService/upload/upload.service'; // Assumin
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
 import { ReviewService } from '../reviews/reviews.service'; // Assuming you have a ReviewService for handling reviews
 import { VendorSortField } from 'src/constants/vendor.enum';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class VendorService {
@@ -49,6 +50,7 @@ export class VendorService {
     const vendorData: Partial<Vendor> = {
       name: createVendorDto.name,
       description: createVendorDto.description,
+      user_id: { id: createVendorDto.user_id } as User,
       status: createVendorDto.status || VendorStatus.ACTIVE,
     };
 
@@ -333,6 +335,10 @@ export class VendorService {
   
     if (updateVendorDto.description !== undefined) {
       vendor.description = updateVendorDto.description;
+    }
+
+    if (updateVendorDto.user_id !== undefined) {
+      vendor.user_id = { id: updateVendorDto.user_id } as User;
     }
   
     if (updateVendorDto.status !== undefined) {
