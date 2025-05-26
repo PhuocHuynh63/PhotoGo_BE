@@ -51,7 +51,7 @@ export class VendorService {
     // Check if user exists and has vendor_owner role
     const user = await this.userRepository.findOne({
       where: { id: createVendorDto.user_id },
-      relations: ['role']
+      relations: ['role', 'vendor']
     });
 
     if (!user) {
@@ -64,6 +64,12 @@ export class VendorService {
       throw new BadRequestException('Chỉ có user với vai trò vendor_owner mới có thể tạo nhà cung cấp');
     }
 
+    // Check if user already has a vendor
+    if (user.vendor) {
+      this.logger.error(`User ${createVendorDto.user_id} đã có nhà cung cấp`);
+      throw new BadRequestException('User đã có nhà cung cấp, không thể tạo thêm');
+    }
+    
     // Upload file trước khi bắt đầu transaction
     const vendorData: Partial<Vendor> = {
       name: createVendorDto.name,
@@ -154,7 +160,7 @@ export class VendorService {
         this.logger.log('Fetching saved vendor with relations');
         const result = await vendorRepo.findOne({
           where: { id: savedVendor.id },
-          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType'],
+          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'user_id', 'user_id.role'],
         });
 
         this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
@@ -171,7 +177,7 @@ export class VendorService {
   async findOne(id: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { id },
-      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType'],
+      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'user_id', 'user_id.role'],
     });
     if (!vendor) {
       throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
@@ -198,6 +204,7 @@ export class VendorService {
     response.logo = vendor.logo;
     response.banner = vendor.banner;
     response.status = vendor.status;
+    response.user_id = vendor.user_id;
     response.category = vendor.category;
     response.locations = vendor.locations.map(loc => ({
       id: loc.id,

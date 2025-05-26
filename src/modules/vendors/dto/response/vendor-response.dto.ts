@@ -4,6 +4,7 @@ import { Category } from 'src/modules/categories/entities/category.entity';
 import { LocationDto } from 'src/modules/locations/dto/response/location-response.dto';
 import { ServicePackageDto } from 'src/modules/service-package/dto/response/package-response.dto';
 import { Review } from 'src/modules/reviews/entities/review.entity';
+import { User } from 'src/modules/users/entities/user.entity';
 
 
 export class VendorResponseDto {
@@ -45,4 +46,7 @@ export class VendorResponseDto {
 
   @ApiProperty({ type: () => [Review] })
   reviews: Review[];
+
+  @ApiProperty({ type: () => User })
+  user_id: User;
 }
