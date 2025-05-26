@@ -28,6 +28,8 @@ import { RolesGuard } from '../auth/passport/roles.guard';
 import { Public } from 'src/decorator/custom';
 import { FilterServicePackageDto } from './dto/filter-service-package.dto';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
+import { Roles } from 'src/decorator/role.decorator';
+import { Role } from 'src/modules/roles/entities/role.entity';
 
 @ApiTags('Service Packages')
 @Controller('service-packages')
@@ -38,6 +40,7 @@ export class ServicePackageController {
 
   //#region ServicePackage - Static Routes
   @Post()
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Tạo gói dịch vụ mới' })
   @ApiResponse({ status: 201, description: 'Gói dịch vụ đã được tạo thành công', type: ServicePackage })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
@@ -97,7 +100,6 @@ export class ServicePackageController {
   async findAll(): Promise<{ data: ServicePackage[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
     return this.servicePackageService.findAll();
   }
-  //#endregion ServicePackage - Static Routes
 
   @Get('filter')
   @Public()
@@ -115,6 +117,7 @@ export class ServicePackageController {
 
   //#region ServicePackageMetadata
   @Post('metadata')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Tạo metadata cho gói dịch vụ' })
   @ApiResponse({ status: 201, description: 'Metadata đã được tạo thành công', type: ServicePackageMetadata })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
@@ -140,6 +143,7 @@ export class ServicePackageController {
   }
 
   @Patch('metadata/:id')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Cập nhật metadata theo ID' })
   @ApiResponse({ status: 200, description: 'Metadata đã được cập nhật thành công', type: ServicePackageMetadata })
   @ApiResponse({ status: 404, description: 'Không tìm thấy metadata' })
@@ -149,6 +153,7 @@ export class ServicePackageController {
   }
 
   @Delete('metadata/:id')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Xóa metadata theo ID' })
   @ApiResponse({ status: 200, description: 'Metadata đã được xóa thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy metadata' })
@@ -159,6 +164,7 @@ export class ServicePackageController {
 
   //#region ServiceType
   @Post('service-type')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Tạo loại dịch vụ mới' })
   @ApiResponse({ status: 201, description: 'Loại dịch vụ đã được tạo thành công', type: ServiceType })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
@@ -184,6 +190,7 @@ export class ServicePackageController {
   }
 
   @Patch('service-type/:id')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Cập nhật loại dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Loại dịch vụ đã được cập nhật thành công', type: ServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy loại dịch vụ' })
@@ -193,6 +200,7 @@ export class ServicePackageController {
   }
 
   @Delete('service-type/:id')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Xóa loại dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Loại dịch vụ đã được xóa thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy loại dịch vụ' })
@@ -203,45 +211,63 @@ export class ServicePackageController {
 
   //#region ServiceConcept
   @Post('service-concept')
-  @ApiOperation({ summary: 'Tạo khái niệm dịch vụ mới' })
-  @ApiResponse({ status: 201, description: 'Khái niệm dịch vụ đã được tạo thành công', type: ServiceConcept })
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Tạo concept dịch vụ mới' })
+  @ApiResponse({ status: 201, description: 'Concept dịch vụ đã được tạo thành công', type: ServiceConcept })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-    @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))  @ApiConsumes('multipart/form-data')  @ApiBody({    description: 'Dữ liệu và tệp của khái niệm dịch vụ',    schema: {      type: 'object',      properties: {        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },        description: { type: 'string', nullable: true },        servicePackageId: { type: 'string', example: 'uuid', nullable: true },        price: { type: 'number', example: 1000000 },        duration: { type: 'number', example: 60 },        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },        serviceTypeIds: {          type: 'array',          items: { type: 'string' },          example: ['uuid1', 'uuid2'],          nullable: true,        },        images: {           type: 'array',          items: {            type: 'string',            format: 'binary'          },          description: 'Multiple images can be uploaded (max 10)'        },      },      required: ['name', 'price', 'duration'],    },  })
-    async createServiceConcept(    @Body() createServiceConceptDto: CreateServiceConceptDto,    @UploadedFiles() files: { images?: Express.Multer.File[] },  ): Promise<ServiceConcept> {    const fileMap = {      images: files.images,    };
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  async createServiceConcept(
+    @Body() createServiceConceptDto: CreateServiceConceptDto,
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+  ): Promise<ServiceConcept> {
+    const fileMap = {
+      images: files.images,
+    };
     return this.servicePackageService.createServiceConcept(createServiceConceptDto, fileMap);
   }
 
   @Get('service-concept')
   @Public()
-  @ApiOperation({ summary: 'Lấy danh sách tất cả khái niệm dịch vụ' })
-  @ApiResponse({ status: 200, description: 'Danh sách khái niệm dịch vụ đã được lấy thành công', type: [ServiceConcept] })
+  @ApiOperation({ summary: 'Lấy danh sách tất cả concept dịch vụ' })
+  @ApiResponse({ status: 200, description: 'Danh sách concept dịch vụ đã được lấy thành công', type: [ServiceConcept] })
   async findAllServiceConcepts(): Promise<{ data: ServiceConcept[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
     return this.servicePackageService.findAllServiceConcepts();
   }
 
   @Get('service-concept/:id')
   @Public()
-  @ApiOperation({ summary: 'Lấy khái niệm dịch vụ theo ID' })
-  @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được tìm thấy', type: ServiceConcept })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
+  @ApiOperation({ summary: 'Lấy concept dịch vụ theo ID' })
+  @ApiResponse({ status: 200, description: 'Concept dịch vụ đã được tìm thấy', type: ServiceConcept })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy concept dịch vụ' })
   async findServiceConcept(@Param('id') id: string): Promise<ServiceConcept> {
     return this.servicePackageService.findServiceConcept(id);
   }
 
   @Patch('service-concept/:id')
-  @ApiOperation({ summary: 'Cập nhật khái niệm dịch vụ theo ID' })
-  @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được cập nhật thành công', type: ServiceConcept })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Cập nhật concept dịch vụ theo ID' })
+  @ApiResponse({ status: 200, description: 'Concept dịch vụ đã được cập nhật thành công', type: ServiceConcept })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy concept dịch vụ' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-    @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))  @ApiConsumes('multipart/form-data')  @ApiBody({    description: 'Cập nhật dữ liệu và tệp của khái niệm dịch vụ',    schema: {      type: 'object',      properties: {        name: { type: 'string', example: 'Chụp ảnh cưới cơ bản' },        description: { type: 'string', nullable: true },        price: { type: 'number', example: 1000000 },        duration: { type: 'number', example: 60 },        status: { type: 'string', enum: ['hoạt động', 'không hoạt động'], nullable: true },        serviceTypeIds: {          type: 'array',          items: { type: 'string' },          example: ['uuid1', 'uuid2'],          nullable: true,        },        images: {           type: 'array',          items: {            type: 'string',            format: 'binary'          },          description: 'Multiple images can be uploaded (max 10)'        },      },    },  })
-    async updateServiceConcept(    @Param('id') id: string,    @Body() updateServiceConceptDto: UpdateServiceConceptDto,    @UploadedFiles() files: { images?: Express.Multer.File[] },  ): Promise<ServiceConcept> {    const fileMap = {      images: files.images,    };
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  async updateServiceConcept(
+    @Param('id') id: string,
+    @Body() updateServiceConceptDto: UpdateServiceConceptDto,
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+  ): Promise<ServiceConcept> {
+    const fileMap = {
+      images: files.images,
+    };
     return this.servicePackageService.updateServiceConcept(id, updateServiceConceptDto, fileMap);
   }
 
   @Delete('service-concept/:id')
-  @ApiOperation({ summary: 'Xóa khái niệm dịch vụ theo ID' })
-  @ApiResponse({ status: 200, description: 'Khái niệm dịch vụ đã được xóa thành công' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy khái niệm dịch vụ' })
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Xóa concept dịch vụ theo ID' })
+  @ApiResponse({ status: 200, description: 'Concept dịch vụ đã được xóa thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy concept dịch vụ' })
   async removeServiceConcept(@Param('id') id: string): Promise<void> {
     return this.servicePackageService.removeServiceConcept(id);
   }
@@ -249,7 +275,8 @@ export class ServicePackageController {
 
   //#region ServiceConceptServiceType
   @Post('service-concept-service-type')
-  @ApiOperation({ summary: 'Tạo liên kết gói dịch vụ với loại dịch vụ' })
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Tạo liên kết concept dịch vụ và loại dịch vụ' })
   @ApiResponse({ status: 201, description: 'Liên kết đã được tạo thành công', type: ServiceConceptServiceType })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   async createServiceConceptServiceType(@Body() dto: CreateServiceConceptServiceTypeDto): Promise<ServiceConceptServiceType> {
@@ -258,7 +285,7 @@ export class ServicePackageController {
 
   @Get('service-concept-service-type')
   @Public()
-  @ApiOperation({ summary: 'Lấy danh sách tất cả liên kết gói dịch vụ với loại dịch vụ' })
+  @ApiOperation({ summary: 'Lấy danh sách tất cả liên kết concept dịch vụ và loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách liên kết đã được lấy thành công', type: [ServiceConceptServiceType] })
   async findAllServiceConceptServiceType(): Promise<{ data: ServiceConceptServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
     return this.servicePackageService.findAllServiceConceptServiceType();
@@ -266,7 +293,7 @@ export class ServicePackageController {
 
   @Get('service-concept-service-type/:serviceConceptId/:serviceTypeId')
   @Public()
-  @ApiOperation({ summary: 'Lấy liên kết gói dịch vụ với loại dịch vụ theo ID' })
+  @ApiOperation({ summary: 'Lấy liên kết concept dịch vụ và loại dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Liên kết đã được tìm thấy', type: ServiceConceptServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy liên kết' })
   async findServiceConceptServiceType(
@@ -277,7 +304,8 @@ export class ServicePackageController {
   }
 
   @Patch('service-concept-service-type/:serviceConceptId/:serviceTypeId')
-  @ApiOperation({ summary: 'Cập nhật liên kết gói dịch vụ với loại dịch vụ' })
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Cập nhật liên kết concept dịch vụ và loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Liên kết đã được cập nhật thành công', type: ServiceConceptServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy liên kết' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
@@ -290,7 +318,8 @@ export class ServicePackageController {
   }
 
   @Delete('service-concept-service-type/:serviceConceptId/:serviceTypeId')
-  @ApiOperation({ summary: 'Xóa liên kết gói dịch vụ với loại dịch vụ' })
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Xóa liên kết concept dịch vụ và loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Liên kết đã được xóa thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy liên kết' })
   async removeServiceConceptServiceType(
@@ -312,30 +341,13 @@ export class ServicePackageController {
   }
 
   @Patch(':id')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Cập nhật gói dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Gói dịch vụ đã được cập nhật thành công', type: ServicePackage })
   @ApiResponse({ status: 404, description: 'Không tìm thấy gói dịch vụ' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    description: 'Cập nhật dữ liệu và tệp của gói dịch vụ',
-    schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', example: 'Gói dịch vụ cơ bản' },
-        description: { type: 'string', nullable: true },
-        status: { type: 'string', enum: Object.values(ServicePackageStatus), nullable: true },
-        serviceConceptIds: {
-          type: 'array',
-          items: { type: 'string' },
-          example: ['uuid1', 'uuid2'],
-          nullable: true,
-        },
-        image: { type: 'string', format: 'binary' },
-      },
-    },
-  })
   async update(
     @Param('id') id: string,
     @Body() updateServicePackageDto: UpdateServicePackageDto,
@@ -348,6 +360,7 @@ export class ServicePackageController {
   }
 
   @Delete(':id')
+  @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Xóa gói dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Gói dịch vụ đã được xóa thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy gói dịch vụ' })
@@ -355,6 +368,4 @@ export class ServicePackageController {
     return this.servicePackageService.remove(id);
   }
   //#endregion ServicePackage - Dynamic Routes
-
-
 }
