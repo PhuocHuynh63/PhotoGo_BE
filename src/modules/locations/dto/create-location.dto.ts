@@ -3,15 +3,15 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateLocationDto {
   @IsUUID()
-  @IsNotEmpty()
+  @IsOptional()
   @ApiProperty({
     example: '97004449-52d9-4a49-b071-ce5786f7645e',
     description: 'ID của vendor',
-    required: true,
+    required: false,
     name: 'vendor_id',
     title: 'Vendor Information'
   })
-  vendor_id: string;
+  vendor_id?: string;
 
   @IsString()
   @IsNotEmpty()

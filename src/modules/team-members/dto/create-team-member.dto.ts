@@ -5,10 +5,10 @@ export class CreateTeamMemberDto {
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
-    description: 'ID của nhà cung cấp',
-    example: 'V001',
+    description: 'ID của cửa hàng',
+    example: 'uuid của location',
   })
-  vendor_id: string;
+  location_id: string;
 
   @IsString()
   @IsNotEmpty()

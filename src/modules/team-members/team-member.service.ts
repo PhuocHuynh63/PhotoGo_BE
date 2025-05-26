@@ -4,17 +4,34 @@ import { Repository } from 'typeorm';
 import { TeamMember } from './entities/team-member.entity';
 import { CreateTeamMemberDto } from './dto/create-team-member.dto';
 import { FindTeamMemberDto } from './dto/find-team-member.dto';
+import { Location } from '../locations/entities/location.entity';
 
 @Injectable()
 export class TeamMemberService {
   constructor(
     @InjectRepository(TeamMember)
     private readonly teamMemberRepository: Repository<TeamMember>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
   ) { }
 
   //#region create
   async create(createTeamMemberDto: CreateTeamMemberDto): Promise<TeamMember> {
-    const teamMember = this.teamMemberRepository.create(createTeamMemberDto);
+    // Find the location first
+    const location = await this.locationRepository.findOne({
+      where: { id: createTeamMemberDto.location_id }
+    });
+
+    if (!location) {
+      throw new NotFoundException(`Không tìm thấy location với ID ${createTeamMemberDto.location_id}`);
+    }
+
+    // Create team member with location relationship
+    const teamMember = this.teamMemberRepository.create({
+      ...createTeamMemberDto,
+      location: location
+    });
+
     return this.teamMemberRepository.save(teamMember);
   }
   //#endregion create
@@ -38,7 +55,7 @@ export class TeamMemberService {
     //#region Filter
     const queryBuilder = this.teamMemberRepository.createQueryBuilder('teamMember');
 
-    queryBuilder.leftJoinAndSelect('teamMember.vendor', 'vendor');
+    queryBuilder.leftJoinAndSelect('teamMember.location', 'location', 'location.id = :locationId', { locationId: query.location_id });
 
     if (query.term) {
       queryBuilder.andWhere(

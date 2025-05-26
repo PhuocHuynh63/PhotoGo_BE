@@ -1,14 +1,13 @@
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { Vendor } from '../../vendors/entities/vendor.entity';
-
+import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
+import { Location } from 'src/modules/locations/entities/location.entity';
 @Entity('team_members')
 export class TeamMember {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Vendor, { nullable: false })
-  @JoinColumn({ name: 'vendor_id' })
-  vendor: Vendor;
+  @OneToOne(() => Location, { nullable: false })
+  @JoinColumn({ name: 'location_id' })
+  location: Location;
 
   @Column({ type: 'varchar', length: 100, nullable: false })
   full_name: string;

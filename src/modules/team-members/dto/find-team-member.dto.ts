@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumberString } from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsUUID } from 'class-validator';
 
 export class FindTeamMemberDto {
   @IsNumberString()
@@ -28,6 +28,15 @@ export class FindTeamMemberDto {
     required: false,
   })
   term?: string;
+
+  @IsUUID()
+  @IsOptional()
+  @ApiProperty({
+    example: 'uuid của location',
+    description: 'ID của cửa hàng để lọc thành viên đội',
+    required: false,
+  })
+  location_id?: string;
 
   @IsString()
   @IsOptional()
