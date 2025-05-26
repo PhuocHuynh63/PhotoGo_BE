@@ -33,6 +33,8 @@ export class VendorService {
     private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
@@ -44,19 +46,35 @@ export class VendorService {
     files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
   ): Promise<Vendor> {
     const startTime = Date.now();
-    this.logger.log('Starting create vendor process');
+    this.logger.log('Bắt đầu quá trình tạo nhà cung cấp');
+
+    // Check if user exists and has vendor_owner role
+    const user = await this.userRepository.findOne({
+      where: { id: createVendorDto.user_id },
+      relations: ['role']
+    });
+
+    if (!user) {
+      this.logger.error(`Không tìm thấy user với ID ${createVendorDto.user_id}`);
+      throw new NotFoundException(`Không tìm thấy user với ID ${createVendorDto.user_id}`);
+    }
+
+    if (user.role?.id !== 'R008') {
+      this.logger.error(`User ${createVendorDto.user_id} không có vai trò vendor_owner`);
+      throw new BadRequestException('Chỉ có user với vai trò vendor_owner mới có thể tạo nhà cung cấp');
+    }
 
     // Upload file trước khi bắt đầu transaction
     const vendorData: Partial<Vendor> = {
       name: createVendorDto.name,
       description: createVendorDto.description,
-      user_id: { id: createVendorDto.user_id } as User,
+      user_id: user,
       status: createVendorDto.status || VendorStatus.ACTIVE,
     };
 
     // Upload logo
     if (files.logo) {
-      this.logger.log('Uploading logo');
+      this.logger.log('Tải lên logo');
       try {
         const uploadResult = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
         vendorData.logo = uploadResult;

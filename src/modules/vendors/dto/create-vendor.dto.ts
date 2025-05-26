@@ -8,8 +8,6 @@ import { Logger } from '@nestjs/common';
 
 import { VendorManagerRole } from '../../../constants/vendor.enum';
 export class CreateVendorDto {
-  private readonly logger = new Logger(CreateVendorDto.name);
-
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
