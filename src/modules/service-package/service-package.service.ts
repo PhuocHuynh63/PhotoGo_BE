@@ -13,6 +13,7 @@ import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
 import { DataSource } from 'typeorm';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
+import { ServiceConceptImage } from './entities/service-concept-image.entity';
 
 @Injectable()
 export class ServicePackageService {
@@ -29,6 +30,8 @@ export class ServicePackageService {
     private readonly serviceTypeRepository: Repository<ServiceType>,
     @InjectRepository(ServiceConcept)
     private readonly serviceConceptRepository: Repository<ServiceConcept>,
+    @InjectRepository(ServiceConceptImage)
+    private readonly serviceConceptImageRepository: Repository<ServiceConceptImage>,
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
   ) {}
@@ -84,6 +87,7 @@ export class ServicePackageService {
     const queryBuilder = this.servicePackageRepository.createQueryBuilder('service_package');
     queryBuilder.leftJoinAndSelect('service_package.vendor', 'vendor');
     queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
+    queryBuilder.leftJoinAndSelect('service_concept.images', 'images');
 
     const [data, totalItem] = await queryBuilder
       .skip(skip)
@@ -104,7 +108,7 @@ export class ServicePackageService {
   async findOne(id: string): Promise<ServicePackage> {
     const servicePackage = await this.servicePackageRepository.findOne({
       where: { id },
-      relations: ['vendor', 'serviceConcepts'],
+      relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images'],
     });
     if (!servicePackage) {
       throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
@@ -366,12 +370,22 @@ export class ServicePackageService {
       duration: createServiceConceptDto.duration,
       status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
       servicePackage: servicePackage,
-      images: uploadedImageUrls,
     };
 
     // Create the service concept
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
     const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
+
+    // Create service concept images
+    if (uploadedImageUrls.length > 0) {
+      const imageEntities = uploadedImageUrls.map(url => 
+        this.serviceConceptImageRepository.create({
+          imageUrl: url,
+          serviceConceptId: savedServiceConcept.id
+        })
+      );
+      await this.serviceConceptImageRepository.save(imageEntities);
+    }
 
     // If service type IDs are provided, link them to the concept
     if (createServiceConceptDto.serviceTypeIds && createServiceConceptDto.serviceTypeIds.length > 0) {
@@ -422,6 +436,7 @@ export class ServicePackageService {
     const queryBuilder = this.serviceConceptRepository.createQueryBuilder('service_concept');
     queryBuilder.leftJoinAndSelect('service_concept.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
     queryBuilder.leftJoinAndSelect('serviceConceptServiceTypes.serviceType', 'serviceType');
+    queryBuilder.leftJoinAndSelect('service_concept.images', 'images');
 
     const [data, totalItem] = await queryBuilder
       .skip(skip)
@@ -442,7 +457,7 @@ export class ServicePackageService {
   async findServiceConcept(id: string): Promise<ServiceConcept> {
     const serviceConcept = await this.serviceConceptRepository.findOne({
       where: { id },
-      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType'],
+      relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType', 'images'],
     });
     if (!serviceConcept) {
       throw new NotFoundException(`Khái niệm dịch vụ với ID ${id} không tồn tại`);
@@ -462,7 +477,16 @@ export class ServicePackageService {
       this.logger.log('Uploading new images');
       try {
         const uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
-        serviceConcept.images = uploadedImageUrls;
+        // Delete existing images
+        await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
+        // Create new images
+        const imageEntities = uploadedImageUrls.map(url => 
+          this.serviceConceptImageRepository.create({
+            imageUrl: url,
+            serviceConceptId: id
+          })
+        );
+        await this.serviceConceptImageRepository.save(imageEntities);
       } catch (error) {
         this.logger.error(`Error uploading images: ${error.message}`);
         throw new BadRequestException(`Error uploading images: ${error.message}`);
@@ -607,7 +631,7 @@ export class ServicePackageService {
         sc.description as service_concept_description,
         sc.price as service_concept_price,
         sc.duration as service_concept_duration,
-        sc.image_url as service_concept_image_url,
+        ARRAY_AGG(DISTINCT sci.image_url) FILTER (WHERE sci.image_url IS NOT NULL) as service_concept_image_url,
         st.id as service_type_id,
         st.name as service_type_name,
         st.description as service_type_description
@@ -615,8 +639,13 @@ export class ServicePackageService {
       JOIN service_package sp ON sp.id = fp.id
       LEFT JOIN service_package_prices spp ON spp.id = sp.id
       LEFT JOIN service_concept sc ON sc.service_package_id = sp.id AND sc.status = 'hoạt động'
+      LEFT JOIN service_concept_image sci ON sci.service_concept_id = sc.id
       LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
       LEFT JOIN service_type st ON st.id = sct.service_type_id
+      GROUP BY 
+        sp.id, sp.name, sp.description, sp.image_url, sp.status, sp.created_at, sp.updated_at,
+        spp.min_price, spp.max_price, sc.id, sc.name, sc.description, sc.price, sc.duration,
+        st.id, st.name, st.description
     `;
 
     // Add sorting

@@ -11,7 +11,7 @@ import {
 import { ServiceConceptStatus } from 'src/constants/servicePackage.enum';
 import { ServicePackage } from './service-package.entity';
 import { ServiceConceptServiceType } from './service-concept-service-type.entity';
-
+import { ServiceConceptImage } from './service-concept-image.entity';
 
 @Entity('service_concept')
 export class ServiceConcept {
@@ -27,8 +27,8 @@ export class ServiceConcept {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column("text", { array: true, nullable: true , name: 'image_url'})
-  images: string[];
+  @OneToMany(() => ServiceConceptImage, (serviceConceptImage) => serviceConceptImage.serviceConcept)
+  images: ServiceConceptImage[];
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.0, nullable: false })
   price: number;
