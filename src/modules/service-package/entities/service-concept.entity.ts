@@ -27,7 +27,7 @@ export class ServiceConcept {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'simple-json', nullable: true, name: 'image_url' })
+  @Column("text", { array: true, nullable: true , name: 'image_url'})
   images: string[];
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.0, nullable: false })

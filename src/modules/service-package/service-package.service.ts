@@ -750,7 +750,7 @@ export class ServicePackageService {
             description: row.service_concept_description,
             price: Number(parseFloat(row.service_concept_price).toFixed(2)),
             duration: row.service_concept_duration,
-            images: row.service_concept_image_url ? JSON.parse(row.service_concept_image_url) : [],
+            images: Array.isArray(row.service_concept_image_url) ? row.service_concept_image_url : [],
             serviceTypes: new Map<string, any>() // Use a Map for types to avoid duplicates
           });
         }

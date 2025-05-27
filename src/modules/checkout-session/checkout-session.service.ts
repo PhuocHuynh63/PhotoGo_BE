@@ -1,6 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 
 @Injectable()
 export class CheckoutSessionService {
@@ -21,10 +20,10 @@ export class CheckoutSessionService {
   }
 
   async createSession(
-    createCheckoutSessionDto: CreateCheckoutSessionDto,
+    sessionData: string,
     userId?: string,
     deviceId?: string,
-  ): Promise<{ message: string; key: string; data: CreateCheckoutSessionDto }> {
+  ): Promise<{ message: string; key: string; data: string }> {
     try {
       const sessionKey = this.getSessionKey(userId, deviceId);
       
@@ -36,7 +35,7 @@ export class CheckoutSessionService {
 
       await this.redisClient.set(
         sessionKey,
-        JSON.stringify(createCheckoutSessionDto),
+        sessionData,
         'EX',
         this.SESSION_TTL
       );
@@ -44,7 +43,7 @@ export class CheckoutSessionService {
       return {
         message: 'Phiên đặt chỗ đã được lưu thành công',
         key: sessionKey,
-        data: createCheckoutSessionDto,
+        data: sessionData,
       };
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -54,7 +53,7 @@ export class CheckoutSessionService {
     }
   }
 
-  async getSession(userId?: string, deviceId?: string): Promise<CreateCheckoutSessionDto | { message: string }> {
+  async getSession(userId?: string, deviceId?: string): Promise<string | { message: string }> {
     try {
       const sessionKey = this.getSessionKey(userId, deviceId);
       
@@ -65,13 +64,11 @@ export class CheckoutSessionService {
           message: 'Không tìm thấy phiên đặt chỗ',
         };
       }
-
-      const parsedData = JSON.parse(sessionData);
       
       // Reset TTL on access
       await this.updateSessionTTL(userId, deviceId);
       
-      return parsedData;
+      return sessionData;
     } catch (error) {
       throw new BadRequestException('Không thể lấy phiên đặt chỗ');
     }
@@ -96,27 +93,26 @@ export class CheckoutSessionService {
   }
 
   async updateSessionData(
-    data: Partial<CreateCheckoutSessionDto>,
+    data: string,
     userId?: string,
     deviceId?: string,
-  ): Promise<CreateCheckoutSessionDto> {
+  ): Promise<string> {
     try {
       const sessionKey = this.getSessionKey(userId, deviceId);
       const existingData = await this.getSession(userId, deviceId);
-
-      if ('message' in existingData) {
+      
+      if (typeof existingData === 'object' && 'message' in existingData) {
         throw new NotFoundException('Không tìm thấy phiên đặt chỗ');
       }
 
-      const updatedData = { ...existingData, ...data };
       await this.redisClient.set(
         sessionKey,
-        JSON.stringify(updatedData),
+        data,
         'EX',
         this.SESSION_TTL
       );
 
-      return updatedData;
+      return data;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;

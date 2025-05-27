@@ -1,87 +1,106 @@
-import { Controller, Post, Get, Body, Headers, Request, Delete, Patch, Param } from '@nestjs/common';
-import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiParam } from '@nestjs/swagger';
+import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { CheckoutSessionService } from './checkout-session.service';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
+import { Public } from 'src/decorator/custom';
 
-@ApiTags('Checkout Session')
+@ApiTags('checkout-session')
 @Controller('checkout-session')
+@ApiHeader({
+  name: 'device-id',
+  description: 'ID của thiết bị (bắt buộc nếu không có userId)',
+  required: false
+})
+@ApiBearerAuth('access-token')
 export class CheckoutSessionController {
-  constructor(
-    private readonly checkoutSessionService: CheckoutSessionService,
-  ) {}
+  constructor(private readonly checkoutSessionService: CheckoutSessionService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Lưu thông tin phiên đặt chỗ' })
-  @ApiResponse({ status: 201, description: 'Phiên đặt chỗ đã được lưu thành công' })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ hoặc phiên đã tồn tại' })
-  @ApiHeader({ name: 'x-device-id', required: false, description: 'Device ID for non-authenticated users' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Tạo phiên đặt chỗ mới' })
+  @ApiResponse({ status: 201, description: 'Phiên đặt chỗ đã được tạo thành công' })
+  @ApiResponse({ status: 400, description: 'Không có ID người dùng hoặc ID thiết bị' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionData: {
+          type: 'string',
+          description: 'Dữ liệu phiên đặt chỗ',
+          example: '{"vendorId": "123", "servicePackageId": "456", "selectedTime": "2024-03-20T14:00:00Z"}'
+        }
+      }
+    }
+  })
   async createSession(
-    @Body() createCheckoutSessionDto: CreateCheckoutSessionDto,
-    @Request() req: any,
-    @Headers('x-device-id') deviceId?: string,
+    @Body('sessionData') sessionData: string,
+    @Req() req: any,
   ) {
-    const userId = req.user?.id;
     return this.checkoutSessionService.createSession(
-      createCheckoutSessionDto,
-      userId,
-      deviceId
+      sessionData,
+      req.user?.id,
+      req.headers['device-id'],
     );
   }
 
   @Get()
+  @Public()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Lấy thông tin phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Thông tin phiên đặt chỗ' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy phiên đặt chỗ' })
-  @ApiHeader({ name: 'x-device-id', required: false, description: 'Device ID for non-authenticated users' })
-  async getSession(
-    @Request() req: any,
-    @Headers('x-device-id') deviceId?: string,
-  ) {
-    const userId = req.user?.id;
-    return this.checkoutSessionService.getSession(userId, deviceId);
-  }
-
-  @Get('ttl')
-  @ApiOperation({ summary: 'Lấy thời gian còn lại của phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Thời gian còn lại (giây)' })
-  @ApiHeader({ name: 'x-device-id', required: false, description: 'Device ID for non-authenticated users' })
-  async getSessionTTL(
-    @Request() req: any,
-    @Headers('x-device-id') deviceId?: string,
-  ) {
-    const userId = req.user?.id;
-    const ttl = await this.checkoutSessionService.getSessionTTL(userId, deviceId);
-    return { ttl };
-  }
-
-  @Patch()
-  @ApiOperation({ summary: 'Cập nhật thông tin phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Thông tin phiên đặt chỗ đã được cập nhật' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy phiên đặt chỗ' })
-  @ApiHeader({ name: 'x-device-id', required: false, description: 'Device ID for non-authenticated users' })
-  async updateSession(
-    @Body() updateData: Partial<CreateCheckoutSessionDto>,
-    @Request() req: any,
-    @Headers('x-device-id') deviceId?: string,
-  ) {
-    const userId = req.user?.id;
-    return this.checkoutSessionService.updateSessionData(
-      updateData,
-      userId,
-      deviceId
+  @ApiResponse({ status: 200, description: 'Lấy thông tin phiên đặt chỗ thành công' })
+  async getSession(@Req() req: any) {
+    return this.checkoutSessionService.getSession(
+      req.user?.id,
+      req.headers['device-id'],
     );
   }
 
   @Delete()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Xóa phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Phiên đặt chỗ đã được xóa thành công' })
-  @ApiHeader({ name: 'x-device-id', required: false, description: 'Device ID for non-authenticated users' })
-  async deleteSession(
-    @Request() req: any,
-    @Headers('x-device-id') deviceId?: string,
+  @ApiResponse({ status: 200, description: 'Xóa phiên đặt chỗ thành công' })
+  async deleteSession(@Req() req: any) {
+    return this.checkoutSessionService.deleteSession(
+      req.user?.id,
+      req.headers['device-id'],
+    );
+  }
+
+  @Post('update')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Cập nhật thông tin phiên đặt chỗ' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thông tin phiên đặt chỗ thành công' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionData: {
+          type: 'string',
+          description: 'Dữ liệu phiên đặt chỗ mới',
+          example: '{"vendorId": "123", "servicePackageId": "456", "selectedTime": "2024-03-20T14:00:00Z"}'
+        }
+      }
+    }
+  })
+  async updateSessionData(
+    @Body('sessionData') sessionData: string,
+    @Req() req: any,
   ) {
-    const userId = req.user?.id;
-    await this.checkoutSessionService.deleteSession(userId, deviceId);
-    return { message: 'Phiên đặt chỗ đã được xóa thành công' };
+    return this.checkoutSessionService.updateSessionData(
+      sessionData,
+      req.user?.id,
+      req.headers['device-id'],
+    );
+  }
+
+  @Get('ttl')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Lấy thời gian sống còn lại của phiên đặt chỗ' })
+  @ApiResponse({ status: 200, description: 'Lấy thời gian sống thành công' })
+  async getSessionTTL(@Req() req: any) {
+    return this.checkoutSessionService.getSessionTTL(
+      req.user?.id,
+      req.headers['device-id'],
+    );
   }
 } 
