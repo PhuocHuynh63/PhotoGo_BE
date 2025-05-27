@@ -7,6 +7,7 @@ import { ServicePackageMetadata } from './entities/service-package-metadata.enti
 import { ServiceConceptServiceType } from './entities/service-concept-service-type.entity';
 import { ServiceType } from './entities/service-type.entity';
 import { ServiceConcept } from './entities/service-concept.entity';
+import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { UploadModule } from 'src/3rdService/upload/upload.module';
 import { AuthModule } from '../auth/auth.module';
 
@@ -18,6 +19,7 @@ import { AuthModule } from '../auth/auth.module';
       ServiceConceptServiceType,
       ServiceType,
       ServiceConcept,
+      ServiceConceptImage,
     ]),
     UploadModule,
     AuthModule,

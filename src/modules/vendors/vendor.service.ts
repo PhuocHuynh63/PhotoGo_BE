@@ -160,7 +160,7 @@ export class VendorService {
         this.logger.log('Fetching saved vendor with relations');
         const result = await vendorRepo.findOne({
           where: { id: savedVendor.id },
-          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'user_id', 'user_id.role'],
+          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'servicePackages.serviceConcepts.images', 'user_id', 'user_id.role'],
         });
 
         this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
@@ -177,7 +177,17 @@ export class VendorService {
   async findOne(id: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { id },
-      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'user_id', 'user_id.role'],
+      relations: [
+        'category', 
+        'locations', 
+        'servicePackages', 
+        'servicePackages.serviceConcepts', 
+        'servicePackages.serviceConcepts.serviceConceptServiceTypes', 
+        'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 
+        'servicePackages.serviceConcepts.images',
+        'user_id', 
+        'user_id.role'
+      ],
     });
     if (!vendor) {
       throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
@@ -227,7 +237,7 @@ export class VendorService {
         id: concept.id,
         name: concept.name,
         description: concept.description,
-        images: concept.images || [],
+        images: concept.images.map(img => img.imageUrl),
         price: concept.price,
         duration: concept.duration,
         serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
@@ -264,7 +274,8 @@ export class VendorService {
     queryBuilder.leftJoinAndSelect('vendor.category', 'category');
     queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
     queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'service_package');
-    queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept'); 
+    queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
+    queryBuilder.leftJoinAndSelect('service_concept.images', 'service_concept_images');
 
     if (query.term) {
       queryBuilder.andWhere(
@@ -303,7 +314,7 @@ export class VendorService {
   async findBySlug(slug: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { slug },
-      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType'],
+      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'servicePackages.serviceConcepts.images'],
     });
 
     if (!vendor) {
@@ -498,6 +509,7 @@ export class VendorService {
       .leftJoinAndSelect('vendor.category', 'category')
       .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
       .leftJoinAndSelect('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoinAndSelect('serviceConcepts.images', 'images')
       .leftJoinAndSelect('vendor.reviews', 'reviews')
       .where('location.city ILIKE :city', { city: `%${city}%` })
       .getMany();
