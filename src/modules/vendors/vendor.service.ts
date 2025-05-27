@@ -765,7 +765,7 @@ export class VendorService {
           sc.description as service_concept_description,
           sc.price as service_concept_price,
           sc.duration as service_concept_duration,
-          COALESCE(sc.image_url::text, '[]')::json as service_concept_images
+          COALESCE(sc.image_url, ARRAY[]::text[]) as service_concept_images
         FROM service_package sp
         LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         WHERE sp.vendor_id = ANY($1) AND sp.status = 'hoạt động'
