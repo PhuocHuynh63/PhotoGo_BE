@@ -101,8 +101,25 @@ export class PaymentService {
         paymentOSId: paymentLinkRes.paymentLinkId, // Lưu paymentId từ PayOS
       });
 
-      await this.bookingService.update(invoice.booking.id, {
-        status: BookingStatus.COMPLETED});
+      // Update booking status
+      if (invoice.booking && invoice.booking.id) {
+        const booking = await this.bookingService.findOne(invoice.booking.id);
+        
+        if (booking) {
+          try {
+            await this.bookingService.update(booking.id, {
+              status: BookingStatus.COMPLETED
+            });
+          } catch (error) {
+            console.error('Lỗi cập nhật trạng thái booking', error);
+            throw error;
+          }
+        } else {
+            console.log('Booking không tồn tại');
+        }
+      } else {
+        console.log('Không tìm thấy booking trong hóa đơn');
+      }
         
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,

@@ -10,6 +10,9 @@ export class Voucher {
   @Column({ type: 'varchar', length: 50, nullable: false, unique: true })
   code: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  description?: string;
+
   @Column({ type: 'varchar', length: 20, nullable: false })
   discount_type: string;
 

@@ -10,7 +10,7 @@ import { VoucherService } from '../vouchers/voucher.service';
 import e from 'express';
 import { InvoiceStatus } from 'src/constants/booking.enum';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherTypeDiscount } from 'src/constants/voucher.enum';
 
 @Injectable()
 export class InvoiceService {
@@ -51,46 +51,56 @@ export class InvoiceService {
       const now = new Date();
       const startDate = new Date(voucher.startDate);
       const endDate = new Date(voucher.endDate);
-      if (now > startDate || now < endDate || voucher.status !== VoucherStatusEnum.ACTIVE) {
+      if (now < startDate || now > endDate || voucher.status !== VoucherStatusEnum.ACTIVE) {
         throw new NotFoundException(`Voucher với ID ${voucherId} không hợp lệ`);
       }
 
-      // Tính toán discountAmount dựa trên voucher
-      if (voucher.discountType === 'PERCENTAGE') {
-        discountAmount = (originalPrice * voucher.discountValue) / 100;
-      } else if (voucher.discountType === 'FIXED') {
-        discountAmount = voucher.discountValue;
+      // Kiểm tra xem user đã sử dụng voucher này chưa
+      const voucherUser = await this.voucherService.findOneVoucherUser(voucherId, booking.userId);
+      if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
+        throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${booking.userId} không tồn tại hoặc không khả dụng`);
       }
 
-      //3. Tinh discountedPrice
-      const discountedPrice = originalPrice - discountAmount;
-
-      //4. Tinh taxAmount
-      const taxAmount = discountedPrice * 0.1; // Giả sử thuế là 10%
-      
-      //5. Tinh feeAmount
-      const feeAmount = 0; // Giả sử không có phí nào
-
-      //6. Tinh payablePrice
-      const payablePrice = discountedPrice + taxAmount + feeAmount;
-
-      //7. Tao invoice
-      const invoice = this.invoiceRepository.create({
-        ...createInvoiceDto,
-        booking,
-        originalPrice,
-        discountAmount,
-        discountedPrice,
-        taxAmount,
-        feeAmount,
-        payablePrice,
-        status: InvoiceStatus.PENDING,
-      });
-
-      // Cập nhật trạng thái voucher thành USED (nếu cần)
-      await this.voucherService.useVoucher(voucher.id,booking.userId);
-      return this.invoiceRepository.save(invoice);
+      // Tính toán discountAmount dựa trên voucher
+      if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
+        const discountValue = parseFloat(voucher.discount_value);
+        discountAmount = Math.round((originalPrice * discountValue) / 100);
+      } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
+        discountAmount = Math.round(parseFloat(voucher.discount_value));
+      }
     }
+
+    //3. Tinh discountedPrice
+    const discountedPrice = originalPrice - discountAmount;
+
+    //4. Tinh taxAmount
+    const taxAmount = Math.round(discountedPrice * 0.1); // Giả sử thuế là 10%
+    
+    //5. Tinh feeAmount
+    const feeAmount = 0; // Giả sử không có phí nào
+
+    //6. Tinh payablePrice
+    const payablePrice = discountedPrice + taxAmount + feeAmount;
+
+    //7. Tao invoice
+    const invoice = this.invoiceRepository.create({
+      ...createInvoiceDto,
+      booking,
+      originalPrice,
+      discountAmount,
+      discountedPrice,
+      taxAmount,
+      feeAmount,
+      payablePrice,
+      status: InvoiceStatus.PENDING,
+    });
+
+    // Cập nhật trạng thái voucher thành USED (nếu có voucher)
+    if (voucher) {
+      await this.voucherService.useVoucher(voucher.id, booking.userId);
+    }
+
+    return this.invoiceRepository.save(invoice);
   }
 
   async findAll(query: FindAllInvoicesDto): Promise<Invoice[]> {

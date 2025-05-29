@@ -77,17 +77,23 @@ export class BookingService {
     const booking = await this.findOne(id);
 
     if (updateBookingDto.status) {
+      // Update booking status
       booking.status = updateBookingDto.status;
+      const updatedBooking = await this.bookingRepository.save(booking);
 
-      // Cập nhật lịch sử thay đổi trạng thái
+      // Create a new history record with the correct booking ID
       const history = this.bookingHistoryRepository.create({
-        bookingId: booking.id,
+        bookingId: updatedBooking.id,
         status: updateBookingDto.status,
       });
+      
+      // Save the new history record
       await this.bookingHistoryRepository.save(history);
+      
+      return updatedBooking;
     }
 
-    return this.bookingRepository.save(booking);
+    return booking;
   }
 
   async remove(id: string): Promise<void> {
