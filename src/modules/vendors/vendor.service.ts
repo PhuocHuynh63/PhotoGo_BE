@@ -777,12 +777,14 @@ export class VendorService {
           sc.description as service_concept_description,
           sc.price as service_concept_price,
           sc.duration as service_concept_duration,
-          COALESCE(sc.image_url, ARRAY[]::text[]) as service_concept_images
+          COALESCE(ARRAY_AGG(sci.image_url) FILTER (WHERE sci.image_url IS NOT NULL), ARRAY[]::text[]) as service_concept_images
         FROM service_package sp
         LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        LEFT JOIN service_concept_image sci ON sci.service_concept_id = sc.id
         WHERE sp.vendor_id = ANY($1) AND sp.status = 'hoạt động'
+        GROUP BY sp.id, sc.id, sc.name, sc.description, sc.price, sc.duration
         ORDER BY sp.id, sc.id
-      `, [vendorIds]),
+        `, [vendorIds]),
       this.dataSource.query(`
         SELECT *
         FROM review
