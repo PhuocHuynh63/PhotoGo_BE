@@ -157,6 +157,15 @@ export class VendorController {
     return this.vendorService.findAll(query);
   }
 
+  @Get('user/:userID')
+  @Public()
+  @ApiOperation({ summary: 'Lấy một nhà cung cấp theo userID (Public)' })
+  @ApiResponse({ status: 200, type: VendorResponseDto })
+  async getVendorByUserID(@Param('userID') userID: string): Promise<VendorResponseDto> {
+    const vendor = await this.vendorService.getVendorByUserID(userID);
+    return this.vendorService.getVendorResponse(vendor.id, this.reviewService);
+  }
+  
   //#region Get by ID (last)
   @Public()
   @Get(':id')
