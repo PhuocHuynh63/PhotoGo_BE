@@ -525,6 +525,7 @@ export class VendorService {
     maxPrice?: number;
     minRating?: number;
     maxRating?: number;
+    category?: string;
     current?: string;
     pageSize?: string;
     sortBy?: VendorSortField;
@@ -579,12 +580,14 @@ export class VendorService {
         SELECT DISTINCT v.id
         FROM vendors v
         LEFT JOIN locations l ON l.vendor_id = v.id
+        LEFT JOIN category c ON c.id = v.category_id
         WHERE v.status = 'hoạt động'
         ${params.location ? `AND EXISTS (
           SELECT 1 FROM locations l2 
           WHERE l2.vendor_id = v.id 
           AND unaccent(l2.city) ILIKE unaccent($${paramIndex})
         )` : ''}
+        ${params.category ? `AND c.id = $${paramIndex}` : ''}
       )
       SELECT DISTINCT 
         v.id,
@@ -655,6 +658,12 @@ export class VendorService {
     if (params.maxRating !== undefined) {
       baseQuery += ` AND vs.avg_rating <= $${paramIndex}`;
       baseParams.push(params.maxRating);
+      paramIndex++;
+    }
+
+    if (params.category) {
+      baseQuery += ` AND c.id = $${paramIndex}`;
+      baseParams.push(params.category);
       paramIndex++;
     }
   
@@ -745,6 +754,12 @@ export class VendorService {
     if (params.maxRating !== undefined) {
       countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
       countParams.push(params.maxRating);
+      countParamIndex++;
+    }
+
+    if (params.category) {
+      countQuery += ` AND c.id = $${countParamIndex}`;
+      countParams.push(params.category);
       countParamIndex++;
     }
   

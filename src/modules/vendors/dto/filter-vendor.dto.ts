@@ -71,6 +71,15 @@ export class FilterVendorDto {
   })
   maxRating?: number;
 
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Loại dịch vụ',
+    example: 'Nhà hàng',
+    required: false,
+  })
+  category?: string;
+  
   @IsNumberString()
   @IsOptional()
   @ApiProperty({
