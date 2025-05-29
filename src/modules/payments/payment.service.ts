@@ -50,7 +50,7 @@ export class PaymentService {
     });
 
     if (!payment) {
-      throw new NotFoundException(`Payment with ID ${id} not found`);
+      throw new NotFoundException(`Thanh toán với ID ${id} không tồn tại`);
     }
 
     return payment;
@@ -60,15 +60,15 @@ export class PaymentService {
     console.log(`Received invoiceId: ${invoiceId}`);
     const invoice = await this.invoiceRepo.findOne({ 
       where: { id: invoiceId },
-      relations: ['booking', 'booking.user', 'booking.servicePackage'],
+      relations: ['booking', 'booking.user', 'booking.serviceConcept'],
     });
     
     if (!invoice) {
-      throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+      throw new NotFoundException(`Hóa đơn với ID ${invoiceId} không tồn tại`);
     }
 
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
-    const servicePackage = invoice.booking?.servicePackage;
+    const serviceConcept = invoice.booking?.serviceConcept;
     const orderCode = Date.now(); // Sử dụng timestamp để đảm bảo unique
     const description = `PG#${orderCode}`;
     const paymentLinkData = {
@@ -81,9 +81,9 @@ export class PaymentService {
       buyerName,
       items: [
         {
-          name: servicePackage?.name || 'Dịch vụ không xác định',
+          name: serviceConcept?.name || 'Dịch vụ không xác định',
           quantity: 1,
-          price: Number(servicePackage?.price) || 0,
+          price: Number(serviceConcept?.price) || 0,
         },
       ],
     };
@@ -101,15 +101,32 @@ export class PaymentService {
         paymentOSId: paymentLinkRes.paymentLinkId, // Lưu paymentId từ PayOS
       });
 
-      await this.bookingService.update(invoice.booking.id, {
-        status: BookingStatus.COMPLETED});
+      // Update booking status
+      if (invoice.booking && invoice.booking.id) {
+        const booking = await this.bookingService.findOne(invoice.booking.id);
+        
+        if (booking) {
+          try {
+            await this.bookingService.update(booking.id, {
+              status: BookingStatus.COMPLETED
+            });
+          } catch (error) {
+            console.error('Lỗi cập nhật trạng thái booking', error);
+            throw error;
+          }
+        } else {
+            console.log('Booking không tồn tại');
+        }
+      } else {
+        console.log('Không tìm thấy booking trong hóa đơn');
+      }
         
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,
       };
     } catch (error) {
       console.error('PayOS error:', error);
-      throw new Error('Failed to create payment link');
+      throw new Error('Lỗi khi tạo liên kết thanh toán');
     }
   }
 
@@ -120,7 +137,7 @@ export class PaymentService {
     const invoice = await this.invoiceRepo.findOne({ where: { id: payment.invoiceId } });
 
     if (!payment) {
-      throw new NotFoundException(`Payment with transaction ID ${transactionId} not found`);
+      throw new NotFoundException(`Thanh toán với ID ${transactionId} không tồn tại`);
     }
 
     if (status === 'COMPLETED') {

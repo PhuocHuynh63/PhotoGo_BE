@@ -6,7 +6,7 @@ export class FindVoucherDto {
   @IsOptional()
   @ApiProperty({
     example: '1',
-    description: 'Page number for pagination',
+    description: 'Số trang cho phép chia',
     required: false,
   })
   current?: string;
@@ -15,7 +15,7 @@ export class FindVoucherDto {
   @IsOptional()
   @ApiProperty({
     example: '10',
-    description: 'Number of items per page for pagination',
+    description: 'Số mục trên mỗi trang cho phép chia',
     required: false,
   })  
   pageSize?: string;
@@ -24,7 +24,7 @@ export class FindVoucherDto {
   @IsOptional()
   @ApiProperty({
     example: 'GiamGia20',
-    description: 'Search term for filtering vouchers',
+    description: 'Từ tìm kiếm để lọc mã giảm giá',
     required: false,
   })
   term?: string;
@@ -33,7 +33,7 @@ export class FindVoucherDto {
   @IsOptional()
   @ApiProperty({
     example: 'created_at',
-    description: 'Field to sort by',
+    description: 'Trường để sắp xếp',
     required: false,
   })
   sortBy?: string;
@@ -42,7 +42,7 @@ export class FindVoucherDto {
   @IsOptional()
   @ApiProperty({
     example: 'asc',
-    description: 'Sort direction (asc or desc)',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';

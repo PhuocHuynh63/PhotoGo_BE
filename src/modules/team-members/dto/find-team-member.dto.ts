@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumberString } from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsUUID } from 'class-validator';
 
 export class FindTeamMemberDto {
   @IsNumberString()
   @IsOptional()
   @ApiProperty({
     example: '1',
-    description: 'Page number for pagination',
+    description: 'Số trang cho phân trang',
     required: false,
   })
   current?: string;
@@ -15,7 +15,7 @@ export class FindTeamMemberDto {
   @IsOptional()
   @ApiProperty({
     example: '10',
-    description: 'Number of items per page for pagination',
+    description: 'Số mục trên mỗi trang cho phân trang',
     required: false,
   })
   pageSize?: string;
@@ -24,16 +24,25 @@ export class FindTeamMemberDto {
   @IsOptional()
   @ApiProperty({
     example: 'Nguyễn Văn A',
-    description: 'Search term for filtering team members',
+    description: 'Từ tìm kiếm để lọc thành viên đội',
     required: false,
   })
   term?: string;
+
+  @IsUUID()
+  @IsOptional()
+  @ApiProperty({
+    example: 'uuid của location',
+    description: 'ID của cửa hàng để lọc thành viên đội',
+    required: false,
+  })
+  location_id?: string;
 
   @IsString()
   @IsOptional()
   @ApiProperty({
     example: 'V001',
-    description: 'ID of the vendor to filter team members',
+    description: 'ID của nhà cung cấp để lọc thành viên đội',
     required: false,
   })
   sortBy?: string;
@@ -42,7 +51,7 @@ export class FindTeamMemberDto {
   @IsOptional()
   @ApiProperty({
     example: 'asc',
-    description: 'Sort direction (asc or desc)',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';

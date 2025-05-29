@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Like } from 'typeorm';
+import { Repository, DataSource, Like, Not, In } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
@@ -16,6 +16,7 @@ import { UploadService } from 'src/3rdService/upload/upload.service'; // Assumin
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
 import { ReviewService } from '../reviews/reviews.service'; // Assuming you have a ReviewService for handling reviews
 import { VendorSortField } from 'src/constants/vendor.enum';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class VendorService {
@@ -30,10 +31,13 @@ export class VendorService {
     private readonly vendorLikeRepository: Repository<VendorLike>,
     @InjectRepository(VendorAvailability)
     private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
-
   ) { }
 
   //#region CreateVendor
@@ -42,24 +46,47 @@ export class VendorService {
     files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
   ): Promise<Vendor> {
     const startTime = Date.now();
-    this.logger.log('Starting create vendor process');
+    this.logger.log('Bắt đầu quá trình tạo nhà cung cấp');
 
+    // Check if user exists and has vendor_owner role
+    const user = await this.userRepository.findOne({
+      where: { id: createVendorDto.user_id },
+      relations: ['role', 'vendor']
+    });
+
+    if (!user) {
+      this.logger.error(`Không tìm thấy user với ID ${createVendorDto.user_id}`);
+      throw new NotFoundException(`Không tìm thấy user với ID ${createVendorDto.user_id}`);
+    }
+
+    if (user.role?.id !== 'R008') {
+      this.logger.error(`User ${createVendorDto.user_id} không có vai trò vendor_owner`);
+      throw new BadRequestException('Chỉ có user với vai trò vendor_owner mới có thể tạo nhà cung cấp');
+    }
+
+    // Check if user already has a vendor
+    if (user.vendor) {
+      this.logger.error(`User ${createVendorDto.user_id} đã có nhà cung cấp`);
+      throw new BadRequestException('User đã có nhà cung cấp, không thể tạo thêm');
+    }
+    
     // Upload file trước khi bắt đầu transaction
     const vendorData: Partial<Vendor> = {
       name: createVendorDto.name,
       description: createVendorDto.description,
+      user_id: user,
       status: createVendorDto.status || VendorStatus.ACTIVE,
     };
 
     // Upload logo
     if (files.logo) {
-      this.logger.log('Uploading logo');
+      this.logger.log('Tải lên logo');
       try {
         const uploadResult = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
         vendorData.logo = uploadResult;
       } catch (error) {
-        this.logger.error(`Failed to upload logo: ${error.message}`);
-        throw new BadRequestException(`Failed to upload logo: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên logo: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên logo: ${error.message}`);
       }
     }
 
@@ -70,8 +97,8 @@ export class VendorService {
         const uploadResult = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
         vendorData.banner = uploadResult;
       } catch (error) {
-        this.logger.error(`Failed to upload banner: ${error.message}`);
-        throw new BadRequestException(`Failed to upload banner: ${error.message}`);
+        this.logger.error(`Lỗi khi tải lên banner: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên banner: ${error.message}`);
       }
     }
 
@@ -88,7 +115,7 @@ export class VendorService {
           where: { id: createVendorDto.category_id },
         });
         if (!category) {
-          throw new NotFoundException(`Category with ID ${createVendorDto.category_id} not found`);
+          throw new NotFoundException(`Danh mục với ID ${createVendorDto.category_id} không tồn tại`);
         }
 
         this.logger.log('Generating unique slug');
@@ -109,7 +136,7 @@ export class VendorService {
 
           const locations = createVendorDto.locations.map((locationDto, index) => {
             if (!locationDto.address) {
-              throw new BadRequestException(`Address is required for location at index ${index}`);
+              throw new BadRequestException(`Địa chỉ là bắt buộc cho vị trí thứ ${index}`);
             }
             const location = locationRepo.create({
               address: locationDto.address,
@@ -127,19 +154,19 @@ export class VendorService {
           this.logger.log(`Mapped locations for saving: ${JSON.stringify(locations)}`);
           await locationRepo.save(locations);
         } else {
-          this.logger.warn('No valid locations provided');
+          this.logger.warn('Không có vị trí hợp lệ được cung cấp');
         }
 
         this.logger.log('Fetching saved vendor with relations');
         const result = await vendorRepo.findOne({
           where: { id: savedVendor.id },
-          relations: ['category', 'locations'],
+          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'servicePackages.serviceConcepts.images', 'user_id', 'user_id.role'],
         });
 
-        this.logger.log(`Create vendor completed in ${Date.now() - startTime}ms`);
+        this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
         return result;
       } catch (error) {
-        this.logger.error(`Transaction failed: ${error.message}`);
+        this.logger.error(`Giao dịch thất bại: ${error.message}`);
         throw error;
       }
     });
@@ -150,10 +177,20 @@ export class VendorService {
   async findOne(id: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { id },
-      relations: ['category', 'locations', 'servicePackages'],
+      relations: [
+        'category', 
+        'locations', 
+        'servicePackages', 
+        'servicePackages.serviceConcepts', 
+        'servicePackages.serviceConcepts.serviceConceptServiceTypes', 
+        'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 
+        'servicePackages.serviceConcepts.images',
+        'user_id', 
+        'user_id.role'
+      ],
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
     return vendor;
   }
@@ -164,20 +201,23 @@ export class VendorService {
     const vendor = await this.findOne(id);
   
     const totalPrice = vendor.servicePackages.reduce(
-      (acc, pkg) => acc + Number(pkg.price), 0,
+      (acc, pkg) => acc + Number(pkg.serviceConcepts.reduce((acc, concept) => acc + Number(concept.price), 0)), 0,
     );
   
     const averageRating = await reviewService.getAverageRatingByVendorId(id);
   
     const response = new VendorResponseDto();
+    response.id = vendor.id;
     response.name = vendor.name;
     response.slug = vendor.slug;
     response.description = vendor.description;
     response.logo = vendor.logo;
     response.banner = vendor.banner;
     response.status = vendor.status;
+    response.user_id = vendor.user_id;
     response.category = vendor.category;
     response.locations = vendor.locations.map(loc => ({
+      id: loc.id,
       address: loc.address,
       district: loc.district,
       ward: loc.ward,
@@ -187,10 +227,27 @@ export class VendorService {
       longitude: loc.longitude,
     }));
     response.servicePackages = vendor.servicePackages.map(pkg => ({
+      id: pkg.id,
       name: pkg.name,
       description: pkg.description,
-      price: pkg.price,
-      duration: pkg.duration,
+      image: pkg.image,
+      status: pkg.status,
+      vendorId: pkg.vendorId,
+      serviceConcepts: pkg.serviceConcepts.map(concept => ({
+        id: concept.id,
+        name: concept.name,
+        description: concept.description,
+        images: concept.images.map(img => img.imageUrl),
+        price: concept.price,
+        duration: concept.duration,
+        serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
+          id: sct.serviceType.id,
+          name: sct.serviceType.name,
+          description: sct.serviceType.description
+        }))
+      })),
+      created_at: pkg.created_at,
+      updated_at: pkg.updated_at
     }));
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
@@ -217,6 +274,8 @@ export class VendorService {
     queryBuilder.leftJoinAndSelect('vendor.category', 'category');
     queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
     queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'service_package');
+    queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
+    queryBuilder.leftJoinAndSelect('service_concept.images', 'service_concept_images');
 
     if (query.term) {
       queryBuilder.andWhere(
@@ -252,35 +311,52 @@ export class VendorService {
   //#endregion findAll
 
   //#region findBySlug
-  async findBySlug(slug: string): Promise<VendorResponseDto> {
+  async findBySlug(slug: string): Promise<Vendor> {
     const vendor = await this.vendorRepository.findOne({
       where: { slug },
-      relations: ['category', 'locations', 'servicePackages', 'reviews'],
+      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'servicePackages.serviceConcepts.images'],
     });
-  
+
     if (!vendor) {
-      throw new NotFoundException(`Vendor with slug ${slug} not found`);
+      throw new NotFoundException(`Nhà cung cấp với slug ${slug} không tồn tại`);
     }
 
-    return this.getVendorResponse(vendor.id, this.reviewService);
+    return vendor;
   }
   //#endregion findBySlug
+
+  //#region getVendorByUserID with role 'ROO8'
+  async getVendorByUserID(userID: string): Promise<Vendor> {
+    const vendor = await this.vendorRepository.findOne({
+      where: { user_id: { id: userID } },
+    });
+    return vendor;
+  }
+  //#endregion getVendorByUserID with role 'ROO8'
 
   //#region findAllWithAvailability
   async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
     const vendors = await this.vendorRepository
       .createQueryBuilder('vendor')
       .leftJoinAndSelect('vendor.availabilities', 'vendor_availability', 
-        'vendor_availability.date = :date AND vendor_availability.isAvailable = true AND vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :endTime',
+        `vendor_availability.date = :date 
+         AND vendor_availability.isAvailable = true 
+         AND (
+           (vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :startTime)
+           OR (vendor_availability.startTime <= :endTime AND vendor_availability.endTime >= :endTime)
+           OR (vendor_availability.startTime >= :startTime AND vendor_availability.endTime <= :endTime)
+         )`,
         { date, startTime, endTime }
       )
       .getMany();
   
-    // Optionally: map isAvailable
-    return vendors.map(vendor => ({
-      ...vendor,
-      isAvailable: vendor.availabilities.length > 0,
-    }));
+    // Filter out vendors without availabilities
+    return vendors
+      .filter(vendor => vendor.availabilities && vendor.availabilities.length > 0)
+      .map(vendor => ({
+        ...vendor,
+        isAvailable: true
+      }));
   }
   //#endregion findAllWithAvailability  
 
@@ -293,7 +369,7 @@ export class VendorService {
     const vendor = await this.vendorRepository.findOne({ where: { id } });
   
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
   
     // Update các field đơn giản nếu được truyền vào
@@ -304,6 +380,10 @@ export class VendorService {
   
     if (updateVendorDto.description !== undefined) {
       vendor.description = updateVendorDto.description;
+    }
+
+    if (updateVendorDto.user_id !== undefined) {
+      vendor.user_id = { id: updateVendorDto.user_id } as User;
     }
   
     if (updateVendorDto.status !== undefined) {
@@ -320,6 +400,48 @@ export class VendorService {
       const uploadedBanner = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
       vendor.banner = uploadedBanner;
     }
+
+    // Update locations
+    if (updateVendorDto.locations) {
+      // First, remove locations that are not in the update list
+      const locationIds = updateVendorDto.locations
+        .filter(loc => loc.id)
+        .map(loc => loc.id);
+      
+      await this.locationRepository.delete({
+        vendor: { id: vendor.id },
+        id: Not(In(locationIds))
+      });
+
+      // Then update or create locations
+      const locations = await Promise.all(updateVendorDto.locations.map(async loc => {
+        if (loc.id) {
+          // Update existing location
+          const existingLocation = await this.locationRepository.findOne({
+            where: { id: loc.id, vendor: { id: vendor.id } }
+          });
+          
+          if (existingLocation) {
+            existingLocation.address = loc.address;
+            existingLocation.district = loc.district;
+            existingLocation.ward = loc.ward;
+            existingLocation.city = loc.city;
+            existingLocation.province = loc.province;
+            existingLocation.latitude = loc.latitude;
+            existingLocation.longitude = loc.longitude;
+            return existingLocation;
+          }
+        }
+        
+        // Create new location
+        return this.locationRepository.create({
+          ...loc,
+          vendor: vendor
+        });
+      }));
+
+      vendor.locations = locations;
+    }
   
     return this.vendorRepository.save(vendor);
   }  
@@ -329,7 +451,7 @@ export class VendorService {
   async remove(id: string): Promise<void> {
     const vendor = await this.vendorRepository.findOne({ where: { id } });
     if (!vendor) {
-      throw new NotFoundException(`Vendor with ID ${id} not found`);
+      throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
 
     await this.vendorRepository.remove(vendor);
@@ -388,45 +510,31 @@ export class VendorService {
   }
   //#endregion Utility
 
-  //#region SearchLocations
-  async searchLocations(searchTerm: string): Promise<{
-    data: Vendor[];
-    pagination: {
-      totalItem: number;
-    };
-  }> {
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
-    queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-
-    // Search in location fields
-    queryBuilder.andWhere(
-      `(unaccent(locations.address) ILIKE unaccent(:term) OR 
-        unaccent(locations.district) ILIKE unaccent(:term) OR 
-        unaccent(locations.ward) ILIKE unaccent(:term) OR 
-        unaccent(locations.city) ILIKE unaccent(:term) OR 
-        unaccent(locations.province) ILIKE unaccent(:term))`,
-      { term: `%${searchTerm}%` }
-    );
-
-    const [data, totalItem] = await queryBuilder.getManyAndCount();
-
-    return {
-      data,
-      pagination: {
-        totalItem,
-      },
-    };
+  //#region SearchLocations with City only link with vendor
+  async searchLocationsWithCity(city: string): Promise<Location[]> {
+    const locations = await this.locationRepository
+      .createQueryBuilder('location')
+      .leftJoinAndSelect('location.vendor', 'vendor')
+      .leftJoinAndSelect('vendor.category', 'category')
+      .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
+      .leftJoinAndSelect('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoinAndSelect('serviceConcepts.images', 'images')
+      .leftJoinAndSelect('vendor.reviews', 'reviews')
+      .where('location.city ILIKE :city', { city: `%${city}%` })
+      .getMany();
+    return locations;
   }
-  //#endregion SearchLocations
+  //#endregion SearchLocations with City only link with vendor
 
   //#region filterVendors
   async filterVendors(params: {
+    name?: string;
     location?: string;
     minPrice?: number;
     maxPrice?: number;
     minRating?: number;
     maxRating?: number;
+    category?: string;
     current?: string;
     pageSize?: string;
     sortBy?: VendorSortField;
@@ -441,246 +549,375 @@ export class VendorService {
     };
   }> {
     const currentPage = params.current ? Number(params.current) : 1;
-    const pageSize = params.pageSize ? Number(params.pageSize) : 10;
+    const pageSize = params.pageSize ? Number(params.pageSize) : 3; // Mặc định pageSize là 3
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
-
-    let query = `
+    let paramIndex = 1;
+    const baseParams: any[] = [];
+  
+    // Base query for vendor filtering
+    let baseQuery = `
       WITH vendor_stats AS (
         SELECT 
           v.id,
-          AVG(r.rating) as avg_rating
+          COALESCE(AVG(r.rating), 0) as avg_rating,
+          COUNT(r.id) as review_count
         FROM vendors v
         LEFT JOIN review r ON r.vendor_id = v.id
         GROUP BY v.id
       ),
-      vendor_data AS (
+      vendor_prices AS (
         SELECT 
-          v.*,
-          vs.avg_rating,
-          l.id as location_id,
-          l.address,
-          l.district,
-          l.ward,
-          l.city,
-          l.province,
-          l.latitude,
-          l.longitude,
-          c.id as category_id,
-          c.name as category_name
+          v.id,
+          MIN(sc.price) as min_price,
+          MAX(sc.price) as max_price
         FROM vendors v
-        LEFT JOIN vendor_stats vs ON vs.id = v.id
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        GROUP BY v.id
+      ),
+      vendor_subscriptions AS (
+        SELECT 
+          v.id,
+          COUNT(s.id) as subscription_count,
+          RANK() OVER (ORDER BY COUNT(s.id) DESC) as subscription_rank
+        FROM vendors v
+        LEFT JOIN subscription s ON s.vendor_id = v.id AND s.status = 'hoạt động'
+        GROUP BY v.id
+      ),
+      filtered_vendors AS (
+        SELECT DISTINCT v.id
+        FROM vendors v
         LEFT JOIN locations l ON l.vendor_id = v.id
         LEFT JOIN category c ON c.id = v.category_id
-        WHERE 1=1
+        WHERE v.status = 'hoạt động'
+        ${params.location ? `AND EXISTS (
+          SELECT 1 FROM locations l2 
+          WHERE l2.vendor_id = v.id 
+          AND unaccent(l2.city) ILIKE unaccent($${paramIndex})
+        )` : ''}
+        ${params.category ? `AND c.id = $${paramIndex}` : ''}
+      )
+      SELECT DISTINCT 
+        v.id,
+        v.name,
+        v.description,
+        v.logo,
+        v.banner,
+        v.status,
+        v.slug,
+        v.created_at,
+        v.updated_at,
+        vs.avg_rating,
+        vs.review_count,
+        vp.min_price,
+        vp.max_price,
+        vsub.subscription_count,
+        vsub.subscription_rank,
+        c.id as category_id,
+        c.name as category_name,
+        l.id as location_id,
+        l.address,
+        l.district,
+        l.ward,
+        l.city,
+        l.province,
+        l.latitude,
+        l.longitude
+      FROM filtered_vendors fv
+      JOIN vendors v ON v.id = fv.id
+      LEFT JOIN locations l ON l.vendor_id = v.id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_prices vp ON vp.id = v.id
+      LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
     `;
-
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-
-    // Add location filter
+  
+    // Add filters to base query
+    if (params.name) {
+      baseQuery += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
+      baseParams.push(`%${params.name}%`);
+      paramIndex++;
+    }
+  
     if (params.location) {
-      query += `
-        AND (
-          unaccent(l.address) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.district) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.ward) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.city) ILIKE unaccent($${paramIndex}) OR
-          unaccent(l.province) ILIKE unaccent($${paramIndex})
-        )
-      `;
-      queryParams.push(`%${params.location}%`);
+      baseQuery += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
+      baseParams.push(`%${params.location}%`);
       paramIndex++;
     }
-
-    // Add price filters
+  
     if (params.minPrice !== undefined) {
-      query += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex}
-      )`;
-      queryParams.push(params.minPrice);
+      baseQuery += ` AND vp.min_price >= $${paramIndex}`;
+      baseParams.push(params.minPrice);
       paramIndex++;
     }
+    
     if (params.maxPrice !== undefined) {
-      query += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex}
-      )`;
-      queryParams.push(params.maxPrice);
+      baseQuery += ` AND vp.max_price <= $${paramIndex}`;
+      baseParams.push(params.maxPrice);
       paramIndex++;
     }
-
-    // Add rating filters
+  
     if (params.minRating !== undefined) {
-      query += ` AND vs.avg_rating >= $${paramIndex}`;
-      queryParams.push(params.minRating);
+      baseQuery += ` AND vs.avg_rating >= $${paramIndex}`;
+      baseParams.push(params.minRating);
       paramIndex++;
     }
+    
     if (params.maxRating !== undefined) {
-      query += ` AND vs.avg_rating <= $${paramIndex}`;
-      queryParams.push(params.maxRating);
+      baseQuery += ` AND vs.avg_rating <= $${paramIndex}`;
+      baseParams.push(params.maxRating);
       paramIndex++;
     }
 
-    query += `) 
-    SELECT 
-      vd.*,
-      sp.id as service_package_id,
-      sp.name as service_package_name,
-      sp.description as service_package_description,
-      sp.price as service_package_price,
-      sp.duration as service_package_duration,
-      sp.status as service_package_status,
-      r.id as review_id,
-      r.rating as review_rating,
-      r.comment as review_comment
-    FROM vendor_data vd
-    LEFT JOIN service_package sp ON sp.vendor_id = vd.id
-    LEFT JOIN review r ON r.vendor_id = vd.id`;
-
+    if (params.category) {
+      baseQuery += ` AND c.id = $${paramIndex}`;
+      baseParams.push(params.category);
+      paramIndex++;
+    }
+  
     // Add sorting
     switch (params.sortBy) {
+      case VendorSortField.SUBSCRIPTION_COUNT:
+        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST`;
+        break;
       case VendorSortField.PRICE:
-        query += ` ORDER BY sp.price ${sortDirection} NULLS LAST, vd.id`;
+        baseQuery += ` ORDER BY vp.min_price ${sortDirection} NULLS LAST`;
         break;
       case VendorSortField.RATING:
-        query += ` ORDER BY vd.avg_rating ${sortDirection} NULLS LAST, vd.id`;
+        baseQuery += ` ORDER BY vs.avg_rating ${sortDirection} NULLS LAST`;
         break;
       case VendorSortField.NAME:
-        query += ` ORDER BY vd.name ${sortDirection}, vd.id`;
+        baseQuery += ` ORDER BY v.name ${sortDirection}`;
         break;
       default:
-        query += ` ORDER BY vd.created_at DESC, vd.id`;
+        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
     }
-
-    // Add pagination
-    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(pageSize, skip);
-
-    // Get total count
+  
+    // Add pagination to base query
+    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    baseParams.push(pageSize, skip);
+  
+    // Get total count query
     let countQuery = `
       WITH vendor_stats AS (
         SELECT 
           v.id,
-          AVG(r.rating) as avg_rating
+          COALESCE(AVG(r.rating), 0) as avg_rating
         FROM vendors v
         LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_prices AS (
+        SELECT 
+          v.id,
+          MIN(sc.price) as min_price,
+          MAX(sc.price) as max_price
+        FROM vendors v
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id AND sp.status = 'hoạt động'
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         GROUP BY v.id
       )
       SELECT COUNT(DISTINCT v.id)
       FROM vendors v
-      LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN locations l ON l.vendor_id = v.id
-      WHERE 1=1
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_prices vp ON vp.id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
+      WHERE v.status = 'hoạt động'
     `;
-
-    // Add the same filters to count query
+  
+    const countParams: any[] = [];
+    let countParamIndex = 1;
+  
+    if (params.name) {
+      countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
+      countParams.push(`%${params.name}%`);
+      countParamIndex++;
+    }
+  
     if (params.location) {
-      countQuery += `
-        AND (
-          unaccent(l.address) ILIKE unaccent($1) OR
-          unaccent(l.district) ILIKE unaccent($1) OR
-          unaccent(l.ward) ILIKE unaccent($1) OR
-          unaccent(l.city) ILIKE unaccent($1) OR
-          unaccent(l.province) ILIKE unaccent($1)
-        )
-      `;
+      countQuery += ` AND unaccent(l.city) ILIKE unaccent($${countParamIndex})`;
+      countParams.push(`%${params.location}%`);
+      countParamIndex++;
     }
-
+  
     if (params.minPrice !== undefined) {
-      countQuery += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price >= $${paramIndex}
-      )`;
+      countQuery += ` AND vp.min_price >= $${countParamIndex}`;
+      countParams.push(params.minPrice);
+      countParamIndex++;
     }
+    
     if (params.maxPrice !== undefined) {
-      countQuery += ` AND EXISTS (
-        SELECT 1 FROM service_package sp 
-        WHERE sp.vendor_id = v.id AND sp.price <= $${paramIndex}
-      )`;
+      countQuery += ` AND vp.max_price <= $${countParamIndex}`;
+      countParams.push(params.maxPrice);
+      countParamIndex++;
     }
+  
     if (params.minRating !== undefined) {
-      countQuery += ` AND vs.avg_rating >= $${paramIndex}`;
+      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
+      countParams.push(params.minRating);
+      countParamIndex++;
     }
+    
     if (params.maxRating !== undefined) {
-      countQuery += ` AND vs.avg_rating <= $${paramIndex}`;
+      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
+      countParams.push(params.maxRating);
+      countParamIndex++;
     }
 
+    if (params.category) {
+      countQuery += ` AND c.id = $${countParamIndex}`;
+      countParams.push(params.category);
+      countParamIndex++;
+    }
+  
     // Execute queries
-    const [data, totalItem] = await Promise.all([
-      this.dataSource.query(query, queryParams),
-      this.dataSource.query(countQuery, queryParams.slice(0, -2)) // Remove pagination params for count
+    const [vendorData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
     ]);
-
-    const totalPage = Math.ceil(totalItem[0].count / pageSize);
-
+  
+    if (vendorData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+  
+    // Fetch service packages and reviews for the filtered vendors
+    const vendorIds = vendorData.map(v => v.id);
+    const [servicePackages, reviews] = await Promise.all([
+      this.dataSource.query(`
+        SELECT 
+          sp.*,
+          sc.id as service_concept_id,
+          sc.name as service_concept_name,
+          sc.description as service_concept_description,
+          sc.price as service_concept_price,
+          sc.duration as service_concept_duration,
+          COALESCE(ARRAY_AGG(sci.image_url) FILTER (WHERE sci.image_url IS NOT NULL), ARRAY[]::text[]) as service_concept_images
+        FROM service_package sp
+        LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
+        LEFT JOIN service_concept_image sci ON sci.service_concept_id = sc.id
+        WHERE sp.vendor_id = ANY($1) AND sp.status = 'hoạt động'
+        GROUP BY sp.id, sc.id, sc.name, sc.description, sc.price, sc.duration
+        ORDER BY sp.id, sc.id
+        `, [vendorIds]),
+      this.dataSource.query(`
+        SELECT *
+        FROM review
+        WHERE vendor_id = ANY($1)
+        ORDER BY created_at DESC
+      `, [vendorIds])
+    ]);
+  
     // Group service packages and reviews by vendor
-    const vendorMap = new Map();
-    data.forEach(row => {
-      if (!vendorMap.has(row.id)) {
-        vendorMap.set(row.id, {
+    const servicePackagesByVendor = new Map();
+    const reviewsByVendor = new Map();
+  
+    servicePackages.forEach((row: any) => {
+      if (!servicePackagesByVendor.has(row.vendor_id)) {
+        servicePackagesByVendor.set(row.vendor_id, new Map());
+      }
+      const vendorPackages = servicePackagesByVendor.get(row.vendor_id);
+      
+      if (!vendorPackages.has(row.id)) {
+        vendorPackages.set(row.id, {
           id: row.id,
           name: row.name,
           description: row.description,
-          logo: row.logo,
-          banner: row.banner,
           status: row.status,
-          slug: row.slug,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-          averageRating: row.avg_rating || 0,
-          locations: row.location_id ? [{
-            id: row.location_id,
-            address: row.address,
-            district: row.district,
-            ward: row.ward,
-            city: row.city,
-            province: row.province,
-            latitude: row.latitude,
-            longitude: row.longitude
-          }] : [],
-          servicePackages: [],
-          category: row.category_id ? {
-            id: row.category_id,
-            name: row.category_name
-          } : null,
-          reviews: []
+          serviceConcepts: []
         });
       }
-
-      const vendor = vendorMap.get(row.id);
-      
-      // Add service package if it exists and not already added
-      if (row.service_package_id && !vendor.servicePackages.some(sp => sp.id === row.service_package_id)) {
-        vendor.servicePackages.push({
-          id: row.service_package_id,
-          name: row.service_package_name,
-          description: row.service_package_description,
-          price: row.service_package_price,
-          duration: row.service_package_duration,
-          status: row.service_package_status
-        });
-      }
-
-      // Add review if it exists and not already added
-      if (row.review_id && !vendor.reviews.some(r => r.id === row.review_id)) {
-        vendor.reviews.push({
-          id: row.review_id,
-          rating: row.review_rating,
-          comment: row.review_comment
+  
+      if (row.service_concept_id) {
+        const pkg = vendorPackages.get(row.id);
+        pkg.serviceConcepts.push({
+          id: row.service_concept_id,
+          name: row.service_concept_name,
+          description: row.service_concept_description,
+          price: row.service_concept_price,
+          duration: row.service_concept_duration,
+          images: Array.isArray(row.service_concept_images) ? row.service_concept_images : []
         });
       }
     });
-
+  
+    reviews.forEach((review: any) => {
+      if (!reviewsByVendor.has(review.vendor_id)) {
+        reviewsByVendor.set(review.vendor_id, []);
+      }
+      reviewsByVendor.get(review.vendor_id).push({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        created_at: review.created_at
+      });
+    });
+  
+    // Group locations by vendor ID before mapping
+    const locationsByVendor = new Map();
+    vendorData.forEach((row: any) => {
+      if (row.location_id) {
+        if (!locationsByVendor.has(row.id)) {
+          locationsByVendor.set(row.id, []);
+        }
+        locationsByVendor.get(row.id).push({
+          id: row.location_id,
+          address: row.address || '',
+          district: row.district || '',
+          ward: row.ward || '',
+          city: row.city || '',
+          province: row.province || '',
+          latitude: row.latitude ? Number(parseFloat(row.latitude).toFixed(6)) : null,
+          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null
+        });
+      }
+    });
+  
+    // Map vendors without filtering duplicates
+    const vendors = vendorData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      logo: row.logo || null,
+      banner: row.banner || null,
+      status: row.status,
+      slug: row.slug,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
+      reviewCount: parseInt(row.review_count) || 0,
+      minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
+      maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+      subscriptionCount: parseInt(row.subscription_count) || 0,
+      isRemarkable: row.subscription_rank <= 3, // Vendor is remarkable if they are in top 3 by subscription count
+      locations: locationsByVendor.get(row.id) || [],
+      servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
+      category: row.category_id ? {
+        id: row.category_id,
+        name: row.category_name
+      } : null,
+      reviews: reviewsByVendor.get(row.id) || []
+    }));
+  
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+  
     return {
-      data: Array.from(vendorMap.values()),
+      data: vendors,
       pagination: {
         current: currentPage,
         pageSize,
         totalPage,
-        totalItem: Number(totalItem[0].count)
-      }
+        totalItem: Number(totalItem[0].count),
+      },
     };
   }
   //#endregion filterVendors

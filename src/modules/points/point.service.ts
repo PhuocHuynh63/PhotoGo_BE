@@ -119,7 +119,7 @@ export class PointService {
     });
 
     if (!transactions.length) {
-      throw new NotFoundException(`No transactions found for point ID: ${pointId}`);
+      throw new NotFoundException(`Không tìm thấy giao dịch cho điểm ID: ${pointId}`);
     }
 
     return transactions;

@@ -11,6 +11,7 @@ import { RefundHistory } from '../refunds/entities/refund-history.entity';
 import { Dispute } from '../disputes/entities/dispute.entity'; // Adjust the import path as necessary
 import { ServicePackageModule } from '../service-package/service-package.module';
 import { ServicePackage } from '../service-package/entities/service-package.entity';
+import { ServiceConcept } from '../service-package/entities/service-concept.entity';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ServicePackage } from '../service-package/entities/service-package.enti
       RefundHistory,
       Dispute,
       ServicePackage,
+      ServiceConcept,
     ]),
     ServicePackageModule,
   ],

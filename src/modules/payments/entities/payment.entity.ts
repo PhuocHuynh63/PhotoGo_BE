@@ -17,7 +17,7 @@ export class Payment {
   @Column({ type: 'integer' })
   amount: number;
 
-  @Column({ type: 'varchar', length: 100, nullable: true, name: 'paymentos_id' }) // Thay paymentId thành paymentOSId
+  @Column({ type: 'varchar', length: 100, nullable: true, name: 'paymentos_id' })
   paymentOSId: string;
 
   @Column({ type: 'enum', enum: PaymentMethod })

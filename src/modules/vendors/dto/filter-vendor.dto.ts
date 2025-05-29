@@ -6,10 +6,20 @@ import { VendorSortField } from 'src/constants/vendor.enum';
 
 
 export class FilterVendorDto {
+
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Location search term',
+    description: 'Từ tìm kiếm tên',
+    example: 'Nhà hàng',
+    required: false,
+  })
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Từ tìm kiếm vị trí',
     example: 'Thủ Đức',
     required: false,
   })
@@ -20,7 +30,7 @@ export class FilterVendorDto {
   @Min(0)
   @Type(() => Number)
   @ApiProperty({
-    description: 'Minimum price',
+    description: 'Giá tối thiểu',
     example: 1000000,
     required: false,
   })
@@ -31,7 +41,7 @@ export class FilterVendorDto {
   @Min(0)
   @Type(() => Number)
   @ApiProperty({
-    description: 'Maximum price',
+    description: 'Giá tối đa',
     example: 5000000,
     required: false,
   })
@@ -43,7 +53,7 @@ export class FilterVendorDto {
   @Max(5)
   @Type(() => Number)
   @ApiProperty({
-    description: 'Minimum rating (0-5)',
+    description: 'Điểm đánh giá tối thiểu (0-5)',
     example: 4,
     required: false,
   })
@@ -55,16 +65,25 @@ export class FilterVendorDto {
   @Max(5)
   @Type(() => Number)
   @ApiProperty({
-    description: 'Maximum rating (0-5)',
+    description: 'Điểm đánh giá tối đa (0-5)',
     example: 5,
     required: false,
   })
   maxRating?: number;
 
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Loại dịch vụ',
+    example: 'Nhà hàng',
+    required: false,
+  })
+  category?: string;
+  
   @IsNumberString()
   @IsOptional()
   @ApiProperty({
-    description: 'Page number for pagination',
+    description: 'Trang hiện tại cho phân trang',
     example: '1',
     required: false,
   })
@@ -73,7 +92,7 @@ export class FilterVendorDto {
   @IsNumberString()
   @IsOptional()
   @ApiProperty({
-    description: 'Number of items per page',
+    description: 'Số lượng mục trên mỗi trang',
     example: '10',
     required: false,
   })
@@ -82,7 +101,7 @@ export class FilterVendorDto {
   @IsEnum(VendorSortField)
   @IsOptional()
   @ApiProperty({
-    description: 'Field to sort by',
+    description: 'Trường để sắp xếp',
     enum: VendorSortField,
     example: VendorSortField.CREATED_AT,
     required: false,
@@ -92,7 +111,46 @@ export class FilterVendorDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Sort direction (asc or desc)',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
+    example: 'desc',
+    required: false,
+  })
+  sortDirection?: 'asc' | 'desc';
+}
+
+export class RemarkableVendorDto {
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trang hiện tại cho phân trang',
+    example: '1',
+    required: false,
+  })
+  current?: string;
+
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số lượng mục trên mỗi trang',
+    example: '10',
+    required: false,
+  })
+  pageSize?: string;
+
+  @IsEnum(VendorSortField)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trường để sắp xếp',
+    enum: VendorSortField,
+    example: VendorSortField.SUBSCRIPTION_COUNT,
+    required: false,
+  })
+  sortBy?: VendorSortField;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Hướng sắp xếp (asc hoặc desc)',
     example: 'desc',
     required: false,
   })

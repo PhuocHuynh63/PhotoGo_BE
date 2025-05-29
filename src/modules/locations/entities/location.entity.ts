@@ -1,6 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 import { Vendor } from '../../vendors/entities/vendor.entity';
-
+import { TeamMember } from '../../team-members/entities/team-member.entity';
 @Entity('locations')
 export class Location {
   @PrimaryGeneratedColumn('uuid')
@@ -36,4 +36,7 @@ export class Location {
 
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'NOW()', onUpdate: 'NOW()' })
   updated_at: Date;
+
+  @OneToOne(() => TeamMember, (teamMember) => teamMember.location, { cascade: true })
+  teamMember: TeamMember;
 }

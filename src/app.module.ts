@@ -16,7 +16,7 @@ import { TeamMemberModule } from './modules/team-members/team-member.module';
 import { CategoryModule } from './modules/categories/category.module';
 import { NotificationModule } from './modules/notifications/notification.module';
 import { LocationModule } from './modules/locations/location.module';
-import { SubscriptionPlanModule } from './modules/subscription_plan/subscription-plan.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { PointModule } from './modules/points/point.module';
 import { VoucherModule } from './modules/vouchers/voucher.module';
 import { WalletModule } from './modules/wallets/wallet.module';
@@ -24,6 +24,7 @@ import { CommentModule } from './modules/comments/comment.module';
 import { RefundModule } from './modules/refunds/refund.module';
 import { BookingModule } from './modules/bookings/booking.module';
 import { CartModule } from './modules/carts/cart.module';
+import { ChatModule } from './modules/chats/chat.module';
 import { PaymentModule } from './modules/payments/payment.module';
 import { PayosModule } from './3rdService/payos/payos.module';
 import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
@@ -44,7 +45,8 @@ import { ReviewModule } from './modules/reviews/reviews.module';
 import { ServicePackageModule } from './modules/service-package/service-package.module';
 import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
 import { BullQueueModule } from './3rdService/bull/bull-queue.module';
-
+import { GeminiModule } from './3rdService/gemini/gemini.module';
+import { CheckoutSessionModule } from './modules/checkout-session/checkout-session.module';
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
   return moment(date).format(format);
@@ -118,6 +120,7 @@ if (!fs.existsSync(templateDir)) {
       inject: [ConfigService],
     }),
     BullQueueModule,
+    CheckoutSessionModule,
     UserModule,
     RoleModule,
     GoogleAuthModule,
@@ -126,11 +129,12 @@ if (!fs.existsSync(templateDir)) {
     UploadModule,
     VendorModule,
     CategoryModule,
+    ChatModule,
     NotificationModule,
     LocationModule,
     CommentModule,
     TeamMemberModule,
-    SubscriptionPlanModule,
+    SubscriptionModule,
     VoucherModule,
     PointModule,
     BookingModule,
@@ -143,7 +147,8 @@ if (!fs.existsSync(templateDir)) {
     WishlistModule,
     SupportTicketsModule,
     ReviewModule,
-    ServicePackageModule
+    ServicePackageModule,
+    GeminiModule
   ],
   controllers: [AppController],
   providers: [

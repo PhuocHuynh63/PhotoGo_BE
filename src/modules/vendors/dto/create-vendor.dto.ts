@@ -8,8 +8,6 @@ import { Logger } from '@nestjs/common';
 
 import { VendorManagerRole } from '../../../constants/vendor.enum';
 export class CreateVendorDto {
-  private readonly logger = new Logger(CreateVendorDto.name);
-
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
@@ -26,13 +24,21 @@ export class CreateVendorDto {
   })
   category_id: string;
 
+  // @IsString()
+  // @IsNotEmpty()
+  // @ApiProperty({
+  //   example: 'studio-anh-sang',
+  //   description: 'Slug của nhà cung cấp',
+  // })
+  // slug: string;
+
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
-    example: 'studio-anh-sang',
-    description: 'Slug của nhà cung cấp',
+    example: 'uuid_of_user',
+    description: 'ID người dùng của nhà cung cấp',
   })
-  slug: string;
+  user_id: string;
 
   @IsString()
   @IsOptional()
@@ -54,7 +60,7 @@ export class CreateVendorDto {
   status?: VendorStatus;
 
   @IsArray()
-  @ValidateNested({ each: true, message: 'Each location must be valid' })
+  @ValidateNested({ each: true, message: 'Mỗi vị trí phải hợp lệ' })
   @Type(() => CreateLocationDto)
   @Transform(({ value }) => {
     const logger = new Logger('CreateVendorDto');
@@ -68,7 +74,7 @@ export class CreateVendorDto {
       try {
         const parsed = JSON.parse(value);
         if (!Array.isArray(parsed)) {
-          throw new Error('locations must be an array');
+          throw new Error('locations phải là một mảng');
         }
         logger.log(`Parsed locations before transform: ${JSON.stringify(parsed)}`);
         const transformed = parsed.map((item: any) => {
@@ -86,7 +92,7 @@ export class CreateVendorDto {
         return transformed;
       } catch (e) {
         logger.error(`Failed to parse locations: ${e.message}`);
-        throw new Error(`locations must be a valid JSON array: ${e.message}`);
+        throw new Error(`locations phải là một mảng JSON hợp lệ: ${e.message}`);
       }
     }
 
@@ -95,7 +101,7 @@ export class CreateVendorDto {
   })
   @ApiProperty({
     type: 'string',
-    description: 'A JSON string representing an array of locations',
+    description: 'Một chuỗi JSON biểu diễn một mảng vị trí',
     example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724},{"address":"456 Lê Văn Việt","district":"Thủ Đức","ward":"Tăng Nhơn Phú A","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8432,"longitude":106.7793}]',
   })
   locations: CreateLocationDto[];

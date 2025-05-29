@@ -5,11 +5,11 @@ export class CreateInvoiceDto {
 
   @IsDateString()
   @IsOptional()
-  @ApiProperty({ description: 'Issued Date of the invoice', example: '2025-04-23' })
+  @ApiProperty({ description: 'Ngày phát hành hóa đơn', example: '2025-04-23' })
   issuedAt?: string;
 
   @IsDateString()
   @IsOptional()
-  @ApiProperty({ description: 'Update Date of the invoice', example: '2025-04-30' })
+  @ApiProperty({ description: 'Ngày cập nhật hóa đơn', example: '2025-04-30' })
   updatedAt?: string;
 }

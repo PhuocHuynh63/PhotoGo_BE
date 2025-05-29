@@ -20,7 +20,7 @@ export class CreateVoucherDto {
     description: 'Tên mã giảm giá',
     example: 'Giảm giá 20% cho đơn hàng trên 500.000 VNĐ',
   })
-  description: string;
+  description?: string;
 
 
   @IsString()

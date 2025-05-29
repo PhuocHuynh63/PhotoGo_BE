@@ -20,7 +20,7 @@ export class SupportTicketService {
         where: { id: userId },
       });
       if (!user) {
-        throw new NotFoundException(`User with ID ${userId} not found`);
+        throw new NotFoundException(`Người dùng với ID ${userId} không tồn tại`);
       }
 
       const supportTicket = manager.getRepository(SupportTicket).create({
@@ -88,7 +88,7 @@ export class SupportTicketService {
       relations: ['user'],
     });
     if (!supportTicket) {
-      throw new NotFoundException(`Support ticket with ID ${id} not found`);
+      throw new NotFoundException(`Vé hỗ trợ với ID ${id} không tồn tại`);
     }
     return supportTicket;
   }
@@ -96,7 +96,7 @@ export class SupportTicketService {
   async updateSupportTicket(id: string, updateSupportTicketDto: Partial<CreateSupportTicketDto>): Promise<SupportTicket> {
     const supportTicket = await this.supportTicketRepository.findOne({ where: { id } });
     if (!supportTicket) {
-      throw new NotFoundException(`Support ticket with ID ${id} not found`);
+      throw new NotFoundException(`Vé hỗ trợ với ID ${id} không tồn tại`);
     }
   
     Object.assign(supportTicket, updateSupportTicketDto);
@@ -107,13 +107,13 @@ export class SupportTicketService {
   async deleteSupportTicket(id: string): Promise<void> {
     const supportTicket = await this.supportTicketRepository.findOne({ where: { id } });
     if (!supportTicket) {
-      throw new NotFoundException(`Support ticket with ID ${id} not found`);
+      throw new NotFoundException(`Vé hỗ trợ với ID ${id} không tồn tại`);
     }
 
     try {
       await this.supportTicketRepository.remove(supportTicket);
     } catch (error) {
-      throw new BadRequestException(`Error deleting support ticket with ID ${id}: ${error.message}`);
+      throw new BadRequestException(`Lỗi xóa vé hỗ trợ với ID ${id}: ${error.message}`);
     }
   }
 }

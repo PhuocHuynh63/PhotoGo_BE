@@ -1,21 +1,49 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { Vendor } from '../vendors/entities/vendor.entity';
 
 @Injectable()
 export class LocationService {
   constructor(
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
+    @InjectRepository(Vendor)
+    private readonly vendorRepository: Repository<Vendor>,
   ) { }
 
   //#region create
   async create(createLocationDto: CreateLocationDto): Promise<Location> {
-    const location = this.locationRepository.create(createLocationDto);
+    // Check if vendor exists
+    const vendor = await this.vendorRepository.findOne({
+      where: { id: createLocationDto.vendor_id }
+    });
+    if (!vendor) {
+      throw new NotFoundException(`Vendor with id ${createLocationDto.vendor_id} not found`);
+    }
+
+    // Validate coordinates if provided
+    if (createLocationDto.latitude !== undefined || createLocationDto.longitude !== undefined) {
+      if (createLocationDto.latitude === undefined || createLocationDto.longitude === undefined) {
+        throw new BadRequestException('Both latitude and longitude must be provided together');
+      }
+      if (createLocationDto.latitude < -90 || createLocationDto.latitude > 90) {
+        throw new BadRequestException('Latitude must be between -90 and 90 degrees');
+      }
+      if (createLocationDto.longitude < -180 || createLocationDto.longitude > 180) {
+        throw new BadRequestException('Longitude must be between -180 and 180 degrees');
+      }
+    }
+
+    const location = this.locationRepository.create({
+      ...createLocationDto,
+      vendor,
+    });
+
     return this.locationRepository.save(location);
   }
   //#endregion create

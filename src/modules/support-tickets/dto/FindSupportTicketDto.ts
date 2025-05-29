@@ -7,7 +7,7 @@ export class FindSupportTicketDto {
   @IsOptional()
   @ApiProperty({
     example: '1',
-    description: 'Page number for pagination',
+    description: 'Trang hiện tại',
     required: false,
   })
   current?: string;
@@ -16,7 +16,7 @@ export class FindSupportTicketDto {
   @IsOptional()
   @ApiProperty({
     example: '10',
-    description: 'Number of items per page for pagination',
+    description: 'Số lượng mục trên mỗi trang',
     required: false,
   })
   pageSize?: string;
@@ -25,7 +25,7 @@ export class FindSupportTicketDto {
   @IsOptional()
   @ApiProperty({
     example: 'Vấn đề với đặt lịch',
-    description: 'Search term for filtering support tickets',
+    description: 'Từ khóa tìm kiếm',
     required: false,
   })
   term?: string;
@@ -34,7 +34,7 @@ export class FindSupportTicketDto {
   @IsOptional()
   @ApiProperty({
     enum: SupportTicketStatus,
-    description: 'Status of the support ticket',
+    description: 'Trạng thái của vé hỗ trợ',
     example: SupportTicketStatus.OPEN,
     required: false,
   })
@@ -44,7 +44,7 @@ export class FindSupportTicketDto {
   @IsOptional()
   @ApiProperty({
     example: 'created_at',
-    description: 'Field to sort by',
+    description: 'Trường để sắp xếp',
     required: false,
   })
   sortBy?: string;
@@ -53,7 +53,7 @@ export class FindSupportTicketDto {
   @IsOptional()
   @ApiProperty({
     example: 'asc',
-    description: 'Sort direction (asc or desc)',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';

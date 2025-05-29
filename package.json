@@ -21,6 +21,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/axios": "^4.0.0",
     "@nestjs/bull": "^11.0.2",
@@ -36,7 +37,7 @@
     "@nestjs/schedule": "^5.0.1",
     "@nestjs/swagger": "^8.1.1",
     "@nestjs/typeorm": "^11.0.0",
-    "@nestjs/websockets": "^10.4.15",
+    "@nestjs/websockets": "^10.4.17",
     "@payos/node": "^1.0.10",
     "@types/cache-manager-redis-store": "^3.0.0",
     "bcrypt": "^5.1.1",
@@ -64,6 +65,7 @@
     "rxjs": "^7.8.1",
     "sharp": "^0.34.1",
     "slugify": "^1.6.6",
+    "socket.io": "^4.8.1",
     "typeorm-naming-strategies": "^4.1.0"
   },
   "devDependencies": {
