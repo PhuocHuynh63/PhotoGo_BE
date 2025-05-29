@@ -6,3 +6,9 @@ export class UpdateBookingDto {
   @IsOptional()
   status?: BookingStatus;
 }
+
+export class UpdateBookingHistoryStatusDto {
+  @IsEnum(BookingStatus)
+  @IsOptional()
+  status?: BookingStatus;
+}
