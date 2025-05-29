@@ -325,6 +325,15 @@ export class VendorService {
   }
   //#endregion findBySlug
 
+  //#region getVendorByUserID with role 'ROO8'
+  async getVendorByUserID(userID: string): Promise<Vendor> {
+    const vendor = await this.vendorRepository.findOne({
+      where: { user_id: { id: userID } },
+    });
+    return vendor;
+  }
+  //#endregion getVendorByUserID with role 'ROO8'
+
   //#region findAllWithAvailability
   async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
     const vendors = await this.vendorRepository
