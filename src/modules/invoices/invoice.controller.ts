@@ -4,7 +4,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { FindAllInvoicesDto } from './dto/find-all.dto';
 import { Invoice } from './entities/invoice.entity';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
-import { ApiTags, ApiBearerAuth, ApiOperation , ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation , ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @Controller('invoices')
 @ApiTags('Invoice')
@@ -15,11 +15,14 @@ export class InvoiceController {
   @Post()
   @ApiOperation({ summary: 'Tạo hóa đơn mới' })
   @ApiResponse({ status: 201, description: 'Hóa đơn được tạo thành công' })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })  
+  @ApiQuery({ name: 'bookingId', required: true, description: 'Booking ID' })
+  @ApiQuery({ name: 'voucherId', required: false, description: 'Voucher ID (optional)' })
   async create(@Query('bookingId') bookingId: string,
-               @Query('voucherId') voucherId: string,
-               @Body() createInvoiceDto: CreateInvoiceDto) {
-    return await this.invoiceService.create(bookingId,voucherId,createInvoiceDto);
+               @Body() createInvoiceDto: CreateInvoiceDto,
+               @Query('voucherId') voucherId?: string
+              ) {
+    return await this.invoiceService.create(bookingId, voucherId, createInvoiceDto);
   }
 
   @Get()
