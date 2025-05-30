@@ -41,24 +41,17 @@ export class CheckoutSessionService {
   }
 
   async getSession(userId?: string, id?: string): Promise<string | { message: string }> {
-    try {
-      const sessionKey = this.getSessionKey(userId, id);
+    const sessionKey = this.getSessionKey(userId, id);
+    const sessionData = await this.redisClient.get(sessionKey);
 
-      const sessionData = await this.redisClient.get(sessionKey);
-
-      if (!sessionData) {
-        return {
-          message: 'Không tìm thấy phiên đặt chỗ',
-        };
-      }
-
-      // Reset TTL on access
-      await this.updateSessionTTL(userId, id);
-
-      return sessionData;
-    } catch (error) {
-      throw new BadRequestException('Không thể lấy thông tin phiên đặt chỗ');
+    if (!sessionData) {
+      throw new NotFoundException('Không tìm thấy phiên đặt chỗ');
     }
+
+    // Reset TTL on access
+    await this.updateSessionTTL(userId, id);
+
+    return sessionData;
   }
 
   async deleteSession(userId?: string, id?: string): Promise<void> {
