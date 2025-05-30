@@ -45,9 +45,9 @@ export class CheckoutSessionService {
     };
   }
 
-  async getSession(userId?: string, deviceId?: string): Promise<string | { message: string }> {
+  async getSession(userId?: string, id?: string): Promise<string | { message: string }> {
     try {
-      const sessionKey = this.getSessionKey(userId, deviceId);
+      const sessionKey = this.getSessionKey(userId, id);
 
       const sessionData = await this.redisClient.get(sessionKey);
 
@@ -58,26 +58,26 @@ export class CheckoutSessionService {
       }
 
       // Reset TTL on access
-      await this.updateSessionTTL(userId, deviceId);
+      await this.updateSessionTTL(userId, id);
 
       return sessionData;
     } catch (error) {
-      throw new BadRequestException('Không thể lấy phiên đặt chỗ');
+      throw new BadRequestException('Không thể lấy thông tin phiên đặt chỗ');
     }
   }
 
-  async deleteSession(userId?: string, deviceId?: string): Promise<void> {
+  async deleteSession(userId?: string, id?: string): Promise<void> {
     try {
-      const sessionKey = this.getSessionKey(userId, deviceId);
+      const sessionKey = this.getSessionKey(userId, id);
       await this.redisClient.del(sessionKey);
     } catch (error) {
       throw new BadRequestException('Không thể xóa phiên đặt chỗ');
     }
   }
 
-  async updateSessionTTL(userId?: string, deviceId?: string): Promise<void> {
+  async updateSessionTTL(userId?: string, id?: string): Promise<void> {
     try {
-      const sessionKey = this.getSessionKey(userId, deviceId);
+      const sessionKey = this.getSessionKey(userId, id);
       await this.redisClient.expire(sessionKey, this.SESSION_TTL);
     } catch (error) {
       throw new BadRequestException('Không thể cập nhật thời gian sống phiên đặt chỗ');
@@ -85,13 +85,13 @@ export class CheckoutSessionService {
   }
 
   async updateSessionData(
-    data: string,
+    sessionData: string,
     userId?: string,
-    deviceId?: string,
+    id?: string,
   ): Promise<string> {
     try {
-      const sessionKey = this.getSessionKey(userId, deviceId);
-      const existingData = await this.getSession(userId, deviceId);
+      const sessionKey = this.getSessionKey(userId, id);
+      const existingData = await this.getSession(userId, id);
 
       if (typeof existingData === 'object' && 'message' in existingData) {
         throw new NotFoundException('Không tìm thấy phiên đặt chỗ');
@@ -99,23 +99,23 @@ export class CheckoutSessionService {
 
       await this.redisClient.set(
         sessionKey,
-        data,
+        sessionData,
         'EX',
         this.SESSION_TTL
       );
 
-      return data;
+      return sessionData;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      throw new BadRequestException('Không thể cập nhật dữ liệu phiên đặt chỗ');
+      throw new BadRequestException('Không thể cập nhật thông tin phiên đặt chỗ');
     }
   }
 
-  async getSessionTTL(userId?: string, deviceId?: string): Promise<number> {
+  async getSessionTTL(userId?: string, id?: string): Promise<number> {
     try {
-      const sessionKey = this.getSessionKey(userId, deviceId);
+      const sessionKey = this.getSessionKey(userId, id);
       return await this.redisClient.ttl(sessionKey);
     } catch (error) {
       throw new BadRequestException('Không thể lấy thời gian sống phiên đặt chỗ');
