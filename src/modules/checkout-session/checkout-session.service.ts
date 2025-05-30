@@ -42,7 +42,6 @@ export class CheckoutSessionService {
 
   async getSession(userId?: string, id?: string): Promise<string | { message: string }> {
     const sessionKey = this.getSessionKey(userId, id);
-
     const sessionData = await this.redisClient.get(sessionKey);
 
     if (!sessionData) {
