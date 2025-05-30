@@ -2,21 +2,17 @@ import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req, Query } fro
 import { CheckoutSessionService } from './checkout-session.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
-import { Public } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 
 @ApiTags('checkout-session')
 @Controller('checkout-session')
-@ApiHeader({
-  name: 'device-id',
-  description: 'ID của thiết bị (bắt buộc nếu không có userId)',
-  required: false
-})
 @ApiBearerAuth('access-token')
 export class CheckoutSessionController {
-  constructor(private readonly checkoutSessionService: CheckoutSessionService) {}
+  constructor(private readonly checkoutSessionService: CheckoutSessionService) { }
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @ResponseMessage('Phiên đặt chỗ đã được tạo thành công')
   @ApiOperation({ summary: 'Tạo phiên đặt chỗ mới' })
   @ApiResponse({ status: 201, description: 'Phiên đặt chỗ đã được tạo thành công' })
   @ApiResponse({ status: 400, description: 'Không có ID người dùng hoặc ID thiết bị' })
@@ -33,15 +29,11 @@ export class CheckoutSessionController {
     }
   })
   async createSession(
-    @Body('sessionData') sessionData: string,
+    @Query('id') id: string,
     @Query('userId') userId: string,
-    @Query('deviceId') deviceId: string,
+    @Body('sessionData') sessionData: string,
   ) {
-    return this.checkoutSessionService.createSession(
-      sessionData,
-      userId,
-      deviceId,
-    );
+    return this.checkoutSessionService.createSession(id, userId, sessionData);
   }
 
   @Get()
