@@ -39,28 +39,31 @@ export class CheckoutSessionController {
   @Get()
   @Public()
   @UseGuards(JwtAuthGuard)
+  @ResponseMessage('Lấy thông tin phiên đặt chỗ thành công')
   @ApiOperation({ summary: 'Lấy thông tin phiên đặt chỗ' })
   @ApiResponse({ status: 200, description: 'Lấy thông tin phiên đặt chỗ thành công' })
-  async getSession(@Req() req: any) {
-    return this.checkoutSessionService.getSession(
-      req.user?.id,
-      req.headers['device-id'],
-    );
+  async getSession(
+    @Query('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.checkoutSessionService.getSession(userId, id);
   }
 
   @Delete()
   @UseGuards(JwtAuthGuard)
+  @ResponseMessage('Xóa phiên đặt chỗ thành công')
   @ApiOperation({ summary: 'Xóa phiên đặt chỗ' })
   @ApiResponse({ status: 200, description: 'Xóa phiên đặt chỗ thành công' })
-  async deleteSession(@Req() req: any) {
-    return this.checkoutSessionService.deleteSession(
-      req.user?.id,
-      req.headers['device-id'],
-    );
+  async deleteSession(
+    @Query('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.checkoutSessionService.deleteSession(userId, id);
   }
 
   @Post('update')
   @UseGuards(JwtAuthGuard)
+  @ResponseMessage('Cập nhật thông tin phiên đặt chỗ thành công')
   @ApiOperation({ summary: 'Cập nhật thông tin phiên đặt chỗ' })
   @ApiResponse({ status: 200, description: 'Cập nhật thông tin phiên đặt chỗ thành công' })
   @ApiBody({
@@ -77,23 +80,25 @@ export class CheckoutSessionController {
   })
   async updateSessionData(
     @Body('sessionData') sessionData: string,
-    @Req() req: any,
+    @Query('id') id: string,
+    @Query('userId') userId: string,
   ) {
     return this.checkoutSessionService.updateSessionData(
       sessionData,
-      req.user?.id,
-      req.headers['device-id'],
+      userId,
+      id,
     );
   }
 
   @Get('ttl')
   @UseGuards(JwtAuthGuard)
+  @ResponseMessage('Lấy thời gian sống thành công')
   @ApiOperation({ summary: 'Lấy thời gian sống còn lại của phiên đặt chỗ' })
   @ApiResponse({ status: 200, description: 'Lấy thời gian sống thành công' })
-  async getSessionTTL(@Req() req: any) {
-    return this.checkoutSessionService.getSessionTTL(
-      req.user?.id,
-      req.headers['device-id'],
-    );
+  async getSessionTTL(
+    @Query('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.checkoutSessionService.getSessionTTL(userId, id);
   }
 } 
