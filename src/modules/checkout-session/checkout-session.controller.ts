@@ -6,11 +6,6 @@ import { Public, ResponseMessage } from 'src/decorator/custom';
 
 @ApiTags('checkout-session')
 @Controller('checkout-session')
-@ApiHeader({
-  name: 'device-id',
-  description: 'ID của thiết bị (bắt buộc nếu không có userId)',
-  required: false
-})
 @ApiBearerAuth('access-token')
 export class CheckoutSessionController {
   constructor(private readonly checkoutSessionService: CheckoutSessionService) { }
