@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { Redis } from 'ioredis';
 
 @Injectable()
@@ -9,10 +9,10 @@ export class CheckoutSessionService {
   constructor(
     @Inject('REDIS_CLIENT')
     private readonly redisClient: Redis,
-  ) {}
+  ) { }
 
-  private getSessionKey(userId: string | undefined, deviceId: string | undefined): string {
-    const identifier = userId || deviceId;
+  private getSessionKey(userId: string | undefined, id: string | undefined): string {
+    const identifier = userId || id;
     if (!identifier) {
       throw new BadRequestException('Không có ID người dùng hoặc ID thiết bị');
     }
@@ -20,54 +20,46 @@ export class CheckoutSessionService {
   }
 
   async createSession(
+    id: string,
+    userId: string,
     sessionData: string,
-    userId?: string,
-    deviceId?: string,
-  ): Promise<{ message: string; key: string; data: string }> {
-    try {
-      const sessionKey = this.getSessionKey(userId, deviceId);
-      
-      // Check if session already exists
-      const existingSession = await this.redisClient.get(sessionKey);
-      if (existingSession) {
-        throw new BadRequestException('Phiên đặt chỗ đã tồn tại');
-      }
+  ): Promise<{ key: string; data: string }> {
+    const sessionKey = this.getSessionKey(userId, id);
 
-      await this.redisClient.set(
-        sessionKey,
-        sessionData,
-        'EX',
-        this.SESSION_TTL
-      );
-
-      return {
-        message: 'Phiên đặt chỗ đã được lưu thành công',
-        key: sessionKey,
-        data: sessionData,
-      };
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể tạo phiên đặt chỗ');
+    // Check if session already exists
+    const existingSession = await this.redisClient.get(sessionKey);
+    if (existingSession) {
+      throw new ConflictException('Phiên đặt chỗ đã tồn tại');
     }
+
+    await this.redisClient.set(
+      sessionKey,
+      sessionData,
+      'EX',
+      this.SESSION_TTL
+    );
+
+    return {
+      key: sessionKey,
+      data: sessionData,
+    };
   }
 
   async getSession(userId?: string, deviceId?: string): Promise<string | { message: string }> {
     try {
       const sessionKey = this.getSessionKey(userId, deviceId);
-      
+
       const sessionData = await this.redisClient.get(sessionKey);
-      
+
       if (!sessionData) {
         return {
           message: 'Không tìm thấy phiên đặt chỗ',
         };
       }
-      
+
       // Reset TTL on access
       await this.updateSessionTTL(userId, deviceId);
-      
+
       return sessionData;
     } catch (error) {
       throw new BadRequestException('Không thể lấy phiên đặt chỗ');
@@ -100,7 +92,7 @@ export class CheckoutSessionService {
     try {
       const sessionKey = this.getSessionKey(userId, deviceId);
       const existingData = await this.getSession(userId, deviceId);
-      
+
       if (typeof existingData === 'object' && 'message' in existingData) {
         throw new NotFoundException('Không tìm thấy phiên đặt chỗ');
       }
