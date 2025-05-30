@@ -26,12 +26,7 @@ export class CheckoutSessionService {
   ): Promise<{ key: string; data: string }> {
     const sessionKey = this.getSessionKey(userId, id);
 
-    // Check if session already exists
-    const existingSession = await this.redisClient.get(sessionKey);
-    if (existingSession) {
-      throw new ConflictException('Phiên đặt chỗ đã tồn tại');
-    }
-
+    // If session exists, update it with new data
     await this.redisClient.set(
       sessionKey,
       sessionData,
