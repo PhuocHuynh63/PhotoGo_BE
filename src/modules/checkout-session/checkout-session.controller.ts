@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req, Query } from '@nestjs/common';
 import { CheckoutSessionService } from './checkout-session.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
@@ -34,12 +34,13 @@ export class CheckoutSessionController {
   })
   async createSession(
     @Body('sessionData') sessionData: string,
-    @Req() req: any,
+    @Query('userId') userId: string,
+    @Query('deviceId') deviceId: string,
   ) {
     return this.checkoutSessionService.createSession(
       sessionData,
-      req.user?.id,
-      req.headers['device-id'],
+      userId,
+      deviceId,
     );
   }
 
