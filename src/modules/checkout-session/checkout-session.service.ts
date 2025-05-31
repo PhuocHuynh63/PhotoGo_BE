@@ -27,15 +27,12 @@ export class CheckoutSessionService {
     const sessionKey = this.getSessionKey(userId, id);
 
     // If session exists, update it with new data
-    const res = await this.redisClient.set(
+    await this.redisClient.set(
       sessionKey,
       JSON.stringify(sessionData),
       'EX',
       this.SESSION_TTL
     );
-
-    console.log(`Redis set response: `, res);
-
 
     return {
       checkoutSesionId: sessionKey,
@@ -43,7 +40,7 @@ export class CheckoutSessionService {
     };
   }
 
-  async getSession(userId?: string, id?: string): Promise<CheckoutSessionDto> {
+  async getSession(userId?: string, id?: string): Promise<{ checkoutSesionId: string; data: CheckoutSessionDto }> {
     const sessionKey = this.getSessionKey(userId, id);
     const sessionData = await this.redisClient.get(sessionKey);
 
@@ -54,7 +51,10 @@ export class CheckoutSessionService {
     // Reset TTL on access
     await this.updateSessionTTL(userId, id);
 
-    return JSON.parse(sessionData) as CheckoutSessionDto;
+    return {
+      checkoutSesionId: sessionKey,
+      data: JSON.parse(sessionData) as CheckoutSessionDto
+    };
   }
 
   async deleteSession(userId?: string, id?: string): Promise<void> {
