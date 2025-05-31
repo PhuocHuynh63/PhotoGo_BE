@@ -1,7 +1,7 @@
 import { ApiProperty, ApiResponse } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, Length, IsNumber, IsDateString, IsOptional, IsEnum } from 'class-validator';
 import { assign } from 'nodemailer/lib/shared';
-import { VoucherUserStatusEnum, VoucherTypeDiscount, VoucherStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherUserStatusEnum, VoucherTypeDiscount, VoucherStatusEnum, VoucherTypePoint } from 'src/constants/voucher.enum';
 
 export class CreateVoucherDto {
   @IsString()
@@ -39,6 +39,55 @@ export class CreateVoucherDto {
     example: 20,
   })
   discount_value: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Giá trị giảm giá',
+    example: 20,
+  })
+  minPrice: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Giá trị giảm giá',
+    example: 20,
+  })
+  maxPrice: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Số lượng mã giảm giá',
+    example: 100,
+  })
+  quantity: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Số lượng mã giảm giá đã sử dụng',
+    example: 0,
+  })
+  usedCount: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Số lượng điểm thưởng',
+    example: 100,
+  })
+  point: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @Length(1, 20)
+  @ApiProperty({
+    description: 'Loại mã giảm giá (phần trăm, cố định)',
+    example: VoucherTypePoint.POINT,
+  })
+  type: VoucherTypePoint;
 
   @IsDateString()
   @IsNotEmpty()

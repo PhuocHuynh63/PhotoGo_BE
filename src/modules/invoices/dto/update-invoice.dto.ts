@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional } from 'class-validator';
-import { InvoiceStatus } from 'src/constants/booking.enum';
+import { InvoiceStatus } from 'src/constants/payment.enum';
 
 export class UpdateInvoiceDto {
 @IsEnum(InvoiceStatus)

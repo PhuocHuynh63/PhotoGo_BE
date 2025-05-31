@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
-import { BookingStatus } from '../../constants/booking.enum';
+import { BookingDepositType, BookingStatus } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
@@ -34,8 +34,12 @@ export class BookingService {
       throw new NotFoundException(`Khái niệm dịch vụ với ID ${serviceConceptId} không tìm thấy`);
     }
 
-    const vendorId = serviceConcept.servicePackage.vendorId;
+    // Kiểm tra tỷ lệ đặt cọc tối thiểu
+    if (createBookingDto.depositType === BookingDepositType.PERCENTAGE && createBookingDto.depositAmount < 30) {
+      throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
+    }
 
+    const vendorId = serviceConcept.servicePackage.vendorId;
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       userId,

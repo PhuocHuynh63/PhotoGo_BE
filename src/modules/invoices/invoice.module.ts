@@ -6,6 +6,8 @@ import { InvoiceController } from './invoice.controller';
 import { BookingModule } from '../bookings/booking.module';
 import { ServicePackageModule } from '../service-package/service-package.module';
 import { VoucherModule } from '../vouchers/voucher.module';
+import { AuthModule } from '../auth/auth.module';
+import { PaymentModule } from '../payments/payment.module';
 
 @Module({
   imports: [
@@ -13,6 +15,8 @@ import { VoucherModule } from '../vouchers/voucher.module';
     BookingModule,
     ServicePackageModule,
     VoucherModule,
+    AuthModule,
+    PaymentModule,
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService],

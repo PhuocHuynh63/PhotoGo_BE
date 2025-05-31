@@ -19,16 +19,16 @@ export class Voucher {
   @Column({ type: 'decimal', precision: 10, nullable: false })
   discount_value: number;
 
-  @Column({ type: 'integer', nullable: false })
+  @Column({ type: 'integer', nullable: false, name: 'minprice' })
   minPrice: number;
 
-  @Column({ type: 'integer', nullable: false })
+  @Column({ type: 'integer', nullable: false, name: 'maxprice' })
   maxPrice: number;
 
   @Column({ type: 'integer', nullable: false })
   quantity: number;
 
-  @Column({ type: 'integer', nullable: false })
+  @Column({ type: 'integer', nullable: false, name: 'usedcount' })
   usedCount: number;
 
   @Column({ type: 'varchar', nullable: false })

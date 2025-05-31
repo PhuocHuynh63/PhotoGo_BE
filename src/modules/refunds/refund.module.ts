@@ -8,9 +8,13 @@ import { PaymentModule } from '../payments/payment.module';
 import { PayosModule } from 'src/3rdService/payos/payos.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Refund, RefundHistory]), PaymentModule, PayosModule],
+  imports: [
+    TypeOrmModule.forFeature([Refund, RefundHistory]),
+    PaymentModule,
+    PayosModule
+  ],
   controllers: [RefundController],
   providers: [RefundService],
-  exports: [TypeOrmModule],
+  exports: [RefundService],
 })
 export class RefundModule {}

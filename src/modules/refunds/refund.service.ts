@@ -5,26 +5,26 @@ import { Refund } from './entities/refund.entity';
 import { RefundHistory } from './entities/refund-history.entity';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { FindAllRefundsDto } from './dto/find-all-refunds.dto';
-import { PaymentStatus , RefundStatus } from '../../constants/booking.enum';
-import { Payment } from '../payments/entities/payment.entity';
+import { RefundStatus } from '../../constants/booking.enum';
+import { PaymentStatus } from '../../constants/payment.enum';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common/exceptions';
 import { PayOSService } from 'src/3rdService/payos/payos.service';
+import { PaymentService } from '../payments/payment.service';
 
 @Injectable()
 export class RefundService {
   constructor(
     @InjectRepository(Refund)
     private readonly refundRepository: Repository<Refund>,
-    @InjectRepository(Payment)
-    private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(RefundHistory)
     private readonly refundHistoryRepository: Repository<RefundHistory>,
+    private readonly paymentService: PaymentService,
     private readonly payos: PayOSService,
   ) {}
 
   async create(createRefundDto: CreateRefundDto): Promise<Refund> {
     const refund = this.refundRepository.create(createRefundDto);
-    refund.status = RefundStatus.PENDING; // Ensure RefundStatus is used instead of PaymentStatus
+    refund.status = RefundStatus.PENDING;
 
     const savedRefund = await this.refundRepository.save(refund);
 
@@ -68,7 +68,7 @@ export class RefundService {
   async refundPayment(paymentId: string, createRefundDto: CreateRefundDto): Promise<any> {
     const { amount, reason } = createRefundDto;
   
-    const payment = await this.paymentRepository.findOne({ where: { id: paymentId } });
+    const payment = await this.paymentService.findOne(paymentId);
     if (!payment) {
       throw new NotFoundException(`Thanh toán với ID ${paymentId} không tồn tại`);
     }
@@ -104,8 +104,9 @@ export class RefundService {
       });
   
       // Cập nhật trạng thái Payment
-      payment.status = PaymentStatus.REFUNDED;
-      await this.paymentRepository.save(payment);
+      await this.paymentService.update(payment.id, {
+        status: PaymentStatus.REFUNDED
+      });
   
       return {
         message: 'Hoàn trả thành công',
@@ -120,5 +121,4 @@ export class RefundService {
       throw new InternalServerErrorException(`Hoàn trả thất bại: ${error.message}`);
     }
   }
-  
 }
