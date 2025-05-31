@@ -6,10 +6,12 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Vendor } from '../../vendors/entities/vendor.entity';
 import { Booking } from '../../bookings/entities/booking.entity';
+import { ReviewImage } from './review_image.entity';
 
 @Entity('review')
 export class Review {
@@ -42,6 +44,9 @@ export class Review {
 
   @Column({ type: 'text', nullable: true })
   comment: string;
+
+  @OneToMany(() => ReviewImage, (reviewImage) => reviewImage.review)
+  images: ReviewImage[];
 
   @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
