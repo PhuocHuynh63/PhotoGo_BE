@@ -21,10 +21,24 @@ export class CheckoutSessionController {
     schema: {
       type: 'object',
       properties: {
-        sessionData: {
+        id: {
           type: 'string',
+          description: 'ID của phiên đặt chỗ',
+          example: '12345'
+        },
+        userId: {
+          type: 'string',
+          description: 'ID của người dùng',
+          example: '67890'
+        },
+        sessionData: {
+          type: 'object',
           description: 'Dữ liệu phiên đặt chỗ',
-          example: '{"vendorId": "123", "servicePackageId": "456", "selectedTime": "2024-03-20T14:00:00Z"}'
+          properties: {
+            conceptId: { type: 'string', example: 'concept123' },
+            date: { type: 'string', format: 'date', example: '2024-03-20' },
+            time: { type: 'string', format: 'time', example: '14:00' },
+          }
         }
       }
     }

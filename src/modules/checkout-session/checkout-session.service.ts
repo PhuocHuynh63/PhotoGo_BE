@@ -43,7 +43,7 @@ export class CheckoutSessionService {
     };
   }
 
-  async getSession(userId?: string, id?: string): Promise<string | { message: string }> {
+  async getSession(userId?: string, id?: string): Promise<CheckoutSessionDto> {
     const sessionKey = this.getSessionKey(userId, id);
     const sessionData = await this.redisClient.get(sessionKey);
 
@@ -54,7 +54,7 @@ export class CheckoutSessionService {
     // Reset TTL on access
     await this.updateSessionTTL(userId, id);
 
-    return sessionData;
+    return JSON.parse(sessionData) as CheckoutSessionDto;
   }
 
   async deleteSession(userId?: string, id?: string): Promise<void> {
