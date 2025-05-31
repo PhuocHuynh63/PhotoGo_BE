@@ -521,9 +521,11 @@ export class ServicePackageService {
       this.logger.log('Uploading new images');
       try {
         const uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
-        // Delete existing images
+        
+        // Delete existing images first
         await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
-        // Create new images
+
+        // Then create new images
         const imageEntities = uploadedImageUrls.map(url => 
           this.serviceConceptImageRepository.create({
             imageUrl: url,
@@ -531,6 +533,9 @@ export class ServicePackageService {
           })
         );
         await this.serviceConceptImageRepository.save(imageEntities);
+
+        // Update service concept with new images
+        serviceConcept.images = imageEntities;
       } catch (error) {
         this.logger.error(`Error uploading images: ${error.message}`);
         throw new BadRequestException(`Error uploading images: ${error.message}`);
@@ -559,22 +564,45 @@ export class ServicePackageService {
     if (updateServiceConceptDto.serviceTypeIds) {
       this.logger.log('Đang cập nhật liên kết loại dịch vụ');
       try {
-        // Remove existing relationships
-        await this.serviceConceptServiceTypeRepository.delete({ serviceConceptId: id });
-
-        // Verify all service types exist
+        // Verify all service types exist first
         const serviceTypes = await this.serviceTypeRepository.findByIds(updateServiceConceptDto.serviceTypeIds);
         if (serviceTypes.length !== updateServiceConceptDto.serviceTypeIds.length) {
           throw new NotFoundException('Một hoặc nhiều loại dịch vụ không tồn tại');
         }
 
-        // Create new relationships
-        for (const serviceType of serviceTypes) {
-          const serviceConceptServiceType = this.serviceConceptServiceTypeRepository.create({
-            serviceConceptId: id,
-            serviceTypeId: serviceType.id,
-          });
-          await this.serviceConceptServiceTypeRepository.save(serviceConceptServiceType);
+        // Get existing relationships
+        const existingRelations = await this.serviceConceptServiceTypeRepository.find({
+          where: { serviceConceptId: id }
+        });
+
+        // Create a map of existing relationships for quick lookup
+        const existingMap = new Map(
+          existingRelations.map(rel => [rel.serviceTypeId, rel])
+        );
+
+        // Create a map of new relationships for quick lookup
+        const newMap = new Map(
+          updateServiceConceptDto.serviceTypeIds.map(typeId => [typeId, true])
+        );
+
+        // Remove relationships that are no longer needed
+        const toRemove = existingRelations.filter(rel => !newMap.has(rel.serviceTypeId));
+        if (toRemove.length > 0) {
+          await this.serviceConceptServiceTypeRepository.remove(toRemove);
+        }
+
+        // Add new relationships
+        const toAdd = serviceTypes
+          .filter(type => !existingMap.has(type.id))
+          .map(type => 
+            this.serviceConceptServiceTypeRepository.create({
+              serviceConceptId: id,
+              serviceTypeId: type.id
+            })
+          );
+
+        if (toAdd.length > 0) {
+          await this.serviceConceptServiceTypeRepository.save(toAdd);
         }
       } catch (error) {
         this.logger.error(`Lỗi khi cập nhật liên kết loại dịch vụ: ${error.message}`);
@@ -584,6 +612,44 @@ export class ServicePackageService {
 
     const updatedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
     this.logger.log(`Khái niệm dịch vụ đã được cập nhật thành công trong ${Date.now() - startTime}ms`);
+
+    // Generate concept vector if new images are provided
+    if (files?.images && files.images.length > 0) {
+      try {
+        this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${updatedServiceConcept.id}`);
+        const vectorStartTime = Date.now();
+        
+        // Try with first image
+        try {
+          await this.geminiService.generateConceptVector(files.images[0], updatedServiceConcept.id);
+          this.logger.log(`Concept vector đã được tạo thành công trong ${Date.now() - vectorStartTime}ms`);
+        } catch (error) {
+          // If first image fails due to safety filter, try with other images
+          if (error.message?.includes('Response was blocked') && files.images.length > 1) {
+            this.logger.warn(`Ảnh đầu tiên bị chặn bởi bộ lọc an toàn, đang thử với ảnh khác...`);
+            for (let i = 1; i < files.images.length; i++) {
+              try {
+                await this.geminiService.generateConceptVector(files.images[i], updatedServiceConcept.id);
+                this.logger.log(`Concept vector đã được tạo thành công với ảnh thứ ${i + 1} trong ${Date.now() - vectorStartTime}ms`);
+                break;
+              } catch (retryError) {
+                if (i === files.images.length - 1) {
+                  throw retryError; // Re-throw if all images fail
+                }
+                this.logger.warn(`Ảnh thứ ${i + 1} cũng bị chặn, đang thử ảnh tiếp theo...`);
+              }
+            }
+          } else {
+            throw error; // Re-throw if it's not a safety filter issue
+          }
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi khi tạo concept vector: ${error.message}`);
+        // Don't throw error to prevent service concept update from failing
+      }
+    }
+
+    // Return the updated concept with all relations
     return this.findServiceConcept(updatedServiceConcept.id);
   }
 
