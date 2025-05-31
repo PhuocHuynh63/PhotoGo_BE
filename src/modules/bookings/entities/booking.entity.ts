@@ -48,6 +48,9 @@ export class Booking {
   @Column({ type: 'uuid', nullable: true, name: 'source_id' })
   sourceId: string;
 
+  @Column({ type: 'integer', nullable: true, name: 'deposit_amount' })
+  depositAmount: number;
+
   @Column({ type: 'enum', enum: BookingDepositType, default: BookingDepositType.PERCENTAGE, nullable: false, name: 'deposit_type' })
   depositType: BookingDepositType;
 

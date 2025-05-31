@@ -175,20 +175,34 @@ export class VendorService {
 
   //#region findOne
   async findOne(id: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
-      where: { id },
-      relations: [
-        'category', 
-        'locations', 
-        'servicePackages', 
-        'servicePackages.serviceConcepts', 
-        'servicePackages.serviceConcepts.serviceConceptServiceTypes', 
-        'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 
-        'servicePackages.serviceConcepts.images',
-        'user_id', 
-        'user_id.role'
-      ],
-    });
+    const vendor = await this.vendorRepository
+      .createQueryBuilder('vendor')
+      .select([
+        'vendor',
+        'category.id',
+        'category.name',
+        'locations',
+        'servicePackages',
+        'serviceConcepts',
+        'serviceConceptServiceTypes',
+        'serviceType',
+        'images',
+        'user_id',
+        'role'
+      ])
+      .leftJoin('vendor.category', 'category')
+      .leftJoin('vendor.locations', 'locations')
+      .leftJoin('vendor.servicePackages', 'servicePackages')
+      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
+      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
+      .leftJoin('serviceConcepts.images', 'images')
+      .leftJoin('vendor.user_id', 'user_id')
+      .leftJoin('user_id.role', 'role')
+      .where('vendor.id = :id', { id })
+      .orderBy('servicePackages.created_at', 'DESC')
+      .getOne();
+
     if (!vendor) {
       throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
@@ -270,12 +284,30 @@ export class VendorService {
     const pageSize = query.pageSize ? Number(query.pageSize) : 10;
     const skip = (currentPage - 1) * pageSize;
 
-    const queryBuilder = this.vendorRepository.createQueryBuilder('vendor');
-    queryBuilder.leftJoinAndSelect('vendor.category', 'category');
-    queryBuilder.leftJoinAndSelect('vendor.locations', 'locations');
-    queryBuilder.leftJoinAndSelect('vendor.servicePackages', 'service_package');
-    queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
-    queryBuilder.leftJoinAndSelect('service_concept.images', 'service_concept_images');
+    const queryBuilder = this.vendorRepository
+      .createQueryBuilder('vendor')
+      .select([
+        'vendor',
+        'category.id',
+        'category.name',
+        'locations',
+        'servicePackages',
+        'serviceConcepts',
+        'serviceConceptServiceTypes',
+        'serviceType',
+        'images',
+        'user_id',
+        'role'
+      ])
+      .leftJoin('vendor.category', 'category')
+      .leftJoin('vendor.locations', 'locations')
+      .leftJoin('vendor.servicePackages', 'servicePackages')
+      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
+      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
+      .leftJoin('serviceConcepts.images', 'images')
+      .leftJoin('vendor.user_id', 'user_id')
+      .leftJoin('user_id.role', 'role');
 
     if (query.term) {
       queryBuilder.andWhere(
@@ -312,10 +344,28 @@ export class VendorService {
 
   //#region findBySlug
   async findBySlug(slug: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
-      where: { slug },
-      relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'servicePackages.serviceConcepts.images'],
-    });
+    const vendor = await this.vendorRepository
+      .createQueryBuilder('vendor')
+      .select([
+        'vendor',
+        'category.id',
+        'category.name',
+        'locations',
+        'servicePackages',
+        'serviceConcepts',
+        'serviceConceptServiceTypes',
+        'serviceType',
+        'images'
+      ])
+      .leftJoin('vendor.category', 'category')
+      .leftJoin('vendor.locations', 'locations')
+      .leftJoin('vendor.servicePackages', 'servicePackages')
+      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
+      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
+      .leftJoin('serviceConcepts.images', 'images')
+      .where('vendor.slug = :slug', { slug })
+      .getOne();
 
     if (!vendor) {
       throw new NotFoundException(`Nhà cung cấp với slug ${slug} không tồn tại`);
@@ -327,9 +377,33 @@ export class VendorService {
 
   //#region getVendorByUserID with role 'ROO8'
   async getVendorByUserID(userID: string): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({
-      where: { user_id: { id: userID } },
-    });
+    const vendor = await this.vendorRepository
+      .createQueryBuilder('vendor')
+      .select([
+        'vendor',
+        'category.id',
+        'category.name',
+        'locations',
+        'servicePackages',
+        'serviceConcepts',
+        'serviceConceptServiceTypes',
+        'serviceType',
+        'images',
+        'user_id',
+        'role'
+      ])
+      .leftJoin('vendor.category', 'category')
+      .leftJoin('vendor.locations', 'locations')
+      .leftJoin('vendor.servicePackages', 'servicePackages')
+      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
+      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
+      .leftJoin('serviceConcepts.images', 'images')
+      .leftJoin('vendor.user_id', 'user_id')
+      .leftJoin('user_id.role', 'role')
+      .where('user_id.id = :userID', { userID })
+      .getOne();
+
     return vendor;
   }
   //#endregion getVendorByUserID with role 'ROO8'
@@ -338,7 +412,26 @@ export class VendorService {
   async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
     const vendors = await this.vendorRepository
       .createQueryBuilder('vendor')
-      .leftJoinAndSelect('vendor.availabilities', 'vendor_availability', 
+      .select([
+        'vendor',
+        'category.id',
+        'category.name',
+        'locations',
+        'servicePackages',
+        'serviceConcepts',
+        'serviceConceptServiceTypes',
+        'serviceType',
+        'images',
+        'vendor_availability'
+      ])
+      .leftJoin('vendor.category', 'category')
+      .leftJoin('vendor.locations', 'locations')
+      .leftJoin('vendor.servicePackages', 'servicePackages')
+      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
+      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
+      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
+      .leftJoin('serviceConcepts.images', 'images')
+      .leftJoin('vendor.availabilities', 'vendor_availability', 
         `vendor_availability.date = :date 
          AND vendor_availability.isAvailable = true 
          AND (
@@ -350,7 +443,6 @@ export class VendorService {
       )
       .getMany();
   
-    // Filter out vendors without availabilities
     return vendors
       .filter(vendor => vendor.availabilities && vendor.availabilities.length > 0)
       .map(vendor => ({
