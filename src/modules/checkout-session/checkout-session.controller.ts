@@ -3,6 +3,7 @@ import { CheckoutSessionService } from './checkout-session.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 import { Public, ResponseMessage } from 'src/decorator/custom';
+import { CheckoutSessionDto } from './dto/checkout-sesion';
 
 @ApiTags('checkout-session')
 @Controller('checkout-session')
@@ -31,7 +32,7 @@ export class CheckoutSessionController {
   async createSession(
     @Query('id') id: string,
     @Query('userId') userId: string,
-    @Body('sessionData') sessionData: string,
+    @Body() sessionData: CheckoutSessionDto,
   ) {
     return this.checkoutSessionService.createSession(id, userId, sessionData);
   }
