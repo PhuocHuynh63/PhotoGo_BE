@@ -18,27 +18,6 @@ export enum BookingDepositType {
   PERCENTAGE = 'phần trăm',
 }
 
-export enum InvoiceStatus {
-  PENDING = 'chờ thanh toán',
-  PAID = 'đã thanh toán',
-  CANCELLED = 'đã hủy',
-  REFUNDED = 'đã hoàn tiền',
-}
-
-export enum PaymentMethod {
-  CARD = 'thẻ',
-  BANK_TRANSFER = 'chuyển khoản ngân hàng',
-  E_WALLET = 'ví điện tử',
-  PAYOS = 'PAYOS',
-}
-
-export enum PaymentStatus {
-  PENDING = 'chờ xử lý',
-  COMPLETED = 'đã hoàn thành',
-  FAILED = 'thất bại',
-  REFUNDED = 'đã hoàn tiền',
-}
-
 export enum RefundStatus {
   PENDING = 'chờ xử lý',
   APPROVED = 'đã chấp nhận',

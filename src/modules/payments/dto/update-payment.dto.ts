@@ -1,26 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 import { PaymentMethod, PaymentStatus, PaymentType } from '../../../constants/payment.enum';
 
-export class CreatePaymentDto {
-  @ApiProperty()
-  @IsUUID()
-  invoiceId: string;
-
-  @ApiProperty()
+export class UpdatePaymentDto {
+  @ApiProperty({ required: false })
   @IsNumber()
-  amount: number;
+  @IsOptional()
+  amount?: number;
 
-  @ApiProperty({ enum: PaymentMethod })
+  @ApiProperty({ enum: PaymentMethod, required: false })
   @IsEnum(PaymentMethod)
-  paymentMethod: PaymentMethod;
+  @IsOptional()
+  paymentMethod?: PaymentMethod;
 
-  @ApiProperty({ enum: PaymentStatus, default: PaymentStatus.PENDING })
+  @ApiProperty({ enum: PaymentStatus, required: false })
   @IsEnum(PaymentStatus)
   @IsOptional()
   status?: PaymentStatus;
 
-  @ApiProperty({ enum: PaymentType, default: PaymentType.DEPOSIT })
+  @ApiProperty({ enum: PaymentType, required: false })
   @IsEnum(PaymentType)
   @IsOptional()
   type?: PaymentType;
@@ -36,7 +34,6 @@ export class CreatePaymentDto {
   description?: string;
 
   @ApiProperty({ required: false })
-  @IsString()
   @IsOptional()
-  paymentOSId?: string;
-}
+  metadata?: Record<string, any>;
+} 

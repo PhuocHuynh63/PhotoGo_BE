@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Invoice } from './entities/invoice.entity';
@@ -8,10 +8,10 @@ import { BookingService } from '../bookings/booking.service';
 import { ServicePackageService } from '../service-package/service-package.service';
 import { VoucherService } from '../vouchers/voucher.service';
 import e from 'express';
-import { InvoiceStatus } from 'src/constants/booking.enum';
+import { InvoiceStatus } from 'src/constants/payment.enum';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherTypeDiscount } from 'src/constants/voucher.enum';
-
+import { BookingDepositType } from 'src/constants/booking.enum';
 @Injectable()
 export class InvoiceService {
   constructor(
@@ -22,7 +22,7 @@ export class InvoiceService {
     private voucherService: VoucherService,
   ) {}
 
-  async create(bookingId,voucherId,createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
+  async create(bookingId, voucherId, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
     // Kiểm tra xem bookingId có tồn tại trong bảng Booking không
     const booking = await this.bookingService.findOne(bookingId);
     if (!booking) {
@@ -95,16 +95,43 @@ export class InvoiceService {
     //6. Tinh payablePrice
     const payablePrice = discountedPrice + taxAmount + feeAmount;
 
-    //7. Tao invoice
+    //7. Tính toán số tiền đặt cọc và số tiền còn lại
+    let depositAmount = 0;
+    let remainingAmount = 0;
+    if (booking.depositType === BookingDepositType.PERCENTAGE) {
+      // Kiểm tra tỷ lệ đặt cọc tối thiểu
+      if (booking.depositAmount < 30) {
+        throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
+      }
+      depositAmount = Math.round(payablePrice * (booking.depositAmount / 100));
+      remainingAmount = payablePrice - depositAmount;
+    } else {
+      depositAmount = booking.depositAmount;
+      remainingAmount = payablePrice - depositAmount;
+    }
+
+    // Kiểm tra số tiền hợp lệ
+    if (depositAmount <= 0 || remainingAmount <= 0) {
+      throw new BadRequestException('Số tiền đặt cọc và số tiền còn lại phải lớn hơn 0');
+    }
+
+    // Làm tròn số tiền
+    depositAmount = Math.round(depositAmount);
+    remainingAmount = Math.round(remainingAmount);
+
+    //8. Tao invoice
     const invoice = this.invoiceRepository.create({
       ...createInvoiceDto,
-      booking,
+      bookingId: booking.id,
       originalPrice,
       discountAmount,
       discountedPrice,
       taxAmount,
       feeAmount,
       payablePrice,
+      depositAmount,
+      remainingAmount,
+      paidAmount: 0,
       status: InvoiceStatus.PENDING,
     });
 
@@ -142,10 +169,10 @@ export class InvoiceService {
 
     return invoice;
   }
-
   async updateInvoice(id: string, updateInvoiceDto: Partial<UpdateInvoiceDto>): Promise<Invoice> {
-    await this.invoiceRepository.update(id, updateInvoiceDto);
-    return this.findOne(id);
+    const invoice = await this.findOne(id);
+    Object.assign(invoice, updateInvoiceDto);
+    return this.invoiceRepository.save(invoice);
   }
 
   async deleteInvoice(id: string): Promise<void> {

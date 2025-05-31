@@ -4,21 +4,21 @@ import { Payment } from './entities/payment.entity';
 import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
 import { PayosModule } from '../../3rdService/payos/payos.module';
-import { InvoiceModule } from '../invoices/invoice.module';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { BookingModule } from '../bookings/booking.module';
 import { VoucherModule } from '../vouchers/voucher.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, Invoice]),
     BookingModule,
     VoucherModule,
-    InvoiceModule,
-    PayosModule
+    PayosModule,
+    AuthModule
   ],
   controllers: [PaymentController],
   providers: [PaymentService],
-  exports: [TypeOrmModule],
+  exports: [PaymentService],
 })
 export class PaymentModule {}

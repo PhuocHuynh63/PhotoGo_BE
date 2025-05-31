@@ -1,8 +1,8 @@
-import { Inject ,Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
-import { InvoiceStatus, PaymentMethod, PaymentStatus } from '../../constants/booking.enum';
+import { InvoiceStatus, PaymentMethod, PaymentStatus, PaymentType } from '../../constants/payment.enum';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FindAllPaymentsDto } from './dto/find-all-payments.dto';
 import { Invoice } from '../invoices/entities/invoice.entity';
@@ -10,9 +10,9 @@ import { ConfigService } from '@nestjs/config';
 import { BookingStatus } from '../../constants/booking.enum';
 import { VoucherService } from '../vouchers/voucher.service';
 import { VoucherUserStatusEnum } from '../../constants/voucher.enum';
-
-import  PayOS  from '@payos/node';
+import PayOS from '@payos/node';
 import { BookingService } from '../bookings/booking.service';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 
 @Injectable()
 export class PaymentService {
@@ -21,7 +21,7 @@ export class PaymentService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(Invoice)
     private readonly invoiceRepo: Repository<Invoice>,
-    @Inject('PAYOS_CLIENT') private readonly payos: PayOS, // Inject PayOS client
+    @Inject('PAYOS_CLIENT') private readonly payos: PayOS,
     private readonly configService: ConfigService,
     private readonly bookingService: BookingService,
     private readonly voucherService: VoucherService,
@@ -59,24 +59,47 @@ export class PaymentService {
     return payment;
   }
 
-  async createPayOSLink(invoiceId: string) {
-    console.log(`Received invoiceId: ${invoiceId}`);
+  async update(id: string, updatePaymentDto: UpdatePaymentDto): Promise<Payment> {
+    const payment = await this.findOne(id);
+    Object.assign(payment, updatePaymentDto);
+    return await this.paymentRepository.save(payment);
+  }
+
+  async remove(id: string): Promise<void> {
+    const payment = await this.findOne(id);
+    await this.paymentRepository.remove(payment);
+  }
+
+  async createPayOSLink(invoiceId: string, paymentType: PaymentType) {
     const invoice = await this.invoiceRepo.findOne({ 
       where: { id: invoiceId },
       relations: ['booking', 'booking.user', 'booking.serviceConcept'],
     });
     
-    if (!invoice) {
-      throw new NotFoundException(`Hóa đơn với ID ${invoiceId} không tồn tại`);
+    if (!invoice || !invoice.id) {
+      throw new NotFoundException(`Hóa đơn với ID ${invoiceId} không tồn tại hoặc không có ID hợp lệ`);
     }
-
+  
+    let amount = 0;
+    if (paymentType === PaymentType.DEPOSIT) {
+      amount = invoice.depositAmount;
+    } else {
+      amount = invoice.remainingAmount;
+    }
+  
+    if (amount <= 0) {
+      throw new BadRequestException('Số tiền thanh toán không hợp lệ');
+    }
+  
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
     const serviceConcept = invoice.booking?.serviceConcept;
-    const orderCode = Date.now(); // Sử dụng timestamp để đảm bảo unique
-    const description = `PG#${orderCode}`;
+    const timestamp = Date.now();
+    const orderCode = parseInt(`${timestamp}${paymentType === PaymentType.DEPOSIT ? '1' : '2'}`);
+    const description = `PG#${orderCode} - ${paymentType === PaymentType.DEPOSIT ? 'Đặt cọc' : 'Thanh toán còn lại'}`;
+  
     const paymentLinkData = {
       orderCode,
-      amount: invoice.payablePrice,
+      amount,
       description,
       returnUrl: this.configService.get<string>('PAYOS_RETURN_URL'),
       cancelUrl: this.configService.get<string>('PAYOS_RETURN_URL'),
@@ -86,46 +109,30 @@ export class PaymentService {
         {
           name: serviceConcept?.name || 'Dịch vụ không xác định',
           quantity: 1,
-          price: Number(serviceConcept?.price) || 0,
+          price: amount,
         },
       ],
     };
-
+  
     try {
       const paymentLinkRes = await this.payos.createPaymentLink(paymentLinkData);
       console.log('Payment link response:', paymentLinkRes);
-
-      await this.paymentRepository.save({
-        invoiceId: invoiceId,
-        amount: invoice.payablePrice,
+  
+      // Tạo payment record
+      const payment = await this.create({
+        invoiceId: invoice.id,
+        amount,
         paymentMethod: PaymentMethod.PAYOS,
         status: PaymentStatus.PENDING,
         transactionId: orderCode.toString(),
-        paymentOSId: paymentLinkRes.paymentLinkId, // Lưu paymentId từ PayOS
+        type: paymentType,
+        description,
+        paymentOSId: paymentLinkRes.paymentLinkId,
       });
-
-      // Update booking status
-      if (invoice.booking && invoice.booking.id) {
-        const booking = await this.bookingService.findOne(invoice.booking.id);
-        
-        if (booking) {
-          try {
-            await this.bookingService.update(booking.id, {
-              status: BookingStatus.COMPLETED
-            });
-          } catch (error) {
-            console.error('Lỗi cập nhật trạng thái booking', error);
-            throw error;
-          }
-        } else {
-            console.log('Booking không tồn tại');
-        }
-      } else {
-        console.log('Không tìm thấy booking trong hóa đơn');
-      }
-        
+  
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,
+        paymentLinkId: paymentLinkRes.paymentLinkId,
       };
     } catch (error) {
       console.error('PayOS error:', error);
@@ -133,24 +140,31 @@ export class PaymentService {
     }
   }
 
-  // handle PayOS webhook
   async handlePayOSWebhook(data: any) {
     const { status, transactionId } = data;
-    const payment = await this.paymentRepository.findOne({ where: { transactionId } });
-    const invoice = await this.invoiceRepo.findOne({ 
-      where: { id: payment.invoiceId },
-      relations: ['booking', 'booking.user', 'booking.user.voucherUsers', 'booking.user.voucherUsers.voucher']
+    
+    // Tìm payment dựa trên transactionId
+    const payment = await this.paymentRepository.findOne({ 
+      where: { transactionId },
+      relations: ['invoice', 'invoice.booking', 'invoice.booking.user', 'invoice.booking.user.voucherUsers', 'invoice.booking.user.voucherUsers.voucher']
     });
 
     if (!payment) {
       throw new NotFoundException(`Thanh toán với ID ${transactionId} không tồn tại`);
     }
 
-    if (status === 'COMPLETED') {
-      payment.status = PaymentStatus.COMPLETED;
-      invoice.status = InvoiceStatus.PAID;
+    const invoice = payment.invoice;
 
-      // Update voucher usage if a voucher was used
+    if (status === 'COMPLETED') {
+      // Cập nhật trạng thái payment
+      payment.status = PaymentStatus.PAID;
+      await this.paymentRepository.save(payment);
+
+      // Cập nhật số tiền đã thanh toán của invoice
+      invoice.paidAmount += payment.amount;
+      await this.invoiceRepo.save(invoice);
+
+      // Cập nhật trạng thái voucher nếu có
       const activeVoucherUser = invoice.booking?.user?.voucherUsers?.find(
         vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
       );
@@ -159,18 +173,18 @@ export class PaymentService {
           await this.voucherService.updateVoucherUsage(activeVoucherUser.voucher.id);
         } catch (error) {
           console.error('Error updating voucher usage:', error);
-          // Don't throw error here to prevent payment completion from failing
         }
+      }
+
+      // Cập nhật trạng thái booking nếu đã thanh toán đủ
+      if (invoice.paidAmount >= invoice.payablePrice) {
+        await this.bookingService.update(invoice.booking.id, {
+          status: BookingStatus.COMPLETED
+        });
       }
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
-      invoice.status = InvoiceStatus.PENDING;
-    } else {
-      return;
+      await this.paymentRepository.save(payment);
     }
-
-    await this.paymentRepository.save(payment);
-    await this.invoiceRepo.save(invoice);
   }
-
 }
