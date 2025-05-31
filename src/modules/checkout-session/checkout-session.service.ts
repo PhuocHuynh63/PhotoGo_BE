@@ -23,7 +23,7 @@ export class CheckoutSessionService {
     id: string,
     userId: string,
     sessionData: CheckoutSessionDto,
-  ): Promise<{ checkoutSesionId: string; data: CheckoutSessionDto }> {
+  ): Promise<{ checkoutSessionId: string; data: CheckoutSessionDto }> {
     const sessionKey = this.getSessionKey(userId, id);
 
     // If session exists, update it with new data
@@ -35,7 +35,7 @@ export class CheckoutSessionService {
     );
 
     return {
-      checkoutSesionId: sessionKey,
+      checkoutSessionId: sessionKey,
       data: sessionData,
     };
   }

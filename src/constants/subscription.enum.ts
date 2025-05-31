@@ -1,10 +1,10 @@
 export enum SubscriptionStatus {
-  ACTIVE = 'hoạt động',
-  CANCELED = 'đã hủy',
-  EXPIRED = 'hết hạn'
+  ACTIVE = 'Hoạt động',
+  CANCELED = 'Đã hủy',
+  EXPIRED = 'Hết hạn'
 }
 
 export enum BillingCycle {
-  MONTHLY = 'hàng tháng',
-  YEARLY = 'hàng năm'
-} 
+  MONTHLY = 'Hàng tháng',
+  YEARLY = 'Hàng năm'
+}
