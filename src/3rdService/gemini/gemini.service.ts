@@ -223,10 +223,18 @@ export class GeminiService {
         try {
             // Generate keywords from image
             const keywords = await this.generateKeywordsFromImage(image);
-            
+            this.logger.log(`Generated keywords: ${keywords.join(', ')}`);
+    
             // Generate embedding from keywords
             const embedding = await this.generateEmbedding(keywords.join(' '));
-
+            this.logger.log(`Generated embedding length: ${embedding.length}`);
+            this.logger.log(`Generated embedding sample: ${embedding.slice(0, 10).join(', ')}...`);
+    
+            // Kiểm tra embedding trước khi lưu
+            if (!Array.isArray(embedding) || embedding.length !== 768 || !embedding.every(val => typeof val === 'number' && !isNaN(val))) {
+                throw new Error(`Invalid embedding: must be an array of 768 numbers`);
+            }
+    
             // Create or update concept vector
             let conceptVector = await this.conceptVectorRepository.findOne({ where: { conceptId } });
             if (!conceptVector) {
@@ -239,10 +247,10 @@ export class GeminiService {
                 conceptVector.keywords = keywords;
                 conceptVector.embedding = embedding;
             }
-
+    
             return await this.conceptVectorRepository.save(conceptVector);
         } catch (error) {
-            console.error('Error generating concept vector:', error);
+            this.logger.error(`Error generating concept vector: ${error.message}`);
             throw error;
         }
     }
@@ -251,11 +259,20 @@ export class GeminiService {
         try {
             // Generate keywords and embedding from the image
             const keywords = await this.generateKeywordsFromImage(image);
+            this.logger.log(`Generated keywords for search: ${keywords.join(', ')}`);
+    
             const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
-
+            this.logger.log(`Generated query embedding length: ${queryEmbedding.length}`);
+            this.logger.log(`Query embedding sample: ${queryEmbedding.slice(0, 10).join(', ')}...`);
+    
+            // Kiểm tra tính hợp lệ của queryEmbedding
+            if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768 || !queryEmbedding.every(val => typeof val === 'number' && !isNaN(val))) {
+                throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
+            }
+    
             // Create a query builder for combined search
             const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
-
+    
             // Build the combined search query using pgvector functions
             queryBuilder
                 .select('conceptVector')
@@ -271,26 +288,29 @@ export class GeminiService {
                             ELSE 0
                         END * 0.4 + 
                         -- Vector similarity using pgvector's cosine distance
-                        (1 - (conceptVector.embedding <=> array_to_vector(:queryEmbedding))) * 0.6
+                        (1 - (conceptVector.embedding <=> :queryEmbedding::vector)) * 0.6
                     )::float as relevance_score
                 `)
-                .addSelect('(conceptVector.embedding <-> array_to_vector(:queryEmbedding))::float as distance')
+                .addSelect('(conceptVector.embedding <-> :queryEmbedding::vector)::float as distance')
                 .setParameter('keywords', keywords)
-                .setParameter('queryEmbedding', queryEmbedding)
+                .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`) // Chuyển thành chuỗi vector
                 .orderBy('relevance_score', 'DESC')
                 .limit(10);
-
+    
             const results = await queryBuilder.getRawAndEntities();
             
             // Map the results to include both relevance score and distance
-            return results.entities.map((entity, index) => ({
+            const mappedResults = results.entities.map((entity, index) => ({
                 ...entity,
                 relevanceScore: parseFloat(results.raw[index].relevance_score),
                 distance: parseFloat(results.raw[index].distance)
             }));
+    
+            this.logger.log(`Found ${mappedResults.length} matching concepts`);
+            return mappedResults;
         } catch (error) {
             this.logger.error(`Error searching concepts: ${error.message}`);
-            throw error;
+            throw new Error(`Failed to search concepts: ${error.message}`);
         }
     }
 
@@ -339,32 +359,45 @@ export class GeminiService {
     private async generateEmbedding(text: string): Promise<number[]> {
         try {
             const model = await this.initializeModel();
-            const prompt = `Generate a 384-dimensional embedding vector for this text: ${text}. Return only the array of numbers, no additional text.`;
-
+            const prompt = `Generate a 768-dimensional embedding vector for this text: ${text}. Return only the array of numbers in JSON format, e.g., [0.1, 0.2, 0.3, ...].`;
+    
             const result = await model.generateContent([prompt]);
             const response = await result.response;
             const responseText = response.text();
-
+    
+            this.logger.log(`Gemini API embedding response: ${responseText}`); // Log để debug
+    
             try {
-                // Try to parse the response as JSON
-                return JSON.parse(responseText);
+                // Phân tích cú pháp phản hồi
+                let embedding = JSON.parse(responseText);
+                
+                // Nếu embedding là mảng chuỗi, chuyển thành mảng số
+                if (embedding.every((val: any) => typeof val === 'string')) {
+                    embedding = embedding.map((val: string) => parseFloat(val));
+                }
+    
+                // Kiểm tra định dạng và độ dài
+                if (!Array.isArray(embedding) || embedding.length !== 768 || !embedding.every((val: any) => typeof val === 'number' && !isNaN(val))) {
+                    throw new Error(`Invalid embedding format or length. Expected 768 numbers, got ${embedding.length}`);
+                }
+    
+                return embedding;
             } catch (parseError) {
-                // If parsing fails, generate a fallback embedding
-                this.logger.warn('Failed to parse embedding response, using fallback embedding');
-                // Generate a simple embedding based on text length and content
-                const fallbackEmbedding = new Array(384).fill(0);
+                this.logger.warn(`Failed to parse embedding response: ${parseError.message}, using fallback embedding`);
+                // Tạo vector dự phòng với 768 phần tử
+                const fallbackEmbedding = new Array(768).fill(0);
                 const words = text.toLowerCase().split(/\s+/);
                 words.forEach((word, index) => {
-                    if (index < 384) {
-                        fallbackEmbedding[index] = word.length / 10; // Normalize to 0-1 range
+                    if (index < 768) {
+                        fallbackEmbedding[index] = Math.min(word.length / 10, 1); // Chuẩn hóa giá trị
                     }
                 });
                 return fallbackEmbedding;
             }
         } catch (error) {
             this.logger.error(`Error generating embedding: ${error.message}`);
-            // Return a zero vector as last resort
-            return new Array(384).fill(0);
+            // Trả về vector dự phòng với 768 phần tử
+            return new Array(768).fill(0);
         }
     }
 }
