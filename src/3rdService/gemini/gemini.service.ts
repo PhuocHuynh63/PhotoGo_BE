@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { IGeminiResponse, ImageAnalysisResponse, TextAnalysisResponse } from './dto/gemini.response.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ConceptVector } from '../../modules/service-package/entities/concept-vector.entity';
 
 @Injectable()
 export class GeminiService {
@@ -30,7 +33,11 @@ export class GeminiService {
         - Không đưa ra các thông tin không có trong ứng dụng PhotoGo
     `;
 
-    constructor(private configService: ConfigService) {
+    constructor(
+        private configService: ConfigService,
+        @InjectRepository(ConceptVector)
+        private conceptVectorRepository: Repository<ConceptVector>,
+    ) {
         const apiKey = this.configService.get<string>('gemini.apiKey');
         if (!apiKey) {
             this.logger.error('GEMINI_API_KEY is not defined in environment variables');
@@ -212,7 +219,152 @@ export class GeminiService {
             negativeCount > positiveCount ? 'negative' : 'neutral';
     }
 
+    async generateConceptVector(image: Express.Multer.File, conceptId: string): Promise<ConceptVector> {
+        try {
+            // Generate keywords from image
+            const keywords = await this.generateKeywordsFromImage(image);
+            
+            // Generate embedding from keywords
+            const embedding = await this.generateEmbedding(keywords.join(' '));
 
+            // Create or update concept vector
+            let conceptVector = await this.conceptVectorRepository.findOne({ where: { conceptId } });
+            if (!conceptVector) {
+                conceptVector = this.conceptVectorRepository.create({
+                    conceptId,
+                    keywords,
+                    embedding,
+                });
+            } else {
+                conceptVector.keywords = keywords;
+                conceptVector.embedding = embedding;
+            }
 
+            return await this.conceptVectorRepository.save(conceptVector);
+        } catch (error) {
+            console.error('Error generating concept vector:', error);
+            throw error;
+        }
+    }
 
+    async searchConcepts(image: Express.Multer.File): Promise<ConceptVector[]> {
+        try {
+            // Generate keywords and embedding from the image
+            const keywords = await this.generateKeywordsFromImage(image);
+            const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
+
+            // Create a query builder for combined search
+            const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
+
+            // Build the combined search query using pgvector functions
+            queryBuilder
+                .select('conceptVector')
+                .addSelect(`
+                    (
+                        -- Keyword match score (0-1)
+                        CASE 
+                            WHEN EXISTS (
+                                SELECT 1 
+                                FROM unnest(conceptVector.keywords) keyword 
+                                WHERE keyword = ANY(:keywords)
+                            ) THEN 1
+                            ELSE 0
+                        END * 0.4 + 
+                        -- Vector similarity using pgvector's cosine distance
+                        (1 - (conceptVector.embedding <=> array_to_vector(:queryEmbedding))) * 0.6
+                    )::float as relevance_score
+                `)
+                .addSelect('(conceptVector.embedding <-> array_to_vector(:queryEmbedding))::float as distance')
+                .setParameter('keywords', keywords)
+                .setParameter('queryEmbedding', queryEmbedding)
+                .orderBy('relevance_score', 'DESC')
+                .limit(10);
+
+            const results = await queryBuilder.getRawAndEntities();
+            
+            // Map the results to include both relevance score and distance
+            return results.entities.map((entity, index) => ({
+                ...entity,
+                relevanceScore: parseFloat(results.raw[index].relevance_score),
+                distance: parseFloat(results.raw[index].distance)
+            }));
+        } catch (error) {
+            this.logger.error(`Error searching concepts: ${error.message}`);
+            throw error;
+        }
+    }
+
+    private async generateKeywordsFromImage(image: Express.Multer.File): Promise<string[]> {
+        try {
+            const model = await this.initializeModel();
+            
+            // Convert image to base64
+            const imageData = {
+                inlineData: {
+                    data: image.buffer.toString('base64'),
+                    mimeType: image.mimetype
+                }
+            };
+
+            const prompt = `Analyze this image and provide 5-10 relevant keywords that describe its content, style, and mood. 
+            Focus on visual elements, composition, and artistic aspects. 
+            Return only the keywords in a comma-separated list, no additional text.`;
+
+            const result = await model.generateContent([prompt, imageData]);
+            const response = await result.response;
+            const text = response.text();
+            
+            if (!text) {
+                throw new Error('No text response from Gemini API');
+            }
+
+            // Clean and parse the keywords
+            const keywords = text
+                .split(',')
+                .map(k => k.trim().toLowerCase())
+                .filter(k => k.length > 0);
+
+            return keywords;
+        } catch (error) {
+            if (error.message?.includes('Response was blocked')) {
+                this.logger.warn('Image was blocked by safety filters, returning default keywords');
+                // Return default keywords that are safe and relevant for photography
+                return ['photography', 'art', 'creative', 'visual', 'design', 'studio', 'portrait', 'professional', 'quality', 'composition'];
+            }
+            this.logger.error(`Error generating keywords: ${error.message}`);
+            throw error;
+        }
+    }
+
+    private async generateEmbedding(text: string): Promise<number[]> {
+        try {
+            const model = await this.initializeModel();
+            const prompt = `Generate a 384-dimensional embedding vector for this text: ${text}. Return only the array of numbers, no additional text.`;
+
+            const result = await model.generateContent([prompt]);
+            const response = await result.response;
+            const responseText = response.text();
+
+            try {
+                // Try to parse the response as JSON
+                return JSON.parse(responseText);
+            } catch (parseError) {
+                // If parsing fails, generate a fallback embedding
+                this.logger.warn('Failed to parse embedding response, using fallback embedding');
+                // Generate a simple embedding based on text length and content
+                const fallbackEmbedding = new Array(384).fill(0);
+                const words = text.toLowerCase().split(/\s+/);
+                words.forEach((word, index) => {
+                    if (index < 384) {
+                        fallbackEmbedding[index] = word.length / 10; // Normalize to 0-1 range
+                    }
+                });
+                return fallbackEmbedding;
+            }
+        } catch (error) {
+            this.logger.error(`Error generating embedding: ${error.message}`);
+            // Return a zero vector as last resort
+            return new Array(384).fill(0);
+        }
+    }
 }

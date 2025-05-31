@@ -12,6 +12,12 @@ export class Category {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ type: 'date', nullable: true })
+  created_at: Date;
+
+  @Column({ type: 'date', nullable: true })
+  updated_at: Date;
+
   @OneToMany(() => Vendor, (vendor) => vendor.category, { nullable: false })
   vendors: Vendor[];
 }

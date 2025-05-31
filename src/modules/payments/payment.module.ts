@@ -7,8 +7,16 @@ import { PayosModule } from '../../3rdService/payos/payos.module';
 import { InvoiceModule } from '../invoices/invoice.module';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { BookingModule } from '../bookings/booking.module';
+import { VoucherModule } from '../vouchers/voucher.module';
+
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment,Invoice]),BookingModule, InvoiceModule, PayosModule],
+  imports: [
+    TypeOrmModule.forFeature([Payment, Invoice]),
+    BookingModule,
+    VoucherModule,
+    InvoiceModule,
+    PayosModule
+  ],
   controllers: [PaymentController],
   providers: [PaymentService],
   exports: [TypeOrmModule],
