@@ -1,6 +1,6 @@
 export enum WalletTransactionType {
-  DEPOSIT = 'Nạp tiền',
-  WITHDRAWAL = 'Rút tiền',
-  PAYMENT = 'Thanh toán',
-  REFUND = 'Hoàn tiền',
+  DEPOSIT = 'nạp tiền',
+  WITHDRAWAL = 'rút tiền',
+  PAYMENT = 'thanh toán',
+  REFUND = 'hoàn tiền',
 }

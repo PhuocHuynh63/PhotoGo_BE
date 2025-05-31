@@ -1,54 +1,54 @@
 export enum BookingStatus {
-  PENDING = 'Chờ xử lý',
-  CONFIRMED = 'Đã xác nhận',
-  CANCELLED = 'Đã hủy',
-  COMPLETED = 'Đã hoàn thành',
+  PENDING = 'chờ xử lý',
+  CONFIRMED = 'đã xác nhận',
+  CANCELLED = 'đã hủy',
+  COMPLETED = 'đã hoàn thành',
 }
 
 export enum BookingSourceType {
-  DIRECT = 'Trực tiếp',
-  CAMPAIGN = 'Chiến dịch',
-  REFERRAL = 'Giới thiệu',
-  FEATURED = 'Nổi bật',
-  PROMOTION = 'Khuyến mãi',
-  OTHER = 'Khác',
+  DIRECT = 'trực tiếp',
+  CAMPAIGN = 'chiến dịch',
+  REFERRAL = 'giới thiệu',
+  FEATURED = 'nổi bật',
+  PROMOTION = 'khuyến mãi',
+  OTHER = 'khác',
 }
 
 export enum BookingDepositType {
-  PERCENTAGE = 'Phần trăm',
+  PERCENTAGE = 'phần trăm',
 }
 
 export enum InvoiceStatus {
-  PENDING = 'Chờ thanh toán',
-  PAID = 'Đã thanh toán',
-  CANCELLED = 'Đã hủy',
-  REFUNDED = 'Đã hoàn tiền',
+  PENDING = 'chờ thanh toán',
+  PAID = 'đã thanh toán',
+  CANCELLED = 'đã hủy',
+  REFUNDED = 'đã hoàn tiền',
 }
 
 export enum PaymentMethod {
-  CARD = 'Thẻ',
-  BANK_TRANSFER = 'Chuyển khoản ngân hàng',
-  E_WALLET = 'Ví điện tử',
+  CARD = 'thẻ',
+  BANK_TRANSFER = 'chuyển khoản ngân hàng',
+  E_WALLET = 'ví điện tử',
   PAYOS = 'PAYOS',
 }
 
 export enum PaymentStatus {
-  PENDING = 'Chờ xử lý',
-  COMPLETED = 'Đã hoàn thành',
-  FAILED = 'Thất bại',
-  REFUNDED = 'Đã hoàn tiền',
+  PENDING = 'chờ xử lý',
+  COMPLETED = 'đã hoàn thành',
+  FAILED = 'thất bại',
+  REFUNDED = 'đã hoàn tiền',
 }
 
 export enum RefundStatus {
-  PENDING = 'Chờ xử lý',
-  APPROVED = 'Đã chấp nhận',
-  REJECTED = 'Bị từ chối',
-  COMPLETED = 'Đã hoàn thành',
+  PENDING = 'chờ xử lý',
+  APPROVED = 'đã chấp nhận',
+  REJECTED = 'bị từ chối',
+  COMPLETED = 'đã hoàn thành',
 }
 
 export enum DisputeStatus {
-  OPEN = 'Mở',
-  IN_PROGRESS = 'Đang xử lý',
-  RESOLVED = 'Đã giải quyết',
-  CLOSED = 'Đã đóng',
+  OPEN = 'mở',
+  IN_PROGRESS = 'đang xử lý',
+  RESOLVED = 'đã giải quyết',
+  CLOSED = 'đã đóng',
 }

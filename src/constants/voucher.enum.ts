@@ -1,19 +1,19 @@
 // This file contains the enum for voucher user status
 export enum VoucherUserStatusEnum {
-    AVAILABLE = 'Có sẵn',
-    USED = 'Đã sử dụng',
-    EXPIRED = 'Hết hạn',
+    AVAILABLE = 'có sẵn',
+    USED = 'đã sử dụng',
+    EXPIRED = 'hết hạn',
 }
 
 export enum VoucherStatusEnum {
-    ACTIVE = 'Hoạt động',
-    INACTIVE = 'Không hoạt động',
-    EXPIRED = 'Hết hạn',
+    ACTIVE = 'hoạt động',
+    INACTIVE = 'không hoạt động',
+    EXPIRED = 'hết hạn',
 }
 
 export enum VoucherTypeDiscount {
-    FIXED = 'Cố định',
-    PERCENTAGE = 'Phần trăm',
+    FIXED = 'cố định',
+    PERCENTAGE = 'phần trăm',
 }
 
 export enum VoucherTypePoint {

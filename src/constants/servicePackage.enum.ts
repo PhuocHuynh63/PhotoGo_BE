@@ -1,9 +1,9 @@
 export enum ServicePackageStatus {
-  ACTIVE = 'Hoạt động',
-  INACTIVE = 'Không hoạt động',
+  ACTIVE = 'hoạt động',
+  INACTIVE = 'không hoạt động',
 }
 
 export enum ServiceConceptStatus {
-  ACTIVE = 'Hoạt động',
-  INACTIVE = 'Không hoạt động',
+  ACTIVE = 'hoạt động',
+  INACTIVE = 'không hoạt động',
 }

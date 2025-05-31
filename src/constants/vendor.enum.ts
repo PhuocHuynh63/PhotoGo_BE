@@ -1,13 +1,13 @@
 export enum VendorStatus {
-  ACTIVE = 'Hoạt động',
-  INACTIVE = 'Không hoạt động',
-  SUSPENDED = 'Tạm ngưng',
+  ACTIVE = 'hoạt động',
+  INACTIVE = 'không hoạt động',
+  SUSPENDED = 'tạm ngưng',
 }
 
 export enum VendorManagerRole {
-  OWNER = 'Chủ sở hữu',
-  MANAGER = 'Quản lý',
-  STAFF = 'Nhân viên',
+  OWNER = 'chủ sở hữu',
+  MANAGER = 'quản lý',
+  STAFF = 'nhân viên',
 }
 
 export enum VendorSortField {
