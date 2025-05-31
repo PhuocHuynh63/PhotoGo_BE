@@ -366,84 +366,148 @@ export class VendorService {
     updateVendorDto: UpdateVendorDto,
     files: { logo?: Express.Multer.File; banner?: Express.Multer.File; image_url?: Express.Multer.File },
   ): Promise<Vendor> {
-    const vendor = await this.vendorRepository.findOne({ where: { id } });
-  
-    if (!vendor) {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình cập nhật nhà cung cấp');
+
+    // Check if vendor exists
+    const existingVendor = await this.vendorRepository.findOne({
+      where: { id },
+      relations: ['category', 'locations', 'user_id', 'user_id.role']
+    });
+
+    if (!existingVendor) {
+      this.logger.error(`Không tìm thấy nhà cung cấp với ID ${id}`);
       throw new NotFoundException(`Nhà cung cấp với ID ${id} không tồn tại`);
     }
-  
-    // Update các field đơn giản nếu được truyền vào
+
+    // Upload files before transaction
+    const vendorData: Partial<Vendor> = {};
+
     if (updateVendorDto.name) {
-      vendor.name = updateVendorDto.name;
-      vendor.slug = await this.generateUniqueSlug(this.vendorRepository, updateVendorDto.name);
+      vendorData.name = updateVendorDto.name;
     }
-  
+
     if (updateVendorDto.description !== undefined) {
-      vendor.description = updateVendorDto.description;
+      vendorData.description = updateVendorDto.description;
     }
 
-    if (updateVendorDto.user_id !== undefined) {
-      vendor.user_id = { id: updateVendorDto.user_id } as User;
-    }
-  
     if (updateVendorDto.status !== undefined) {
-      vendor.status = updateVendorDto.status;
+      vendorData.status = updateVendorDto.status;
     }
-  
-    // Upload ảnh nếu có truyền vào
+
+    // Upload logo
     if (files.logo) {
-      const uploadedLogo = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
-      vendor.logo = uploadedLogo;
+      this.logger.log('Tải lên logo mới');
+      try {
+        const uploadResult = await this.uploadService.uploadImage(files.logo, 'vendors/logos');
+        vendorData.logo = uploadResult;
+      } catch (error) {
+        this.logger.error(`Lỗi khi tải lên logo: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên logo: ${error.message}`);
+      }
     }
-  
+
+    // Upload banner
     if (files.banner) {
-      const uploadedBanner = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
-      vendor.banner = uploadedBanner;
+      this.logger.log('Tải lên banner mới');
+      try {
+        const uploadResult = await this.uploadService.uploadImage(files.banner, 'vendors/banners');
+        vendorData.banner = uploadResult;
+      } catch (error) {
+        this.logger.error(`Lỗi khi tải lên banner: ${error.message}`);
+        throw new BadRequestException(`Lỗi khi tải lên banner: ${error.message}`);
+      }
     }
 
-    // Update locations
-    if (updateVendorDto.locations) {
-      // First, remove locations that are not in the update list
-      const locationIds = updateVendorDto.locations
-        .filter(loc => loc.id)
-        .map(loc => loc.id);
-      
-      await this.locationRepository.delete({
-        vendor: { id: vendor.id },
-        id: Not(In(locationIds))
-      });
+    // Start transaction
+    this.logger.log('Bắt đầu giao dịch cập nhật');
+    return this.dataSource.transaction(async (manager) => {
+      try {
+        const vendorRepo = manager.getRepository(Vendor);
+        const categoryRepo = manager.getRepository(Category);
+        const locationRepo = manager.getRepository(Location);
 
-      // Then update or create locations
-      const locations = await Promise.all(updateVendorDto.locations.map(async loc => {
-        if (loc.id) {
-          // Update existing location
-          const existingLocation = await this.locationRepository.findOne({
-            where: { id: loc.id, vendor: { id: vendor.id } }
+        // Update category if provided
+        if (updateVendorDto.category_id) {
+          this.logger.log('Cập nhật danh mục');
+          const category = await categoryRepo.findOne({
+            where: { id: updateVendorDto.category_id },
           });
-          
-          if (existingLocation) {
-            existingLocation.address = loc.address;
-            existingLocation.district = loc.district;
-            existingLocation.ward = loc.ward;
-            existingLocation.city = loc.city;
-            existingLocation.province = loc.province;
-            existingLocation.latitude = loc.latitude;
-            existingLocation.longitude = loc.longitude;
-            return existingLocation;
+          if (!category) {
+            throw new NotFoundException(`Danh mục với ID ${updateVendorDto.category_id} không tồn tại`);
           }
+          vendorData.category = category;
         }
-        
-        // Create new location
-        return this.locationRepository.create({
-          ...loc,
-          vendor: vendor
-        });
-      }));
 
-      vendor.locations = locations;
-    }
-  
-    return this.vendorRepository.save(vendor);
+        // Generate new slug if name is updated
+        if (updateVendorDto.name) {
+          this.logger.log('Tạo slug mới');
+          vendorData.slug = await this.generateUniqueSlug(vendorRepo, updateVendorDto.name);
+        }
+
+        // Update vendor basic info
+        Object.assign(existingVendor, vendorData);
+        const updatedVendor = await vendorRepo.save(existingVendor);
+
+        // Update locations if provided
+        if (updateVendorDto.locations && Array.isArray(updateVendorDto.locations)) {
+          this.logger.log('Cập nhật vị trí');
+          
+          // Remove locations that are not in the update list
+          const locationIds = updateVendorDto.locations
+            .filter(loc => loc.id)
+            .map(loc => loc.id);
+          
+          await locationRepo.delete({
+            vendor: { id: updatedVendor.id },
+            id: Not(In(locationIds))
+          });
+
+          // Update or create locations
+          const locations = await Promise.all(updateVendorDto.locations.map(async loc => {
+            if (loc.id) {
+              // Update existing location
+              const existingLocation = await locationRepo.findOne({
+                where: { id: loc.id, vendor: { id: updatedVendor.id } }
+              });
+              
+              if (existingLocation) {
+                Object.assign(existingLocation, {
+                  address: loc.address,
+                  district: loc.district,
+                  ward: loc.ward,
+                  city: loc.city,
+                  province: loc.province,
+                  latitude: loc.latitude,
+                  longitude: loc.longitude,
+                });
+                return existingLocation;
+              }
+            }
+            
+            // Create new location
+            return locationRepo.create({
+              ...loc,
+              vendor: updatedVendor
+            });
+          }));
+
+          await locationRepo.save(locations);
+        }
+
+        // Fetch and return updated vendor with all relations
+        const result = await vendorRepo.findOne({
+          where: { id: updatedVendor.id },
+          relations: ['category', 'locations', 'servicePackages', 'servicePackages.serviceConcepts', 'servicePackages.serviceConcepts.serviceConceptServiceTypes', 'servicePackages.serviceConcepts.serviceConceptServiceTypes.serviceType', 'servicePackages.serviceConcepts.images', 'user_id', 'user_id.role'],
+        });
+
+        this.logger.log(`Cập nhật nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
+        return result;
+      } catch (error) {
+        this.logger.error(`Giao dịch cập nhật thất bại: ${error.message}`);
+        throw error;
+      }
+    });
   }  
   //#endregion update
 
