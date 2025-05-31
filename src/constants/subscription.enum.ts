@@ -7,4 +7,4 @@ export enum SubscriptionStatus {
 export enum BillingCycle {
   MONTHLY = 'hàng tháng',
   YEARLY = 'hàng năm'
-} 
+}
