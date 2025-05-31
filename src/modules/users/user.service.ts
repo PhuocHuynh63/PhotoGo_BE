@@ -86,16 +86,21 @@ export class UserService {
       const savedUser = await this.userRepository.save(user);
 
       // Thêm tác vụ xóa vào hàng đợi
-      const jobAdded = await this.bullQueueService.addJob(this.deletionQueue, 'delete-inactive-user', { userId: savedUser.id }, {
-        delay: 5 * 60 * 1000,
-        attempts: 3,
-        backoff: { type: 'fixed', delay: 1000 },
-        removeOnComplete: true,
-        removeOnFail: true,
-      });
+      const jobAdded = await this.bullQueueService.addJob(
+        this.deletionQueue,
+        'delete-inactive-user',
+        { userId: savedUser.id },
+        {
+          delay: 30 * 24 * 60 * 60 * 1000, // 30 ngày tính bằng milliseconds
+          attempts: 3,
+          backoff: { type: 'fixed', delay: 1000 },
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
 
       if (jobAdded) {
-        this.logger.log(`Đã tạo người dùng ID ${savedUser.id} và lập lịch xóa sau 5 phút`);
+        this.logger.log(`Đã tạo người dùng ID ${savedUser.id} và lập lịch xóa sau 30 ngày`);
       } else {
         this.logger.warn(`Đã tạo người dùng ID ${savedUser.id} nhưng không thể lập lịch xóa do lỗi Redis`);
       }

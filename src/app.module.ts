@@ -148,6 +148,7 @@ if (!fs.existsSync(templateDir)) {
     SupportTicketsModule,
     ReviewModule,
     ServicePackageModule,
+    PineconeModule,
     GeminiModule
   ],
   controllers: [AppController],
