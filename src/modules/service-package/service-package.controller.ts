@@ -310,6 +310,63 @@ export class ServicePackageController {
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dữ liệu và tệp của concept dịch vụ',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { 
+          type: 'string', 
+          example: 'Chụp hình cưới ngoại cảnh',
+          description: 'Tên của concept dịch vụ'
+        },
+        description: { 
+          type: 'string', 
+          example: 'Concept chụp hình cưới ngoại cảnh với phong cách tự nhiên',
+          nullable: true,
+          description: 'Mô tả chi tiết về concept dịch vụ'
+        },
+        price: { 
+          type: 'number', 
+          example: 5000000,
+          description: 'Giá của concept dịch vụ'
+        },
+        duration: { 
+          type: 'number', 
+          example: 120,
+          description: 'Thời gian thực hiện (phút)'
+        },
+        servicePackageId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của gói dịch vụ'
+        },
+        serviceTypeIds: {
+          type: 'array',
+          items: {
+            type: 'string'
+          },
+          example: ['ST001', 'ST002'],
+          description: 'Danh sách ID của các loại dịch vụ'
+        },
+        status: { 
+          type: 'string', 
+          enum: Object.values(ServiceConceptStatus), 
+          example: ServiceConceptStatus.ACTIVE,
+          nullable: true,
+          description: 'Trạng thái của concept dịch vụ'
+        },
+        images: { 
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary'
+          },
+          description: 'Danh sách ảnh của concept dịch vụ (tối đa 10 ảnh)'
+        },
+      },
+    },
+  })
   async updateServiceConcept(
     @Param('id') id: string,
     @Body() updateServiceConceptDto: UpdateServiceConceptDto,
@@ -406,6 +463,42 @@ export class ServicePackageController {
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dữ liệu và tệp của gói dịch vụ',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { 
+          type: 'string', 
+          example: 'Gói chụp ảnh cưới cao cấp',
+          description: 'Tên của gói dịch vụ'
+        },
+        description: { 
+          type: 'string', 
+          example: 'Gói chụp ảnh cưới cao cấp bao gồm: 200 ảnh, 2 album, 1 video highlight',
+          nullable: true,
+          description: 'Mô tả chi tiết về gói dịch vụ'
+        },
+        vendorId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của nhà cung cấp dịch vụ'
+        },
+        status: { 
+          type: 'string', 
+          enum: Object.values(ServicePackageStatus), 
+          example: ServicePackageStatus.ACTIVE,
+          nullable: true,
+          description: 'Trạng thái của gói dịch vụ'
+        },
+        image: { 
+          type: 'string', 
+          format: 'binary',
+          description: 'Ảnh đại diện của gói dịch vụ'
+        },
+      },
+    },
+  })
   async update(
     @Param('id') id: string,
     @Body() updateServicePackageDto: UpdateServicePackageDto,
