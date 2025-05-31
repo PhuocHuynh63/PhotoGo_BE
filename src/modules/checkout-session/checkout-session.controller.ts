@@ -3,6 +3,7 @@ import { CheckoutSessionService } from './checkout-session.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 import { Public, ResponseMessage } from 'src/decorator/custom';
+import { CheckoutSessionDto } from './dto/checkout-sesion';
 
 @ApiTags('checkout-session')
 @Controller('checkout-session')
@@ -20,10 +21,24 @@ export class CheckoutSessionController {
     schema: {
       type: 'object',
       properties: {
-        sessionData: {
+        id: {
           type: 'string',
+          description: 'ID của phiên đặt chỗ',
+          example: '12345'
+        },
+        userId: {
+          type: 'string',
+          description: 'ID của người dùng',
+          example: '67890'
+        },
+        sessionData: {
+          type: 'object',
           description: 'Dữ liệu phiên đặt chỗ',
-          example: '{"vendorId": "123", "servicePackageId": "456", "selectedTime": "2024-03-20T14:00:00Z"}'
+          properties: {
+            conceptId: { type: 'string', example: 'concept123' },
+            date: { type: 'string', format: 'date', example: '2024-03-20' },
+            time: { type: 'string', format: 'time', example: '14:00' },
+          }
         }
       }
     }
@@ -31,7 +46,7 @@ export class CheckoutSessionController {
   async createSession(
     @Query('id') id: string,
     @Query('userId') userId: string,
-    @Body('sessionData') sessionData: string,
+    @Body() sessionData: CheckoutSessionDto,
   ) {
     return this.checkoutSessionService.createSession(id, userId, sessionData);
   }

@@ -1,10 +1,10 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { Redis } from 'ioredis';
+import { CheckoutSessionDto } from './dto/checkout-sesion';
 
 @Injectable()
 export class CheckoutSessionService {
   private readonly SESSION_TTL = 900; // 15 minutes in seconds
-  private readonly SESSION_PREFIX = 'checkout_session';
 
   constructor(
     @Inject('REDIS_CLIENT')
@@ -14,33 +14,36 @@ export class CheckoutSessionService {
   private getSessionKey(userId: string | undefined, id: string | undefined): string {
     const identifier = userId || id;
     if (!identifier) {
-      throw new BadRequestException('Không có ID người dùng hoặc ID thiết bị');
+      throw new BadRequestException('Không có ID người dùng hoặc ID phiên đặt chỗ');
     }
-    return `${this.SESSION_PREFIX}:${identifier}`;
+    return identifier;
   }
 
   async createSession(
     id: string,
     userId: string,
-    sessionData: string,
-  ): Promise<{ key: string; data: string }> {
+    sessionData: CheckoutSessionDto,
+  ): Promise<{ checkoutSesionId: string; data: CheckoutSessionDto }> {
     const sessionKey = this.getSessionKey(userId, id);
 
     // If session exists, update it with new data
-    await this.redisClient.set(
+    const res = await this.redisClient.set(
       sessionKey,
-      sessionData,
+      JSON.stringify(sessionData),
       'EX',
       this.SESSION_TTL
     );
 
+    console.log(`Redis set response: `, res);
+
+
     return {
-      key: sessionKey,
+      checkoutSesionId: sessionKey,
       data: sessionData,
     };
   }
 
-  async getSession(userId?: string, id?: string): Promise<string | { message: string }> {
+  async getSession(userId?: string, id?: string): Promise<CheckoutSessionDto> {
     const sessionKey = this.getSessionKey(userId, id);
     const sessionData = await this.redisClient.get(sessionKey);
 
@@ -51,7 +54,7 @@ export class CheckoutSessionService {
     // Reset TTL on access
     await this.updateSessionTTL(userId, id);
 
-    return sessionData;
+    return JSON.parse(sessionData) as CheckoutSessionDto;
   }
 
   async deleteSession(userId?: string, id?: string): Promise<void> {
