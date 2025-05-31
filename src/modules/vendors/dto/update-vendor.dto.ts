@@ -1,4 +1,4 @@
-import { IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { IsOptional, IsArray, ValidateNested, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Transform } from 'class-transformer';
 import { Logger } from '@nestjs/common';
@@ -23,6 +23,14 @@ export class UpdateVendorDto {
     example: 'Mô tả nhà cung cấp 1',
   })
     description?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
+    description: 'ID danh mục của nhà cung cấp',
+    example: 'uuid_of_category',
+  })
+    category_id?: string;
 
   @IsOptional()
   @ApiProperty({

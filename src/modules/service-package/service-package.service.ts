@@ -121,6 +121,9 @@ export class ServicePackageService {
     updateServicePackageDto: UpdateServicePackageDto,
     files: { image?: Express.Multer.File },
   ): Promise<ServicePackage> {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình cập nhật gói dịch vụ');
+
     const servicePackage = await this.findOne(id);
 
     // Update basic fields
@@ -141,6 +144,7 @@ export class ServicePackageService {
     }
 
     const updatedServicePackage = await this.servicePackageRepository.save(servicePackage);
+    this.logger.log(`Gói dịch vụ đã được cập nhật thành công trong ${Date.now() - startTime}ms`);
     return this.findOne(updatedServicePackage.id);
   }
 
@@ -470,6 +474,9 @@ export class ServicePackageService {
     updateServiceConceptDto: UpdateServiceConceptDto,
     files: { images?: Express.Multer.File[] },
   ): Promise<ServiceConcept> {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình cập nhật khái niệm dịch vụ');
+
     const serviceConcept = await this.findServiceConcept(id);
 
     // Upload new images if provided
@@ -500,6 +507,17 @@ export class ServicePackageService {
     if (updateServiceConceptDto.duration !== undefined) serviceConcept.duration = updateServiceConceptDto.duration;
     if (updateServiceConceptDto.status !== undefined) serviceConcept.status = updateServiceConceptDto.status;
 
+    // Update service package if provided
+    if (updateServiceConceptDto.servicePackageId) {
+      const servicePackage = await this.servicePackageRepository.findOne({
+        where: { id: updateServiceConceptDto.servicePackageId }
+      });
+      if (!servicePackage) {
+        throw new NotFoundException(`Gói dịch vụ với ID ${updateServiceConceptDto.servicePackageId} không tồn tại`);
+      }
+      serviceConcept.servicePackage = servicePackage;
+    }
+
     // Update service types if provided
     if (updateServiceConceptDto.serviceTypeIds) {
       this.logger.log('Đang cập nhật liên kết loại dịch vụ');
@@ -528,6 +546,7 @@ export class ServicePackageService {
     }
 
     const updatedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
+    this.logger.log(`Khái niệm dịch vụ đã được cập nhật thành công trong ${Date.now() - startTime}ms`);
     return this.findServiceConcept(updatedServiceConcept.id);
   }
 
