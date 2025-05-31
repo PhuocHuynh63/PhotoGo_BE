@@ -1,5 +1,5 @@
 export enum PointTransactionType {
-  EARN = 'Nhận',
-  REDEEM = 'Đổi',
-  EXPIRE = 'Hết hạn',
+  EARN = 'nhận',
+  REDEEM = 'đổi',
+  EXPIRE = 'hết hạn',
 }

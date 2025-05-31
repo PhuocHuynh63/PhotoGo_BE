@@ -1,14 +1,14 @@
 export enum UserRoles {
-    ADMIN = 'Quản trị viên',
-    USER = 'Người dùng',
-    MANAGER = 'Quản lý',
+    ADMIN = 'quản trị viên',
+    USER = 'người dùng',
+    MANAGER = 'quản lý',
 }
 
 export enum UserStatus {
-    ACTIVE = 'Hoạt động',
-    INACTIVE = 'Không hoạt động',
-    BANNED = 'Bị cấm',
-    SUSPENDED = 'Bị tạm ngưng',
+    ACTIVE = 'hoạt động',
+    INACTIVE = 'không hoạt động',
+    BANNED = 'bị cấm',
+    SUSPENDED = 'bị tạm ngưng',
 }
 
 export enum UserRank {

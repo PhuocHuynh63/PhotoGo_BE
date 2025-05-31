@@ -1,11 +1,11 @@
 export enum NotificationStatus {
-    UNREAD = 'Chưa đọc',
-    READ = 'Đã đọc',
+    UNREAD = 'chưa đọc',
+    READ = 'đã đọc',
 }
 
 export enum NotificationType {
-    INFO = 'Thông tin',
-    WARNING = 'Cảnh báo',
-    ERROR = 'Lỗi',
-    SUCCESS = 'Thành công',
+    INFO = 'thông tin',
+    WARNING = 'cảnh báo',
+    ERROR = 'lỗi',
+    SUCCESS = 'thành công',
 }

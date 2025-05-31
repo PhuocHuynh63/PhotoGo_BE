@@ -1,4 +1,4 @@
 export enum ServiceConceptStatus {
-  ACTIVE = 'Hoạt động',
-  INACTIVE = 'Không hoạt động'
+  ACTIVE = 'hoạt động',
+  INACTIVE = 'không hoạt động'
 }
