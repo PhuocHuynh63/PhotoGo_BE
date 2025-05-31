@@ -15,3 +15,8 @@ export enum VoucherTypeDiscount {
     FIXED = 'Cố định',
     PERCENTAGE = 'Phần trăm',
 }
+
+export enum VoucherTypePoint {
+    FIXED = 'cố định',
+    PERCENTAGE = 'phần trăm',
+}

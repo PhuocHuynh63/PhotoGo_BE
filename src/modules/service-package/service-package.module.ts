@@ -10,7 +10,7 @@ import { ServiceConcept } from './entities/service-concept.entity';
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { UploadModule } from 'src/3rdService/upload/upload.module';
 import { AuthModule } from '../auth/auth.module';
-
+import { GeminiModule } from 'src/3rdService/gemini/gemini.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -23,6 +23,7 @@ import { AuthModule } from '../auth/auth.module';
     ]),
     UploadModule,
     AuthModule,
+    GeminiModule,
   ],
   providers: [ServicePackageService],
   controllers: [ServicePackageController],

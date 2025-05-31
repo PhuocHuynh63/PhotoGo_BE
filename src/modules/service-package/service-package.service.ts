@@ -14,6 +14,7 @@ import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
 import { DataSource } from 'typeorm';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
+import { GeminiService } from 'src/3rdService/gemini/gemini.service';
 
 @Injectable()
 export class ServicePackageService {
@@ -34,6 +35,7 @@ export class ServicePackageService {
     private readonly serviceConceptImageRepository: Repository<ServiceConceptImage>,
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
+    private readonly geminiService: GeminiService,
   ) {}
 
   async create(
@@ -67,7 +69,6 @@ export class ServicePackageService {
     const savedServicePackage = await this.servicePackageRepository.save(servicePackage);
 
     this.logger.log(`Gói dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
-    
     return savedServicePackage;
   }
 
@@ -416,6 +417,42 @@ export class ServicePackageService {
     }
 
     this.logger.log(`Khái niệm dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
+    
+    // Generate concept vector if images are provided
+    if (files?.images && files.images.length > 0) {
+      try {
+        this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${savedServiceConcept.id}`);
+        const vectorStartTime = Date.now();
+        
+        // Try with first image
+        try {
+          await this.geminiService.generateConceptVector(files.images[0], savedServiceConcept.id);
+          this.logger.log(`Concept vector đã được tạo thành công trong ${Date.now() - vectorStartTime}ms`);
+        } catch (error) {
+          // If first image fails due to safety filter, try with other images
+          if (error.message?.includes('Response was blocked') && files.images.length > 1) {
+            this.logger.warn(`Ảnh đầu tiên bị chặn bởi bộ lọc an toàn, đang thử với ảnh khác...`);
+            for (let i = 1; i < files.images.length; i++) {
+              try {
+                await this.geminiService.generateConceptVector(files.images[i], savedServiceConcept.id);
+                this.logger.log(`Concept vector đã được tạo thành công với ảnh thứ ${i + 1} trong ${Date.now() - vectorStartTime}ms`);
+                break;
+              } catch (retryError) {
+                if (i === files.images.length - 1) {
+                  throw retryError; // Re-throw if all images fail
+                }
+                this.logger.warn(`Ảnh thứ ${i + 1} cũng bị chặn, đang thử ảnh tiếp theo...`);
+              }
+            }
+          } else {
+            throw error; // Re-throw if it's not a safety filter issue
+          }
+        }
+      } catch (error) {
+        this.logger.error(`Lỗi khi tạo concept vector: ${error.message}`);
+        // Don't throw error to prevent service concept creation from failing
+      }
+    }
     
     // Return the concept with its service types
     return this.serviceConceptRepository.findOne({

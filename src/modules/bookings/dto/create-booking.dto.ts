@@ -1,4 +1,4 @@
-import { IsEnum, IsDateString, IsString, IsUUID, IsOptional } from 'class-validator';
+import { IsEnum, IsDateString, IsString, IsUUID, IsOptional, IsNumber } from 'class-validator';
 import { BookingSourceType, BookingDepositType, BookingStatus } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -34,6 +34,15 @@ export class CreateBookingDto {
     required: false
   })
   sourceId?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số tiền đặt cọc cho booking',
+    example: '100.00',
+    required: false
+  })
+  depositAmount?: number;
 
   @IsEnum(BookingDepositType)
   @IsOptional()

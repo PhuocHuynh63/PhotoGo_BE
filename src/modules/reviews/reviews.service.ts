@@ -2,9 +2,11 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Review } from './entities/review.entity';
+import { ReviewImage } from './entities/review_image.entity';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { isUUID } from 'class-validator';
+import { UploadService } from '../../3rdService/upload/upload.service';
 
 // Define the return type for findAll
 interface ReviewSummary {
@@ -20,10 +22,16 @@ export class ReviewService {
   constructor(
     @InjectRepository(Review)
     private readonly reviewRepository: Repository<Review>,
+    @InjectRepository(ReviewImage)
+    private readonly reviewImageRepository: Repository<ReviewImage>,
+    private readonly uploadService: UploadService,
   ) {}
 
-  async create(createReviewDto: CreateReviewDto): Promise<Review> {
+  async create(createReviewDto: CreateReviewDto, files: { images?: Express.Multer.File[] }): Promise<Review> {
     // Validate required fields
+    if(!createReviewDto.userId || !createReviewDto.bookingId) {
+      throw new BadRequestException('userId và bookingId là bắt buộc');
+    }
     if (!createReviewDto.rating || !createReviewDto.vendorId) {
       throw new BadRequestException('Điểm đánh giá và vendorId là bắt buộc');
     }
@@ -35,7 +43,23 @@ export class ReviewService {
 
     try {
       const review = this.reviewRepository.create(createReviewDto);
-      return await this.reviewRepository.save(review);
+      const savedReview = await this.reviewRepository.save(review);
+
+      // Upload images if provided
+      if (files?.images?.length) {
+        const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
+        
+        // Create review images
+        const reviewImages = imageUrls.map(url => 
+          this.reviewImageRepository.create({
+            reviewId: savedReview.id,
+            imageUrl: url,
+          })
+        );
+        await this.reviewImageRepository.save(reviewImages);
+      }
+
+      return this.findOne(savedReview.id);
     } catch (error) {
       throw new BadRequestException('Không thể tạo đánh giá: ' + error.message);
     }
@@ -104,7 +128,7 @@ export class ReviewService {
     }
   }
 
-  async update(id: string, updateReviewDto: UpdateReviewDto): Promise<Review> {
+  async update(id: string, updateReviewDto: UpdateReviewDto, files: { images?: Express.Multer.File[] }): Promise<Review> {
     // Validate id is a UUID
     if (!isUUID(id)) {
       throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
@@ -113,7 +137,23 @@ export class ReviewService {
     try {
       const review = await this.findOne(id); // This will throw NotFoundException if not found
       Object.assign(review, updateReviewDto);
-      return await this.reviewRepository.save(review);
+      await this.reviewRepository.save(review);
+
+      // Upload new images if provided
+      if (files?.images?.length) {
+        const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
+        
+        // Create review images
+        const reviewImages = imageUrls.map(url => 
+          this.reviewImageRepository.create({
+            reviewId: review.id,
+            imageUrl: url,
+          })
+        );
+        await this.reviewImageRepository.save(reviewImages);
+      }
+
+      return this.findOne(id);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error; // Re-throw NotFoundException

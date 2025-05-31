@@ -42,6 +42,8 @@ export class BookingService {
       serviceConceptId,
       vendorId,
       status: BookingStatus.PENDING,
+      depositAmount: createBookingDto.depositAmount,
+      depositType: createBookingDto.depositType,
     });
   
     const savedBooking = await this.bookingRepository.save(booking);

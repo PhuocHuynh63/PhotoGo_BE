@@ -55,6 +55,11 @@ export class InvoiceService {
         throw new NotFoundException(`Voucher với ID ${voucherId} không hợp lệ`);
       }
 
+      // Kiểm tra giá trị đơn hàng có đủ điều kiện để sử dụng voucher
+      if (originalPrice < voucher.minPrice) {
+        throw new NotFoundException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
+      }
+
       // Kiểm tra xem user đã sử dụng voucher này chưa
       const voucherUser = await this.voucherService.findOneVoucherUser(voucherId, booking.userId);
       if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
@@ -65,8 +70,16 @@ export class InvoiceService {
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
         const discountValue = parseFloat(voucher.discount_value);
         discountAmount = Math.round((originalPrice * discountValue) / 100);
+        // Kiểm tra nếu discount vượt quá maxPrice
+        if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
+          discountAmount = voucher.maxPrice;
+        }
       } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
         discountAmount = Math.round(parseFloat(voucher.discount_value));
+        // Kiểm tra nếu discount vượt quá maxPrice
+        if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
+          discountAmount = voucher.maxPrice;
+        }
       }
     }
 
