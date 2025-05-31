@@ -8,6 +8,8 @@ import { FindAllPaymentsDto } from './dto/find-all-payments.dto';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { ConfigService } from '@nestjs/config';
 import { BookingStatus } from '../../constants/booking.enum';
+import { VoucherService } from '../vouchers/voucher.service';
+import { VoucherUserStatusEnum } from '../../constants/voucher.enum';
 
 import  PayOS  from '@payos/node';
 import { BookingService } from '../bookings/booking.service';
@@ -22,6 +24,7 @@ export class PaymentService {
     @Inject('PAYOS_CLIENT') private readonly payos: PayOS, // Inject PayOS client
     private readonly configService: ConfigService,
     private readonly bookingService: BookingService,
+    private readonly voucherService: VoucherService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
@@ -134,7 +137,10 @@ export class PaymentService {
   async handlePayOSWebhook(data: any) {
     const { status, transactionId } = data;
     const payment = await this.paymentRepository.findOne({ where: { transactionId } });
-    const invoice = await this.invoiceRepo.findOne({ where: { id: payment.invoiceId } });
+    const invoice = await this.invoiceRepo.findOne({ 
+      where: { id: payment.invoiceId },
+      relations: ['booking', 'booking.user', 'booking.user.voucherUsers', 'booking.user.voucherUsers.voucher']
+    });
 
     if (!payment) {
       throw new NotFoundException(`Thanh toán với ID ${transactionId} không tồn tại`);
@@ -143,6 +149,19 @@ export class PaymentService {
     if (status === 'COMPLETED') {
       payment.status = PaymentStatus.COMPLETED;
       invoice.status = InvoiceStatus.PAID;
+
+      // Update voucher usage if a voucher was used
+      const activeVoucherUser = invoice.booking?.user?.voucherUsers?.find(
+        vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
+      );
+      if (activeVoucherUser?.voucher) {
+        try {
+          await this.voucherService.updateVoucherUsage(activeVoucherUser.voucher.id);
+        } catch (error) {
+          console.error('Error updating voucher usage:', error);
+          // Don't throw error here to prevent payment completion from failing
+        }
+      }
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
       invoice.status = InvoiceStatus.PENDING;

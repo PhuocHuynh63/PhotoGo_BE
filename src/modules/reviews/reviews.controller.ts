@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Put, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { ReviewService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { Review } from './entities/review.entity';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 
 // Define the response type for findAll
 interface ReviewSummary {
@@ -23,8 +24,58 @@ export class ReviewController {
   @Post()
   @ApiOperation({ summary: 'Tạo đánh giá mới' })
   @ApiResponse({ status: 201, description: 'Đánh giá đã được tạo thành công', type: Review })
-  async create(@Body() createReviewDto: CreateReviewDto): Promise<Review> {
-    return this.reviewService.create(createReviewDto);
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dữ liệu và hình ảnh của đánh giá',
+    schema: {
+      type: 'object',
+      properties: {
+        userId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của người dùng đánh giá'
+        },
+        rating: { 
+          type: 'number', 
+          example: 5,
+          description: 'Điểm đánh giá (1-5)'
+        },
+        comment: { 
+          type: 'string', 
+          example: 'Dịch vụ rất tốt, nhân viên nhiệt tình',
+          description: 'Nội dung đánh giá'
+        },
+        vendorId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của nhà cung cấp dịch vụ'
+        },
+        bookingId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của đơn đặt chỗ'
+        },
+        images: { 
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary'
+          },
+          description: 'Danh sách hình ảnh đánh giá (tối đa 10 ảnh)'
+        },
+      },
+      required: ['rating', 'vendorId', 'bookingId', 'userId'],
+    },
+  })
+  async create(
+    @Body() createReviewDto: CreateReviewDto,
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+  ): Promise<Review> {
+    const fileMap = {
+      images: files.images,
+    };
+    return this.reviewService.create(createReviewDto, fileMap);
   }
 
   @Get()
@@ -54,8 +105,53 @@ export class ReviewController {
   @ApiOperation({ summary: 'Cập nhật đánh giá theo ID' })
   @ApiResponse({ status: 200, description: 'Đánh giá đã được cập nhật thành công', type: Review })
   @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
-  async update(@Param('id') id: string, @Body() updateReviewDto: UpdateReviewDto): Promise<Review> {
-    return this.reviewService.update(id, updateReviewDto);
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dữ liệu và hình ảnh của đánh giá',
+    schema: {
+      type: 'object',
+      properties: {
+        rating: { 
+          type: 'number', 
+          example: 5,
+          description: 'Điểm đánh giá (1-5)'
+        },
+        comment: { 
+          type: 'string', 
+          example: 'Dịch vụ rất tốt, nhân viên nhiệt tình',
+          description: 'Nội dung đánh giá'
+        },
+        vendorId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của nhà cung cấp dịch vụ'
+        },
+        bookingId: { 
+          type: 'string', 
+          example: '123e4567-e89b-12d3-a456-426614174000',
+          description: 'ID của đơn đặt chỗ'
+        },
+        images: { 
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary'
+          },
+          description: 'Danh sách hình ảnh đánh giá (tối đa 10 ảnh)'
+        },
+      },
+    },
+  })
+  async update(
+    @Param('id') id: string,
+    @Body() updateReviewDto: UpdateReviewDto,
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+  ): Promise<Review> {
+    const fileMap = {
+      images: files.images,
+    };
+    return this.reviewService.update(id, updateReviewDto, fileMap);
   }
 
   @Delete(':id')

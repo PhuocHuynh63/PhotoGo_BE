@@ -90,10 +90,15 @@ export class VoucherService {
   //#endregion Voucher Operations
 
   //#region VoucherUser Operations
-  async createVoucherUser(userId: string, voucherId: string,createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
+  async createVoucherUser(userId: string, voucherId: string, createVoucherUserDto: CreateVoucherUserDto): Promise<VoucherUser> {
     const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
       throw new NotFoundException(`Mã giảm giá với ID ${voucherId} không tồn tại`);
+    }
+
+    // Check if voucher has available quantity
+    if (voucher.quantity <= 0) {
+      throw new BadRequestException('Mã giảm giá đã hết số lượng');
     }
 
     const currentDate = new Date();
@@ -219,6 +224,24 @@ export class VoucherService {
     if (result.affected === 0) {
       throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
     }
+  }
+
+  // Add new method to update voucher usage
+  async updateVoucherUsage(voucherId: string): Promise<void> {
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    if (!voucher) {
+      throw new NotFoundException(`Mã giảm giá với ID ${voucherId} không tồn tại`);
+    }
+
+    if (voucher.quantity <= 0) {
+      throw new BadRequestException('Mã giảm giá đã hết số lượng');
+    }
+
+    // Update quantity and usedCount
+    voucher.quantity -= 1;
+    voucher.usedCount += 1;
+
+    await this.voucherRepository.save(voucher);
   }
   //#endregion VoucherUser Operations
 }

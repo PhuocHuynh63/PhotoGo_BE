@@ -16,6 +16,7 @@ export class CategoryService {
   //#region create
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
     const category = this.categoryRepository.create(createCategoryDto);
+    category.created_at = new Date();
     return this.categoryRepository.save(category);
   }
   //#endregion create
@@ -92,6 +93,7 @@ export class CategoryService {
   async update(id: string, updateCategoryDto: UpdateCategoryDto): Promise<Category> {
     const category = await this.findOne(id);
     Object.assign(category, updateCategoryDto);
+    category.updated_at = new Date();
     return this.categoryRepository.save(category);
   }
   //#endregion update
