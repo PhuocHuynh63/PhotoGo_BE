@@ -74,4 +74,32 @@ export class CreateBookingDto {
   //   required: false
   // })
   // status?: BookingStatus;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Tên người đặt hàng',
+    example: 'John Doe',
+    required: false
+  })
+  fullname?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số điện thoại người đặt hàng',
+    example: '0909090909',
+    required: false
+  })
+  phone?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Email người đặt hàng',
+    example: 'john.doe@example.com',
+    required: false
+  })
+  email?: string;
+
 }
