@@ -665,6 +665,71 @@ export class VendorService {
     return `${baseSlug}-${maxSuffix + 1}`;
   }
   //#endregion Utility
+  
+  //#region getConceptImage
+  async getConceptImage(
+    vendorId: string,
+    current: number = 1,
+    pageSize: number = 10
+  ): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    // Calculate offset
+    const skip = (current - 1) * pageSize;
+
+    // Get total count
+    const totalCountQuery = `
+      SELECT COUNT(*) 
+      FROM service_concept_image 
+      WHERE service_concept_id IN (
+        SELECT id FROM service_concept
+        WHERE service_package_id IN (
+          SELECT id FROM service_package
+          WHERE vendor_id = $1
+        )
+      )
+    `;
+
+    // Get paginated data
+    const dataQuery = `
+      SELECT * FROM service_concept_image 
+      WHERE service_concept_id IN (
+        SELECT id FROM service_concept
+        WHERE service_package_id IN (
+          SELECT id FROM service_package
+          WHERE vendor_id = $1
+        )
+      )
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    // Execute both queries
+    const [totalCount, conceptImages] = await Promise.all([
+      this.dataSource.query(totalCountQuery, [vendorId]),
+      this.dataSource.query(dataQuery, [vendorId, pageSize, skip])
+    ]);
+
+    const totalItem = parseInt(totalCount[0].count);
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    return {
+      data: conceptImages,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem
+      }
+    };
+  }
+  //#endregion getConceptImage
 
   //#region SearchLocations with City only link with vendor
   async searchLocationsWithCity(city: string): Promise<Location[]> {

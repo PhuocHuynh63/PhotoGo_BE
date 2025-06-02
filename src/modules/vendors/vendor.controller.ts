@@ -107,6 +107,48 @@ export class VendorController {
   }
 
   @Public()
+  @Get('concept_image')
+  @ApiOperation({ summary: 'Lấy danh sách hình ảnh concept dựa trên vendor id (Public)' })
+  @ApiQuery({ name: 'vendor_id', required: true, description: 'ID của nhà cung cấp', example: 'uuid_of_vendor' })
+  @ApiQuery({ name: 'current', required: false, description: 'Trang hiện tại', example: 1 })
+  @ApiQuery({ name: 'pageSize', required: false, description: 'Số lượng item trên mỗi trang', example: 10 })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách hình ảnh concept',
+    schema: {
+      properties: {
+        message: { type: 'string' },
+        data: { type: 'array', items: { type: 'object' } },
+        pagination: {
+          type: 'object',
+          properties: {
+            current: { type: 'number' },
+            pageSize: { type: 'number' },
+            totalPage: { type: 'number' },
+            totalItem: { type: 'number' }
+          }
+        }
+      }
+    }
+  })
+  async getConceptImage(
+    @Query('vendor_id') vendorId: string,
+    @Query('current') current?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const result = await this.vendorService.getConceptImage(
+      vendorId,
+      current ? parseInt(current) : undefined,
+      pageSize ? parseInt(pageSize) : undefined
+    );
+    return {
+      message: 'Danh sách hình ảnh concept đã được lấy thành công',
+      ...result,
+    };
+  }
+
+
+  @Public()
   @Get('search/locations')
   @ApiOperation({ summary: 'Tìm kiếm nhà cung cấp theo vị trí với thành phố (Public)' })
   @ApiQuery({ name: 'term', required: true, description: 'Từ tìm kiếm vị trí', example: 'Hồ Chí Minh' })
