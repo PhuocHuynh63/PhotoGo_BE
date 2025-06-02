@@ -16,8 +16,8 @@ export class WishlistService {
     private readonly wishlistItemRepository: Repository<WishlistItem>,
   ) {}
 
-  async createWishlist(createWishlistDto: CreateWishlistDto): Promise<Wishlist> {
-    const wishlist = this.wishlistRepository.create(createWishlistDto);
+  async createWishlist(userId: string): Promise<Wishlist> {
+    const wishlist = this.wishlistRepository.create({ userId });
     return await this.wishlistRepository.save(wishlist);
   }
 
