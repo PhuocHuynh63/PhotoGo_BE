@@ -13,11 +13,11 @@ import { WishlistItem } from './entities/wishlist-item.entity';
 export class WishlistController {
   constructor(private readonly wishlistService: WishlistService) {}
 
-  @Post()
+  @Post(':user_id')
   @ApiOperation({ summary: 'Tạo danh sách mong muốn mới' })
   @ApiResponse({ status: 201, description: 'Danh sách mong muốn đã được tạo thành công', type: Wishlist })
-  async createWishlist(@Body() createWishlistDto: CreateWishlistDto): Promise<Wishlist> {
-    return await this.wishlistService.createWishlist(createWishlistDto);
+  async createWishlist(@Param('user_id') userId: string): Promise<Wishlist> {
+    return await this.wishlistService.createWishlist(userId);
   }
 
   @Post('items')

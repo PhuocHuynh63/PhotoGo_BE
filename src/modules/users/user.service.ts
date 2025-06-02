@@ -16,7 +16,8 @@ import { Cron } from '@nestjs/schedule';
 import { BullQueueService } from 'src/3rdService/bull/bull-queue.service';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-
+import { CartService } from 'src/modules/carts/cart.service';
+import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -25,6 +26,8 @@ export class UserService {
     private readonly roleService: RoleService,
     private readonly uploadService: UploadService,
     private readonly MailService: MailService,
+    private readonly cartService: CartService,
+    private readonly wishlistService: WishlistService,
     private readonly bullQueueService: BullQueueService,
     @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
   ) { }
@@ -99,6 +102,12 @@ export class UserService {
       } else {
         this.logger.warn(`Đã tạo người dùng ID ${savedUser.id} nhưng không thể lập lịch xóa do lỗi Redis`);
       }
+
+      // create cart for user
+      await this.cartService.createCart(savedUser.id);
+
+      // create wishlist for user
+      await this.wishlistService.createWishlist(savedUser.id);  
 
       return savedUser;
     } catch (error) {

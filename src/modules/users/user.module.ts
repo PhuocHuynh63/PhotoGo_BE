@@ -9,13 +9,16 @@ import { UploadModule } from 'src/3rdService/upload/upload.module';
 import { MailModule } from 'src/3rdService/mail/mail.module';
 import { BullQueueModule } from 'src/3rdService/bull/bull-queue.module';
 import { UserProcessor } from './bull/user.processor';
-
+import { CartModule } from 'src/modules/carts/cart.module';
+import { WishlistModule } from 'src/modules/wishlists/wishlist.module'; 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
     RoleModule,
     UploadModule,
     MailModule,
+    CartModule,
+    WishlistModule,
     BullQueueModule.registerQueue('user-deletion'),
     BullQueueModule.forRoot(),
   ],
