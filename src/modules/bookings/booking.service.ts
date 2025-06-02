@@ -43,7 +43,7 @@ export class BookingService {
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       userId,
-      serviceConceptId,
+      // serviceConceptId,
       vendorId,
       status: BookingStatus.PENDING,
       depositAmount: createBookingDto.depositAmount,
