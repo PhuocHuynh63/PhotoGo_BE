@@ -1,5 +1,5 @@
 import { IsOptional, IsEnum, IsUUID } from 'class-validator';
-import { InvoiceStatus } from 'src/constants/booking.enum'; // Import the InvoiceStatus enum
+import { InvoiceStatus } from 'src/constants/payment.enum'; // Import the InvoiceStatus enum
 
 export class FindAllInvoicesDto {
   @IsOptional()

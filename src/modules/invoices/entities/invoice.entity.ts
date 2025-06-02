@@ -1,11 +1,9 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { Booking } from '../../bookings/entities/booking.entity';
-import { InvoiceStatus } from 'src/constants/booking.enum';
+import { InvoiceStatus } from 'src/constants/payment.enum';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Refund } from '../../refunds/entities/refund.entity';
 import { Voucher } from 'src/modules/vouchers/entities/voucher.entity';
-
-
 
 @Entity('invoice')
 export class Invoice {
@@ -37,7 +35,16 @@ export class Invoice {
   @Column({ type: 'integer', default: 0 })
   payablePrice: number;
 
-  @Column({ type: 'enum', enum: InvoiceStatus, default: InvoiceStatus.PENDING })
+  @Column({ type: 'integer', default: 0, name: 'deposit_amount' })
+  depositAmount: number;
+
+  @Column({ type: 'integer', default: 0, name: 'remaining_amount' })
+  remainingAmount: number;
+
+  @Column({ type: 'integer', default: 0, name: 'paid_amount' })
+  paidAmount: number;
+
+  @Column({ type: 'enum', enum: InvoiceStatus })
   status: InvoiceStatus;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'issued_at' })
