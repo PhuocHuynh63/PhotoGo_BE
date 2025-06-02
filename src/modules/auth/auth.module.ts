@@ -11,7 +11,7 @@ import { JwtAuthGuard } from './passport/jwt-auth.guard';
 import { RolesGuard } from './passport/roles.guard';
 import { MailModule } from 'src/3rdService/mail/mail.module';
 import { CloudinaryModule } from 'src/3rdService/upload/cloudinary/cloudinary.module';
-
+import { CartModule } from 'src/modules/carts/cart.module';
 @Module({
   imports: [
     UserModule,
@@ -35,6 +35,7 @@ import { CloudinaryModule } from 'src/3rdService/upload/cloudinary/cloudinary.mo
     }),
     PassportModule.register({ defaultStrategy: 'jwt' }), // Đặt chiến lược mặc định là 'jwt'
     MailModule,
+    CartModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard],

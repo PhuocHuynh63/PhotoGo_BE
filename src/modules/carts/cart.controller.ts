@@ -7,6 +7,7 @@ import { UpdateCartDto } from './dto/update-cart.dto';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { GetUser } from 'src/decorator/user.decorator';
+import { Public } from 'src/decorator/custom';
 
 @ApiTags('Carts')
 @ApiBearerAuth('access-token')
@@ -14,11 +15,11 @@ import { GetUser } from 'src/decorator/user.decorator';
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
-  @Post()
+  @Post(':user_id')
   @ApiOperation({ summary: 'Tạo mới giỏ hàng' })
   @ApiResponse({ status: 201, description: 'Giỏ hàng được tạo thành công', type: Cart })
-  async createCart(@Body() createCartDto: CreateCartDto): Promise<Cart> {
-    return await this.cartService.createCart(createCartDto);
+  async createCart(@Param('user_id') userId: string): Promise<Cart> {
+    return await this.cartService.createCart(userId);
   }
 
   @Post(':user_id/:cart_id/:service_concept_id/items')
@@ -34,6 +35,7 @@ export class CartController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả giỏ hàng' })
   @ApiResponse({ status: 200, description: 'Danh sách giỏ hàng', type: [Cart] })
   async findAllCarts(): Promise<Cart[]> {
@@ -41,6 +43,7 @@ export class CartController {
   }
 
   @Get('items/:cartId')
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả mục trong giỏ hàng' })
   @ApiResponse({ status: 200, description: 'Danh sách mục giỏ hàng', type: [CartItem] })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giỏ hàng' })
@@ -49,6 +52,7 @@ export class CartController {
   }
 
   @Get(':userId/items')
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả mục trong giỏ hàng theo ID người dùng' })
   @ApiResponse({ status: 200, description: 'Danh sách mục giỏ hàng', type: [CartItem] })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giỏ hàng' })
@@ -57,6 +61,7 @@ export class CartController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy chi tiết giỏ hàng theo ID' })
   @ApiResponse({ status: 200, description: 'Chi tiết giỏ hàng', type: Cart })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giỏ hàng' })

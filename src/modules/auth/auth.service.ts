@@ -7,7 +7,7 @@ import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { RestPasswordhDto } from './dto/rest-password.dto';
-
+import { CartService } from 'src/modules/carts/cart.service';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +15,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly cartService: CartService,
   ) { }
 
   //#region Validate User
@@ -84,7 +85,8 @@ export class AuthService {
 
     // Send email
     this.mailService.generateAndSendOtp(registerEmailLowerCase, template, content, body);
-
+    // create cart for user
+    await this.cartService.createCart(user.id);
     return user;
   }
   //#endregion

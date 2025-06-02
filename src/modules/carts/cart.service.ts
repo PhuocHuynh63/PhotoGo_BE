@@ -17,8 +17,8 @@ export class CartService {
     private readonly cartItemRepository: Repository<CartItem>,
   ) {}
 
-  async createCart(createCartDto: CreateCartDto): Promise<Cart> {
-    const cart = this.cartRepository.create(createCartDto);
+  async createCart(userId: string): Promise<Cart> {
+    const cart = this.cartRepository.create({ userId });
     return await this.cartRepository.save(cart);
   }
 
