@@ -26,14 +26,14 @@ export class CreateBookingDto {
   })
   sourceType: BookingSourceType;
 
-  @IsUUID()
-  @IsOptional()
-  @ApiProperty({
-    description: 'ID chiến dịch nếu booking từ chiến dịch',
-    example: '123e4567-e89b-12d3-a456-426614174003',
-    required: false
-  })
-  sourceId?: string;
+  // @IsUUID()
+  // @IsOptional()
+  // @ApiProperty({
+  //   description: 'ID chiến dịch nếu booking từ chiến dịch',
+  //   example: '123e4567-e89b-12d3-a456-426614174003',
+  //   required: false
+  // })
+  // sourceId?: string;
 
   @IsNumber()
   @IsOptional()
@@ -64,14 +64,14 @@ export class CreateBookingDto {
   })
   userNote?: string;
 
-  @IsEnum(BookingStatus)
-  @IsOptional()
-  @ApiProperty({
-    description: 'Trạng thái booking (chờ xử lý, đã xác nhận, đã hủy, đã hoàn thành)',
-    enum: BookingStatus,
-    enumName: 'BookingStatus',
-    example: BookingStatus.PENDING,
-    required: false
-  })
-  status?: BookingStatus;
+  // @IsEnum(BookingStatus)
+  // @IsOptional()
+  // @ApiProperty({
+  //   description: 'Trạng thái booking (chờ xử lý, đã xác nhận, đã hủy, đã hoàn thành)',
+  //   enum: BookingStatus,
+  //   enumName: 'BookingStatus',
+  //   example: BookingStatus.PENDING,
+  //   required: false
+  // })
+  // status?: BookingStatus;
 }
