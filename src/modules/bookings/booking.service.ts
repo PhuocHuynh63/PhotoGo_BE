@@ -19,6 +19,31 @@ export class BookingService {
     private serviceConceptRepository: Repository<ServiceConcept>,
   ) {}
 
+  // Helper function to format date to DD/MM/YYYY
+  private formatDate(date: Date): string {
+    if (!date) return null;
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  // Helper function to format booking dates
+  private formatBookingDates(booking: Booking): any {
+    if (!booking) return booking;
+    return {
+      ...booking,
+      date: this.formatDate(booking.date),
+      created_at: this.formatDate(booking.created_at),
+      updated_at: this.formatDate(booking.updated_at),
+      histories: booking.histories?.map(history => ({
+        ...history,
+        changedAt: this.formatDate(history.changedAt)
+      }))
+    };
+  }
+
   //#region Create Booking
   async create(
     createBookingDto: CreateBookingDto,
@@ -58,14 +83,15 @@ export class BookingService {
     });
     await this.bookingHistoryRepository.save(history);
   
-    return savedBooking;
+    return this.formatBookingDates(savedBooking);
   }  
   //#endregion
 
   async findAll(): Promise<Booking[]> {
-    return this.bookingRepository.find({
+    const bookings = await this.bookingRepository.find({
       relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
     });
+    return bookings.map(booking => this.formatBookingDates(booking));
   }
 
   async findOne(id: string): Promise<Booking> {
@@ -76,7 +102,7 @@ export class BookingService {
     if (!booking) {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
-    return booking;
+    return this.formatBookingDates(booking);
   }
 
   async update(id: string, updateBookingDto: UpdateBookingDto): Promise<Booking> {
@@ -96,10 +122,10 @@ export class BookingService {
       // Save the new history record
       await this.bookingHistoryRepository.save(history);
       
-      return updatedBooking;
+      return this.formatBookingDates(updatedBooking);
     }
 
-    return booking;
+    return this.formatBookingDates(booking);
   }
 
   async remove(id: string): Promise<void> {

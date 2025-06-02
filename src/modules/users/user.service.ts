@@ -267,7 +267,21 @@ export class UserService {
     //#endregion
 
     //#region Filter
-    const queryBuilder = this.userRepository.createQueryBuilder('user').select(['-user.passwordHash', '-user.oldPasswordHash']);
+    const queryBuilder = this.userRepository.createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.fullName',
+        'user.email',
+        'user.phoneNumber',
+        'user.status',
+        'user.rank',
+        'user.auth',
+        'user.createdAt',
+        'user.updatedAt',
+        'user.avatarUrl',
+        'role.id',
+        'role.name'
+      ]);
 
     // Thêm join để lấy thông tin role
     queryBuilder.leftJoinAndSelect('user.role', 'role');

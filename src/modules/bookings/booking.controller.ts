@@ -6,7 +6,7 @@ import { Booking } from './entities/booking.entity';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiExtraModels } from '@nestjs/swagger/dist/decorators/api-extra-models.decorator';
 import { BookingDepositType, BookingSourceType, BookingStatus } from 'src/constants/booking.enum';
-import e from 'express';
+import { Public } from 'src/decorator/custom';
 
 @Controller('bookings')
 @ApiExtraModels(CreateBookingDto)
@@ -30,6 +30,7 @@ export class BookingController {
   }
 
   @Get()
+  @Public()
   @ApiResponse({ status: 200, description: 'Danh sách tất cả booking', type: [Booking] })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
@@ -39,6 +40,7 @@ export class BookingController {
   }
 
   @Get(':id')
+  @Public()
   @ApiResponse({ status: 200, description: 'Tìm thấy booking', type: Booking })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })

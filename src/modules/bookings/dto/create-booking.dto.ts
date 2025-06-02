@@ -82,7 +82,7 @@ export class CreateBookingDto {
     example: 'John Doe',
     required: false
   })
-  fullname?: string;
+  fullName?: string;
 
   @IsString()
   @IsOptional()
