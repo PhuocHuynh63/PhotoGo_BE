@@ -12,10 +12,10 @@ export class User {
   @Column({ unique: true, length: 100 })
   email: string;
 
-  @Column({ name: 'password_hash', length: 255, select: false })
+  @Column({ name: 'password_hash', length: 255 })
   passwordHash: string;
 
-  @Column({ name: 'old_password_hash', length: 255, nullable: true, select: false })
+  @Column({ name: 'old_password_hash', length: 255, nullable: true })
   oldPasswordHash?: string;
 
   @Column({ name: 'full_name', length: 100 })
