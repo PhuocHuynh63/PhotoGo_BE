@@ -57,8 +57,8 @@ export class Booking {
   @Column({ type: 'text', nullable: true, name: 'user_note' })
   userNote: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'fullname' })
-  fullname: string;
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'fullName' })
+  fullName: string;
 
   @Column({ type: 'varchar', length: 10, nullable: true, name: 'phone' })
   phone: string;
