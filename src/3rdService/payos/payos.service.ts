@@ -31,8 +31,8 @@ export class PayOSService {
       orderCode: data.orderCode,
       amount: data.amount,
       description: data.description,
-      cancelUrl: data.cancelUrl,
-      returnUrl: data.returnUrl,
+      cancelUrl: 'https://photogo.id.vn/payment/error',
+      returnUrl: 'https://photogo.id.vn/payment/successful',
     };
 
     const signature = this.generateSignature(body);
