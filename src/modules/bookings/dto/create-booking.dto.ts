@@ -108,4 +108,12 @@ export class CreateBookingDto {
   })
   email?: string;
 
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'ID voucher',
+    example: '123e4567-e89b-12d3-a456-426614174003',
+    required: false
+  })
+  voucherId?: string;
 }

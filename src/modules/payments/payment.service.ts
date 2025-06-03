@@ -11,7 +11,6 @@ import { BookingStatus } from '../../constants/booking.enum';
 import { VoucherService } from '../vouchers/voucher.service';
 import { VoucherUserStatusEnum } from '../../constants/voucher.enum';
 import PayOS from '@payos/node';
-import { BookingService } from '../bookings/booking.service';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 
 @Injectable()
@@ -23,7 +22,6 @@ export class PaymentService {
     private readonly invoiceRepo: Repository<Invoice>,
     @Inject('PAYOS_CLIENT') private readonly payos: PayOS,
     private readonly configService: ConfigService,
-    private readonly bookingService: BookingService,
     private readonly voucherService: VoucherService,
   ) {}
 
@@ -138,12 +136,8 @@ export class PaymentService {
         invoice.paidAmount += payment.amount;
         await this.invoiceRepo.save(invoice);
 
-        // Update booking status if all payments are completed
-        if (invoice.paidAmount >= invoice.payablePrice) {
-          await this.bookingService.update(invoice.booking.id, {
-            status: BookingStatus.COMPLETED
-          });
-        }
+        Object.assign(payment, updatePaymentDto);
+        return await this.paymentRepository.save(payment);
       }
     }
 
@@ -267,15 +261,12 @@ export class PaymentService {
     const invoice = payment.invoice;
 
     if (status === 'COMPLETED') {
-      // Update payment status
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
 
-      // Update invoice paid amount
       invoice.paidAmount += payment.amount;
       await this.invoiceRepo.save(invoice);
 
-      // Update voucher status if exists
       const activeVoucherUser = invoice.booking?.user?.voucherUsers?.find(
         vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
       );
@@ -285,13 +276,6 @@ export class PaymentService {
         } catch (error) {
           console.error('Error updating voucher usage:', error);
         }
-      }
-
-      // Update booking status if all payments are completed
-      if (invoice.paidAmount >= invoice.payablePrice) {
-        await this.bookingService.update(invoice.booking.id, {
-          status: BookingStatus.COMPLETED
-        });
       }
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;

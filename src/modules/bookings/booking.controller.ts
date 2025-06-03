@@ -25,7 +25,7 @@ export class BookingController {
     @Body() createBookingDto: CreateBookingDto,
     @Query('userId') userId: string,
     @Query('serviceConceptId') serviceConceptId: string
-  ): Promise<Booking> {
+  ): Promise<{ booking: Booking; paymentLink: string }> {
     try {
       if (!userId) {
         throw new HttpException('User ID là bắt buộc', HttpStatus.BAD_REQUEST);
@@ -33,7 +33,8 @@ export class BookingController {
       if (!serviceConceptId) {
         throw new HttpException('Service Concept ID là bắt buộc', HttpStatus.BAD_REQUEST);
       }
-      return await this.bookingService.create(createBookingDto, userId, serviceConceptId);
+      const result = await this.bookingService.create(createBookingDto, userId, serviceConceptId);
+      return result;
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
