@@ -12,6 +12,9 @@ import { VoucherService } from '../vouchers/voucher.service';
 import { VoucherUserStatusEnum } from '../../constants/voucher.enum';
 import PayOS from '@payos/node';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { BookingHistory } from '../bookings/entities/booking-history.entity';
+import { Booking } from '../bookings/entities/booking.entity';
+import { PaymentCallbackDto } from './dto/payment-callback.dto';
 
 @Injectable()
 export class PaymentService {
@@ -20,6 +23,10 @@ export class PaymentService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(Invoice)
     private readonly invoiceRepo: Repository<Invoice>,
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
+    @InjectRepository(BookingHistory)
+    private readonly bookingHistoryRepository: Repository<BookingHistory>,
     @Inject('PAYOS_CLIENT') private readonly payos: PayOS,
     private readonly configService: ConfigService,
     private readonly voucherService: VoucherService,
@@ -203,8 +210,8 @@ export class PaymentService {
       orderCode,
       amount,
       description,
-      returnUrl: 'https://photogo.id.vn/payment/successful',
-      cancelUrl: 'https://photogo.id.vn/payment/error',
+      returnUrl: `https://photogo.id.vn/payment/successful?paymentId=${orderCode}&status=success`,
+      cancelUrl: `https://photogo.id.vn/payment/error?paymentId=${orderCode}&status=error`,
       webhookUrl: this.configService.get<string>('PAYOS_WEBHOOK_URL'),
       buyerName,
       items: [
@@ -251,7 +258,14 @@ export class PaymentService {
     // Find payment based on transactionId
     const payment = await this.paymentRepository.findOne({ 
       where: { transactionId },
-      relations: ['invoice', 'invoice.booking', 'invoice.booking.user', 'invoice.booking.user.voucherUsers', 'invoice.booking.user.voucherUsers.voucher']
+      relations: [
+        'invoice', 
+        'invoice.booking', 
+        'invoice.booking.user', 
+        'invoice.booking.user.voucherUsers', 
+        'invoice.booking.user.voucherUsers.voucher',
+        'invoice.booking.histories'
+      ]
     });
 
     if (!payment) {
@@ -259,15 +273,39 @@ export class PaymentService {
     }
 
     const invoice = payment.invoice;
+    const booking = invoice.booking;
 
     if (status === 'COMPLETED') {
+      // Update payment status
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
 
+      // Update invoice status and paid amount
       invoice.paidAmount += payment.amount;
+      if (payment.type === PaymentType.DEPOSIT) {
+        invoice.status = InvoiceStatus.PARTIALLY_PAID;
+      } else if (payment.type === PaymentType.REMAINING) {
+        invoice.status = InvoiceStatus.PAID;
+      }
       await this.invoiceRepo.save(invoice);
 
-      const activeVoucherUser = invoice.booking?.user?.voucherUsers?.find(
+      // Update booking status
+      if (payment.type === PaymentType.DEPOSIT) {
+        booking.status = BookingStatus.CONFIRMED;
+      } else if (payment.type === PaymentType.REMAINING) {
+        booking.status = BookingStatus.COMPLETED;
+      }
+      await this.bookingRepository.save(booking);
+
+      // Create booking history
+      const history = this.bookingHistoryRepository.create({
+        bookingId: booking.id,
+        status: booking.status,
+      });
+      await this.bookingHistoryRepository.save(history);
+
+      // Handle voucher if exists
+      const activeVoucherUser = booking?.user?.voucherUsers?.find(
         vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
       );
       if (activeVoucherUser?.voucher) {
@@ -282,6 +320,113 @@ export class PaymentService {
       await this.paymentRepository.save(payment);
     } else {
       throw new BadRequestException(`Trạng thái thanh toán không hợp lệ: ${status}`);
+    }
+  }
+
+  async handlePaymentSuccess(callbackData: PaymentCallbackDto) {
+    const { paymentId, status, code, id, orderCode } = callbackData;
+
+    // Find payment based on transactionId (orderCode)
+    const payment = await this.paymentRepository.findOne({ 
+      where: { transactionId: orderCode },
+      relations: [
+        'invoice', 
+        'invoice.booking', 
+        'invoice.booking.user', 
+        'invoice.booking.user.voucherUsers', 
+        'invoice.booking.user.voucherUsers.voucher',
+        'invoice.booking.histories'
+      ]
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${orderCode}`);
+    }
+
+    const invoice = payment.invoice;
+    const booking = invoice.booking;
+
+    // Update payment status
+    payment.status = PaymentStatus.PAID;
+    await this.paymentRepository.save(payment);
+
+    // Update invoice status and paid amount
+    invoice.paidAmount += payment.amount;
+    if (payment.type === PaymentType.DEPOSIT) {
+      invoice.status = InvoiceStatus.PARTIALLY_PAID;
+    } else if (payment.type === PaymentType.REMAINING) {
+      invoice.status = InvoiceStatus.PAID;
+    }
+    await this.invoiceRepo.save(invoice);
+
+    // Update booking status
+    if (payment.type === PaymentType.DEPOSIT) {
+      booking.status = BookingStatus.CONFIRMED;
+    } else if (payment.type === PaymentType.REMAINING) {
+      booking.status = BookingStatus.COMPLETED;
+    }
+    await this.bookingRepository.save(booking);
+
+    // Create booking history
+    const history = this.bookingHistoryRepository.create({
+      bookingId: booking.id,
+      status: booking.status,
+    });
+    await this.bookingHistoryRepository.save(history);
+
+    // Handle voucher if exists
+    const activeVoucherUser = booking?.user?.voucherUsers?.find(
+      vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
+    );
+    if (activeVoucherUser?.voucher) {
+      try {
+        await this.voucherService.updateVoucherUsage(activeVoucherUser.voucher.id);
+      } catch (error) {
+        console.error('Error updating voucher usage:', error);
+      }
+    }
+  }
+
+  async handlePaymentError(callbackData: PaymentCallbackDto) {
+    const { paymentId, status, code, id, orderCode } = callbackData;
+
+    // Find payment based on transactionId (orderCode)
+    const payment = await this.paymentRepository.findOne({ 
+      where: { transactionId: orderCode },
+      relations: [
+        'invoice', 
+        'invoice.booking', 
+        'invoice.booking.histories'
+      ]
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${orderCode}`);
+    }
+
+    // Update payment status to failed
+    payment.status = PaymentStatus.FAILED;
+    await this.paymentRepository.save(payment);
+
+    // Update invoice status (nếu muốn)
+    const invoice = payment.invoice;
+    if (invoice) {
+      invoice.status = InvoiceStatus.CANCELLED;
+      await this.invoiceRepo.save(invoice);
+    }
+
+    // Update booking status (nếu muốn)
+    const booking = invoice?.booking;
+    if (booking) {
+      booking.status = BookingStatus.CANCELLED;
+      await this.bookingRepository.save(booking);
+
+      // Create booking history
+      const history = this.bookingHistoryRepository.create({
+        bookingId: booking.id,
+        status: BookingStatus.CANCELLED,
+      });
+      await this.bookingHistoryRepository.save(history);
     }
   }
 }
