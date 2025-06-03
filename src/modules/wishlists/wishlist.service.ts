@@ -17,6 +17,16 @@ export class WishlistService {
   ) {}
 
   async createWishlist(userId: string): Promise<Wishlist> {
+    // Kiểm tra xem user đã có wishlist chưa
+    const existingWishlist = await this.wishlistRepository.findOne({
+      where: { userId },
+      relations: ['items'],
+    });
+
+    if (existingWishlist) {
+      return existingWishlist;
+    }
+
     const wishlist = this.wishlistRepository.create({ userId });
     return await this.wishlistRepository.save(wishlist);
   }
