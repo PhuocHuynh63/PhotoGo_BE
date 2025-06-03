@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Query, Param, Res } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, HttpException, HttpStatus } from '@nestjs/common';
 import { LocationService } from './location.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { Location } from './entities/location.entity';
@@ -49,10 +49,19 @@ export class LocationController {
     }
   })
   @ApiResponse({ status: 201, description: 'Địa điểm được tạo thành công', type: Location })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy vendor' })
   @ResponseMessage('Tạo địa điểm thành công') 
   async create(@Body() createLocationDto: CreateLocationDto): Promise<Location> {
-    return this.locationService.create(createLocationDto);
+    try {
+      return await this.locationService.create(createLocationDto);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi tạo địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Public()
@@ -63,6 +72,7 @@ export class LocationController {
     description: 'Danh sách địa điểm với phân trang',
     type: [Location],
   })
+  @ApiResponse({ status: 400, description: 'Tham số tìm kiếm không hợp lệ' })
   @ResponseMessage('Lấy danh sách địa điểm thành công')
   async findAll(@Query() query: FindLocationDto): Promise<{
     data: Location[];
@@ -73,32 +83,79 @@ export class LocationController {
       totalItem: number;
     };
   }> {
-    return this.locationService.findAll(query);
+    try {
+      return await this.locationService.findAll(query);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy danh sách địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Lấy địa điểm theo ID (Public)' })
   @ApiResponse({ status: 200, description: 'Địa điểm được tìm thấy', type: Location })
+  @ApiResponse({ status: 400, description: 'ID không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
   @ResponseMessage('Lấy thông tin địa điểm thành công')
   async findOne(@Param('id') id: string): Promise<Location> {
-    return this.locationService.findOne(id);
+    if (!id) {
+      throw new HttpException('ID địa điểm không được để trống', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.locationService.findOne(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy thông tin địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Cập nhật địa điểm theo ID' })
   @ApiResponse({ status: 200, description: 'Địa điểm được cập nhật thành công', type: Location })
+  @ApiResponse({ status: 400, description: 'Dữ liệu cập nhật không hợp lệ' })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
+  @ResponseMessage('Cập nhật địa điểm thành công')
   async updateLocation(@Param('id') id: string, @Body() updateLocationDto: UpdateLocationDto): Promise<Location> {
-    return await this.locationService.updateLocation(id, updateLocationDto);
+    if (!id) {
+      throw new HttpException('ID địa điểm không được để trống', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.locationService.updateLocation(id, updateLocationDto);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi cập nhật địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa địa điểm theo ID' })
   @ApiResponse({ status: 200, description: 'Địa điểm được xóa thành công' })
+  @ApiResponse({ status: 400, description: 'ID không hợp lệ' })
+  @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
+  @ResponseMessage('Xóa địa điểm thành công')
   async deleteLocation(@Param('id') id: string): Promise<void> {
-    return await this.locationService.deleteLocation(id);
+    if (!id) {
+      throw new HttpException('ID địa điểm không được để trống', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      await this.locationService.deleteLocation(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi xóa địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 }

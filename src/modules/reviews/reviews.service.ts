@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Review } from './entities/review.entity';
@@ -29,16 +29,32 @@ export class ReviewService {
 
   async create(createReviewDto: CreateReviewDto, files: { images?: Express.Multer.File[] }): Promise<Review> {
     // Validate required fields
-    if(!createReviewDto.userId || !createReviewDto.bookingId) {
-      throw new BadRequestException('userId và bookingId là bắt buộc');
-    }
-    if (!createReviewDto.rating || !createReviewDto.vendorId) {
-      throw new BadRequestException('Điểm đánh giá và vendorId là bắt buộc');
+    if (!createReviewDto.userId || !createReviewDto.bookingId || !createReviewDto.vendorId) {
+      throw new BadRequestException('userId, bookingId và vendorId là bắt buộc');
     }
 
-    // Validate vendorId is a UUID
+    // Validate UUIDs
+    if (!isUUID(createReviewDto.userId)) {
+      throw new BadRequestException('Định dạng userId không hợp lệ');
+    }
+    if (!isUUID(createReviewDto.bookingId)) {
+      throw new BadRequestException('Định dạng bookingId không hợp lệ');
+    }
     if (!isUUID(createReviewDto.vendorId)) {
       throw new BadRequestException('Định dạng vendorId không hợp lệ');
+    }
+
+    // Validate rating
+    if (!createReviewDto.rating || createReviewDto.rating < 1 || createReviewDto.rating > 5) {
+      throw new BadRequestException('Điểm đánh giá phải từ 1 đến 5');
+    }
+
+    // Check if review already exists for this booking
+    const existingReview = await this.reviewRepository.findOne({
+      where: { bookingId: createReviewDto.bookingId }
+    });
+    if (existingReview) {
+      throw new ConflictException('Đã tồn tại đánh giá cho đơn đặt chỗ này');
     }
 
     try {
@@ -47,6 +63,10 @@ export class ReviewService {
 
       // Upload images if provided
       if (files?.images?.length) {
+        if (files.images.length > 10) {
+          throw new BadRequestException('Số lượng hình ảnh không được vượt quá 10');
+        }
+
         const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
         
         // Create review images
@@ -61,6 +81,9 @@ export class ReviewService {
 
       return this.findOne(savedReview.id);
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof ConflictException) {
+        throw error;
+      }
       throw new BadRequestException('Không thể tạo đánh giá: ' + error.message);
     }
   }
@@ -75,12 +98,13 @@ export class ReviewService {
           'review.id',
           'review.rating',
           'review.comment',
-          'user', // Updated to match the likely property name
-          'vendor', // Updated to match the likely property name
+          'user.fullName',
+          'vendor.name',
         ])
+        .orderBy('review.created_at', 'DESC')
         .getMany();
     } catch (error) {
-      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
+      throw new BadRequestException('Không thể lấy danh sách đánh giá: ' + error.message);
     }
   }
 
@@ -93,7 +117,10 @@ export class ReviewService {
     try {
       const reviews = await this.reviewRepository.find({
         where: { vendorId },
-        relations: ['vendor'],
+        relations: ['user', 'vendor', 'reviewImages'],
+        order: {
+          createdAt: 'DESC'
+        }
       });
 
       if (!reviews.length) {
@@ -102,6 +129,9 @@ export class ReviewService {
 
       return reviews;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
     }
   }
@@ -115,7 +145,7 @@ export class ReviewService {
     try {
       const review = await this.reviewRepository.findOne({
         where: { id },
-        relations: ['user', 'vendor', 'booking'],
+        relations: ['user', 'vendor', 'booking', 'reviewImages'],
       });
 
       if (!review) {
@@ -124,7 +154,10 @@ export class ReviewService {
 
       return review;
     } catch (error) {
-      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Không thể lấy thông tin đánh giá: ' + error.message);
     }
   }
 
@@ -134,13 +167,33 @@ export class ReviewService {
       throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
     }
 
+    // Validate rating if provided
+    if (updateReviewDto.rating && (updateReviewDto.rating < 1 || updateReviewDto.rating > 5)) {
+      throw new BadRequestException('Điểm đánh giá phải từ 1 đến 5');
+    }
+
     try {
-      const review = await this.findOne(id); // This will throw NotFoundException if not found
+      const review = await this.findOne(id);
+
+      // Check if trying to update bookingId
+      if (updateReviewDto.bookingId && updateReviewDto.bookingId !== review.bookingId) {
+        throw new BadRequestException('Không thể thay đổi đơn đặt chỗ của đánh giá');
+      }
+
+      // Check if trying to update vendorId
+      if (updateReviewDto.vendorId && updateReviewDto.vendorId !== review.vendorId) {
+        throw new BadRequestException('Không thể thay đổi nhà cung cấp của đánh giá');
+      }
+
       Object.assign(review, updateReviewDto);
       await this.reviewRepository.save(review);
 
       // Upload new images if provided
       if (files?.images?.length) {
+        if (files.images.length > 10) {
+          throw new BadRequestException('Số lượng hình ảnh không được vượt quá 10');
+        }
+
         const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
         
         // Create review images
@@ -155,8 +208,8 @@ export class ReviewService {
 
       return this.findOne(id);
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error; // Re-throw NotFoundException
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
       }
       throw new BadRequestException('Không thể cập nhật đánh giá: ' + error.message);
     }
@@ -169,26 +222,38 @@ export class ReviewService {
     }
 
     try {
-      const review = await this.findOne(id); // This will throw NotFoundException if not found
+      const review = await this.findOne(id);
+
+      // Delete associated images
+      await this.reviewImageRepository.delete({ reviewId: id });
+
+      // Delete review
       await this.reviewRepository.remove(review);
     } catch (error) {
       if (error instanceof NotFoundException) {
-        throw error; // Re-throw NotFoundException
+        throw error;
       }
       throw new BadRequestException('Không thể xóa đánh giá: ' + error.message);
     }
   }
 
   async getAverageRatingByVendorId(vendorId: string): Promise<number> {
-    const reviews = await this.reviewRepository.find({
-      where: { vendorId },
-      select: ['rating'],
-    });
-  
-    if (!reviews.length) return 0;
-  
-    const total = reviews.reduce((sum, r) => sum + r.rating, 0);
-    return parseFloat((total / reviews.length).toFixed(2));
+    if (!isUUID(vendorId)) {
+      throw new BadRequestException('Định dạng vendorId không hợp lệ');
+    }
+
+    try {
+      const reviews = await this.reviewRepository.find({
+        where: { vendorId },
+        select: ['rating'],
+      });
+    
+      if (!reviews.length) return 0;
+    
+      const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+      return parseFloat((total / reviews.length).toFixed(2));
+    } catch (error) {
+      throw new BadRequestException('Không thể tính điểm đánh giá trung bình: ' + error.message);
+    }
   }
-  
 }
