@@ -112,22 +112,17 @@ export class BookingService {
       }
     }
 
-    // Validate deposit
-    if (!createBookingDto.depositType) {
-      throw new BadRequestException('Loại đặt cọc là bắt buộc');
-    }
 
     if (!createBookingDto.depositAmount) {
       throw new BadRequestException('Số tiền đặt cọc là bắt buộc');
     }
 
-    if (createBookingDto.depositType === BookingDepositType.PERCENTAGE) {
-      if (createBookingDto.depositAmount < 30) {
-        throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
-      }
-      if (createBookingDto.depositAmount > 100) {
-        throw new BadRequestException('Tỷ lệ đặt cọc không được vượt quá 100%');
-      }
+
+    if (createBookingDto.depositAmount < 30) {
+      throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
+    }
+    if (createBookingDto.depositAmount > 100) {
+      throw new BadRequestException('Tỷ lệ đặt cọc không được vượt quá 100%');
     }
 
     // Validate date and time
@@ -155,7 +150,7 @@ export class BookingService {
 
       const currentTimeInMinutes = currentHours * 60 + currentMinutes;
       const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
-      
+
       if (bookingTimeInMinutes <= currentTimeInMinutes) {
         throw new BadRequestException('Giờ booking không hợp lệ');
       }
@@ -175,9 +170,9 @@ export class BookingService {
       vendorId,
       status: BookingStatus.PENDING,
       depositAmount: createBookingDto.depositAmount,
-      depositType: createBookingDto.depositType,
+      depositType: BookingDepositType.PERCENTAGE,
     });
-  
+
     const savedBooking = await this.bookingRepository.save(booking);
 
     // Find voucher if provided
@@ -356,7 +351,7 @@ export class BookingService {
         status: updateBookingDto.status,
       });
       await this.bookingHistoryRepository.save(history);
-      
+
       return this.formatBookingDates(updatedBooking);
     }
 

@@ -12,4 +12,4 @@ import { ServiceConcept } from '../service-package/entities/service-concept.enti
   providers: [CartService],
   exports: [CartService],
 })
-export class CartModule {}
+export class CartModule { }
