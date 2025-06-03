@@ -21,14 +21,14 @@ export class CartService {
 
   async createCart(userId: string): Promise<Cart> {
     // Kiểm tra xem user đã có giỏ hàng chưa
-    // const existingCart = await this.cartRepository.findOne({
-    //   where: { userId },
-    //   relations: ['items'],
-    // });
+    const existingCart = await this.cartRepository.findOne({
+      where: { userId },
+      relations: ['items'],
+    });
 
-    // if (existingCart) {
-    //   throw new BadRequestException('Người dùng đã có giỏ hàng');
-    // }
+    if (existingCart) {
+      return existingCart;
+    }
 
     const cart = this.cartRepository.create({ userId });
     return await this.cartRepository.save(cart);
