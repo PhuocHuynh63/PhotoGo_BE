@@ -19,6 +19,13 @@ export class BookingService {
     private serviceConceptRepository: Repository<ServiceConcept>,
   ) { }
 
+  // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
+  private convertDateFormat(dateStr: string): string {
+    if (!dateStr) return null;
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month}-${day}`;
+  }
+
   // Helper function to format date to DD/MM/YYYY
   private formatDate(date: Date): string {
     if (!date) return null;
@@ -65,6 +72,12 @@ export class BookingService {
       throw new BadRequestException('Ngày booking là bắt buộc');
     }
 
+    // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+    const convertedDate = this.convertDateFormat(createBookingDto.date);
+    if (!convertedDate) {
+      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+    }
+
     if (!createBookingDto.time) {
       throw new BadRequestException('Giờ booking là bắt buộc');
     }
@@ -105,7 +118,7 @@ export class BookingService {
     }
 
     // Validate date and time
-    const bookingDate = new Date(createBookingDto.date);
+    const bookingDate = new Date(convertedDate);
     const currentDate = new Date();
 
     // Get Vietnam time by adding 7 hours
@@ -143,6 +156,7 @@ export class BookingService {
     const vendorId = serviceConcept.servicePackage.vendorId;
     const booking = this.bookingRepository.create({
       ...createBookingDto,
+      date: convertedDate, // Use the converted date
       userId,
       serviceConceptId,
       vendorId,

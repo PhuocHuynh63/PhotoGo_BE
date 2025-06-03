@@ -1,18 +1,24 @@
-import { IsEnum, IsDateString, IsString, IsUUID, IsOptional, IsNumber } from 'class-validator';
+import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches } from 'class-validator';
 import { BookingSourceType, BookingDepositType, BookingStatus } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBookingDto {
-  @IsDateString()
+  @IsString()
+  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+    message: 'Ngày phải có định dạng DD/MM/YYYY'
+  })
   @ApiProperty({
-    description: 'Ngày booking',
-    example: '2023-10-01'
+    description: 'Ngày booking (định dạng DD/MM/YYYY)',
+    example: '01/10/2023'
   })
   date: string;
 
   @IsString()
+  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: 'Giờ phải có định dạng HH:mm'
+  })
   @ApiProperty({
-    description: 'Giờ booking',
+    description: 'Giờ booking (định dạng HH:mm)',
     example: '14:00'
   })
   time: string;
