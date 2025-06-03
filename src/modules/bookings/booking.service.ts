@@ -7,6 +7,10 @@ import { BookingHistory } from './entities/booking-history.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
+import { InvoiceService } from '../invoices/invoice.service';
+import { Voucher } from '../vouchers/entities/voucher.entity';
+import { PaymentService } from '../payments/payment.service';
+import { PaymentType } from '../../constants/payment.enum';
 
 @Injectable()
 export class BookingService {
@@ -17,7 +21,11 @@ export class BookingService {
     private bookingHistoryRepository: Repository<BookingHistory>,
     @InjectRepository(ServiceConcept)
     private serviceConceptRepository: Repository<ServiceConcept>,
-  ) { }
+    @InjectRepository(Voucher)
+    private voucherRepository: Repository<Voucher>,
+    private invoiceService: InvoiceService,
+    private paymentService: PaymentService,
+  ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
   private convertDateFormat(dateStr: string): string {
@@ -56,7 +64,7 @@ export class BookingService {
     createBookingDto: CreateBookingDto,
     userId: string,
     serviceConceptId: string,
-  ): Promise<Booking> {
+  ): Promise<{ booking: Booking; paymentLink: string }> {
     // Validate service concept
     const serviceConcept = await this.serviceConceptRepository.findOne({
       where: { id: serviceConceptId },
@@ -167,13 +175,36 @@ export class BookingService {
 
     const savedBooking = await this.bookingRepository.save(booking);
 
+    // Find voucher if provided
+    let voucher = null;
+    if (createBookingDto.voucherId) {
+      voucher = await this.voucherRepository.findOne({
+        where: { id: createBookingDto.voucherId },
+      });
+    }
+      
     const history = this.bookingHistoryRepository.create({
       bookingId: savedBooking.id,
       status: BookingStatus.PENDING,
     });
     await this.bookingHistoryRepository.save(history);
 
-    return this.formatBookingDates(savedBooking);
+    // Create invoice using InvoiceService
+    const invoice = await this.invoiceService.create(
+      savedBooking.id,
+      voucher?.id,
+      {
+        issuedAt: new Date().toISOString(),
+      }
+    );
+
+    // Create payment link for deposit
+    const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
+  
+    return {
+      booking: this.formatBookingDates(savedBooking),
+      paymentLink: paymentLinkData.checkoutUrl
+    };
   }
   //#endregion
 
