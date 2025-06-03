@@ -4,12 +4,12 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBookingDto {
   @IsString()
-  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+  @Matches(/^([0-2][0-9]|3[0-1])\/(0[1-9]|1[0-2])\/\d{4}$/, {
     message: 'Ngày phải có định dạng DD/MM/YYYY'
   })
   @ApiProperty({
     description: 'Ngày booking (định dạng DD/MM/YYYY)',
-    example: '01/10/2023'
+    example: '04/06/2025'
   })
   date: string;
 
@@ -19,7 +19,7 @@ export class CreateBookingDto {
   })
   @ApiProperty({
     description: 'Giờ booking (định dạng HH:mm)',
-    example: '14:00'
+    example: '13:00'
   })
   time: string;
 
@@ -64,8 +64,8 @@ export class CreateBookingDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Số tiền đặt cọc cho booking',
-    example: '100.00',
+    description: 'Ghi chú của người dùng',
+    example: 'Không có',
     required: false
   })
   userNote?: string;
