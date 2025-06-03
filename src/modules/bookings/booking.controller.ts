@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
@@ -21,12 +21,28 @@ export class BookingController {
   @ApiResponse({ status: 201, description: 'Tạo booking thành công', type: Booking })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
-  create(
+  async create(
     @Body() createBookingDto: CreateBookingDto,
     @Query('userId') userId: string,
     @Query('serviceConceptId') serviceConceptId: string
   ): Promise<Booking> {
-    return this.bookingService.create(createBookingDto, userId, serviceConceptId);
+    try {
+      if (!userId) {
+        throw new HttpException('User ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      if (!serviceConceptId) {
+        throw new HttpException('Service Concept ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.create(createBookingDto, userId, serviceConceptId);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi tạo booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   @Get()
@@ -35,8 +51,15 @@ export class BookingController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   @ApiOperation({ summary: 'Lấy tất cả booking' })
-  findAll(): Promise<Booking[]> {
-    return this.bookingService.findAll();
+  async findAll(): Promise<Booking[]> {
+    try {
+      return await this.bookingService.findAll();
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   @Get(':id')
@@ -45,8 +68,21 @@ export class BookingController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   @ApiOperation({ summary: 'Lấy booking theo ID' })
-  findOne(@Param('id') id: string): Promise<Booking> {
-    return this.bookingService.findOne(id);
+  async findOne(@Param('id') id: string): Promise<Booking> {
+    try {
+      if (!id) {
+        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.findOne(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi tìm booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   @Patch(':id')
@@ -54,8 +90,24 @@ export class BookingController {
   @ApiResponse({ status: 200, description: 'Cập nhật booking thành công', type: Booking })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
-  update(@Param('id') id: string, @Body() updateBookingDto: UpdateBookingDto): Promise<Booking> {
-    return this.bookingService.update(id, updateBookingDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateBookingDto: UpdateBookingDto
+  ): Promise<Booking> {
+    try {
+      if (!id) {
+        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.update(id, updateBookingDto);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi cập nhật booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
   
   @Delete(':id')
@@ -63,7 +115,20 @@ export class BookingController {
   @ApiResponse({ status: 200, description: 'Xóa booking thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
-  remove(@Param('id') id: string): Promise<void> {
-    return this.bookingService.remove(id);
+  async remove(@Param('id') id: string): Promise<void> {
+    try {
+      if (!id) {
+        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      await this.bookingService.remove(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi xóa booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }

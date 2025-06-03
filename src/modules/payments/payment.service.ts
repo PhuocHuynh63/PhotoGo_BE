@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
@@ -28,12 +28,57 @@ export class PaymentService {
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
+    // Validate required fields
+    if (!createPaymentDto.invoiceId) {
+      throw new BadRequestException('ID hóa đơn không được để trống');
+    }
+    if (!createPaymentDto.amount || createPaymentDto.amount <= 0) {
+      throw new BadRequestException('Số tiền thanh toán phải lớn hơn 0');
+    }
+    if (!createPaymentDto.paymentMethod) {
+      throw new BadRequestException('Phương thức thanh toán không được để trống');
+    }
+    if (!createPaymentDto.type) {
+      throw new BadRequestException('Loại thanh toán không được để trống');
+    }
+
+    // Check if invoice exists
+    const invoice = await this.invoiceRepo.findOne({
+      where: { id: createPaymentDto.invoiceId }
+    });
+    if (!invoice) {
+      throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${createPaymentDto.invoiceId}`);
+    }
+
+    // Check if payment amount is valid
+    if (createPaymentDto.type === PaymentType.DEPOSIT && createPaymentDto.amount > invoice.depositAmount) {
+      throw new BadRequestException('Số tiền đặt cọc không được vượt quá số tiền cần đặt cọc');
+    }
+    if (createPaymentDto.type === PaymentType.REMAINING && createPaymentDto.amount > invoice.remainingAmount) {
+      throw new BadRequestException('Số tiền thanh toán không được vượt quá số tiền còn lại');
+    }
+
+    // Check if payment already exists for this invoice and type
+    const existingPayment = await this.paymentRepository.findOne({
+      where: {
+        invoiceId: createPaymentDto.invoiceId,
+        type: createPaymentDto.type,
+        status: PaymentStatus.PAID
+      }
+    });
+    if (existingPayment) {
+      throw new ConflictException(`Đã tồn tại thanh toán ${createPaymentDto.type} cho hóa đơn này`);
+    }
+
     const payment = this.paymentRepository.create(createPaymentDto);
     return await this.paymentRepository.save(payment);
   }
 
   async findAll(query: FindAllPaymentsDto): Promise<Payment[]> {
-    const qb = this.paymentRepository.createQueryBuilder('payment');
+    const qb = this.paymentRepository.createQueryBuilder('payment')
+      .leftJoinAndSelect('payment.invoice', 'invoice')
+      .leftJoinAndSelect('invoice.booking', 'booking')
+      .leftJoinAndSelect('booking.user', 'user');
 
     if (query.invoiceId) {
       qb.andWhere('payment.invoiceId = :invoiceId', { invoiceId: query.invoiceId });
@@ -43,17 +88,24 @@ export class PaymentService {
       qb.andWhere('payment.status = :status', { status: query.status });
     }
 
+    // Sort by created_at desc
+    qb.orderBy('payment.created_at', 'DESC');
+
     return await qb.getMany();
   }
 
   async findOne(id: string): Promise<Payment> {
+    if (!id) {
+      throw new BadRequestException('ID thanh toán không được để trống');
+    }
+
     const payment = await this.paymentRepository.findOne({
       where: { id },
-      relations: ['invoice'],
+      relations: ['invoice', 'invoice.booking', 'invoice.booking.user'],
     });
 
     if (!payment) {
-      throw new NotFoundException(`Thanh toán với ID ${id} không tồn tại`);
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${id}`);
     }
 
     return payment;
@@ -61,23 +113,79 @@ export class PaymentService {
 
   async update(id: string, updatePaymentDto: UpdatePaymentDto): Promise<Payment> {
     const payment = await this.findOne(id);
+
+    // Check if payment is already completed
+    if (payment.status === PaymentStatus.PAID) {
+      throw new ConflictException('Không thể cập nhật thanh toán đã hoàn thành');
+    }
+
+    // Validate status transition
+    if (updatePaymentDto.status) {
+      if (!Object.values(PaymentStatus).includes(updatePaymentDto.status)) {
+        throw new BadRequestException('Trạng thái thanh toán không hợp lệ');
+      }
+
+      // Check if status transition is valid
+      if (payment.status === PaymentStatus.PENDING && updatePaymentDto.status === PaymentStatus.PAID) {
+        // Update invoice paid amount
+        const invoice = await this.invoiceRepo.findOne({
+          where: { id: payment.invoiceId }
+        });
+        if (!invoice) {
+          throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${payment.invoiceId}`);
+        }
+
+        invoice.paidAmount += payment.amount;
+        await this.invoiceRepo.save(invoice);
+
+        // Update booking status if all payments are completed
+        if (invoice.paidAmount >= invoice.payablePrice) {
+          await this.bookingService.update(invoice.booking.id, {
+            status: BookingStatus.COMPLETED
+          });
+        }
+      }
+    }
+
     Object.assign(payment, updatePaymentDto);
     return await this.paymentRepository.save(payment);
   }
 
   async remove(id: string): Promise<void> {
     const payment = await this.findOne(id);
+
+    // Check if payment is already completed
+    if (payment.status === PaymentStatus.PAID) {
+      throw new ConflictException('Không thể xóa thanh toán đã hoàn thành');
+    }
+
     await this.paymentRepository.remove(payment);
   }
 
   async createPayOSLink(invoiceId: string, paymentType: PaymentType) {
+    if (!invoiceId) {
+      throw new BadRequestException('ID hóa đơn không được để trống');
+    }
+
     const invoice = await this.invoiceRepo.findOne({ 
       where: { id: invoiceId },
       relations: ['booking', 'booking.user', 'booking.serviceConcept'],
     });
     
-    if (!invoice || !invoice.id) {
-      throw new NotFoundException(`Hóa đơn với ID ${invoiceId} không tồn tại hoặc không có ID hợp lệ`);
+    if (!invoice) {
+      throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${invoiceId}`);
+    }
+
+    // Check if payment already exists
+    const existingPayment = await this.paymentRepository.findOne({
+      where: {
+        invoiceId,
+        type: paymentType,
+        status: PaymentStatus.PAID
+      }
+    });
+    if (existingPayment) {
+      throw new ConflictException(`Đã tồn tại thanh toán ${paymentType} cho hóa đơn này`);
     }
   
     let amount = 0;
@@ -116,9 +224,8 @@ export class PaymentService {
   
     try {
       const paymentLinkRes = await this.payos.createPaymentLink(paymentLinkData);
-      console.log('Payment link response:', paymentLinkRes);
   
-      // Tạo payment record
+      // Create payment record
       const payment = await this.create({
         invoiceId: invoice.id,
         amount,
@@ -136,35 +243,39 @@ export class PaymentService {
       };
     } catch (error) {
       console.error('PayOS error:', error);
-      throw new Error('Lỗi khi tạo liên kết thanh toán');
+      throw new BadRequestException('Lỗi khi tạo liên kết thanh toán');
     }
   }
 
   async handlePayOSWebhook(data: any) {
+    if (!data || !data.transactionId) {
+      throw new BadRequestException('Dữ liệu webhook không hợp lệ');
+    }
+
     const { status, transactionId } = data;
     
-    // Tìm payment dựa trên transactionId
+    // Find payment based on transactionId
     const payment = await this.paymentRepository.findOne({ 
       where: { transactionId },
       relations: ['invoice', 'invoice.booking', 'invoice.booking.user', 'invoice.booking.user.voucherUsers', 'invoice.booking.user.voucherUsers.voucher']
     });
 
     if (!payment) {
-      throw new NotFoundException(`Thanh toán với ID ${transactionId} không tồn tại`);
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${transactionId}`);
     }
 
     const invoice = payment.invoice;
 
     if (status === 'COMPLETED') {
-      // Cập nhật trạng thái payment
+      // Update payment status
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
 
-      // Cập nhật số tiền đã thanh toán của invoice
+      // Update invoice paid amount
       invoice.paidAmount += payment.amount;
       await this.invoiceRepo.save(invoice);
 
-      // Cập nhật trạng thái voucher nếu có
+      // Update voucher status if exists
       const activeVoucherUser = invoice.booking?.user?.voucherUsers?.find(
         vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
       );
@@ -176,7 +287,7 @@ export class PaymentService {
         }
       }
 
-      // Cập nhật trạng thái booking nếu đã thanh toán đủ
+      // Update booking status if all payments are completed
       if (invoice.paidAmount >= invoice.payablePrice) {
         await this.bookingService.update(invoice.booking.id, {
           status: BookingStatus.COMPLETED
@@ -185,6 +296,8 @@ export class PaymentService {
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);
+    } else {
+      throw new BadRequestException(`Trạng thái thanh toán không hợp lệ: ${status}`);
     }
   }
 }

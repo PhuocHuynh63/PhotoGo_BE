@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { isUUID } from 'class-validator';
 
 @Injectable()
 export class RoleService {
@@ -13,6 +14,20 @@ export class RoleService {
   ) {}
 
   async create(createRoleDto: CreateRoleDto): Promise<Role> {
+    // Validate required fields
+    if (!createRoleDto.name || createRoleDto.name.trim() === '') {
+      throw new BadRequestException('Tên quyền không được để trống');
+    }
+    if (!createRoleDto.id) {
+      throw new BadRequestException('ID quyền không được để trống');
+    }
+
+    // Validate UUID format
+    if (!isUUID(createRoleDto.id)) {
+      throw new BadRequestException('Định dạng ID quyền không hợp lệ');
+    }
+
+    // Check for existing role
     const existingRole = await this.roleRepository.findOne({
       where: [
         { id: createRoleDto.id },
@@ -21,47 +36,122 @@ export class RoleService {
     });
 
     if (existingRole) {
-      throw new ConflictException('Role ID or name already exists');
+      if (existingRole.id === createRoleDto.id) {
+        throw new ConflictException('ID quyền đã tồn tại');
+      }
+      throw new ConflictException('Tên quyền đã tồn tại');
     }
 
-    const role = this.roleRepository.create(createRoleDto);
-    return this.roleRepository.save(role);
+    try {
+      const role = this.roleRepository.create(createRoleDto);
+      return await this.roleRepository.save(role);
+    } catch (error) {
+      throw new BadRequestException('Không thể tạo quyền: ' + error.message);
+    }
   }
 
   async findAll(): Promise<Role[]> {
-    return this.roleRepository.find();
+    try {
+      return await this.roleRepository.find({
+        order: {
+          name: 'ASC'
+        }
+      });
+    } catch (error) {
+      throw new BadRequestException('Không thể lấy danh sách quyền: ' + error.message);
+    }
   }
 
   async findOne(id: string): Promise<Role> {
-    const role = await this.roleRepository.findOne({ where: { id } });
-    if (!role) {
-      throw new NotFoundException(`Role with ID ${id} not found`);
+    // Validate UUID format
+    if (!isUUID(id)) {
+      throw new BadRequestException('Định dạng ID quyền không hợp lệ');
     }
-    return role;
+
+    try {
+      const role = await this.roleRepository.findOne({ 
+        where: { id },
+        relations: ['users'] // Load users with this role
+      });
+      
+      if (!role) {
+        throw new NotFoundException(`Không tìm thấy quyền với ID: ${id}`);
+      }
+
+      return role;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Không thể lấy thông tin quyền: ' + error.message);
+    }
   }
 
   async update(id: string, updateRoleDto: UpdateRoleDto): Promise<Role> {
-    const role = await this.findOne(id);
-
-    if (updateRoleDto.name) {
-      const existingRole = await this.roleRepository.findOne({
-        where: { name: updateRoleDto.name }
-      });
-      if (existingRole && existingRole.id !== id) {
-        throw new ConflictException('Role name already exists');
-      }
+    // Validate UUID format
+    if (!isUUID(id)) {
+      throw new BadRequestException('Định dạng ID quyền không hợp lệ');
     }
 
-    Object.assign(role, updateRoleDto);
-    return this.roleRepository.save(role);
+    try {
+      const role = await this.findOne(id);
+
+      // Validate name if provided
+      if (updateRoleDto.name) {
+        if (updateRoleDto.name.trim() === '') {
+          throw new BadRequestException('Tên quyền không được để trống');
+        }
+
+        // Check for duplicate name
+        const existingRole = await this.roleRepository.findOne({
+          where: { name: updateRoleDto.name }
+        });
+        if (existingRole && existingRole.id !== id) {
+          throw new ConflictException('Tên quyền đã tồn tại');
+        }
+      }
+
+      Object.assign(role, updateRoleDto);
+      return await this.roleRepository.save(role);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException('Không thể cập nhật quyền: ' + error.message);
+    }
   }
 
   async remove(id: string): Promise<void> {
-    const role = await this.findOne(id);
-    await this.roleRepository.remove(role);
+    // Validate UUID format
+    if (!isUUID(id)) {
+      throw new BadRequestException('Định dạng ID quyền không hợp lệ');
+    }
+
+    try {
+      const role = await this.findOne(id);
+
+      // Check if role is in use
+      if (role.users && role.users.length > 0) {
+        throw new ConflictException('Không thể xóa quyền đang được sử dụng');
+      }
+
+      await this.roleRepository.remove(role);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException('Không thể xóa quyền: ' + error.message);
+    }
   }
 
   async getDefaultRole(): Promise<Role | undefined> {
-    return this.roleRepository.findOne({ where: { id: 'R001' } });
+    try {
+      return await this.roleRepository.findOne({ 
+        where: { id: 'R001' },
+        relations: ['users']
+      });
+    } catch (error) {
+      throw new BadRequestException('Không thể lấy quyền mặc định: ' + error.message);
+    }
   }
 }
