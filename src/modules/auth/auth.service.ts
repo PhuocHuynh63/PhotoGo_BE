@@ -52,10 +52,10 @@ export class AuthService {
         role: user.role,
       },
       access_token: this.jwtService.sign(payload, {
-        expiresIn: '1d',
+        expiresIn: '365d', // 1 year
       }),
       refresh_token: this.jwtService.sign(payload, {
-        expiresIn: '7d',
+        expiresIn: '30d', // 30 days
       }),
     };
   }
