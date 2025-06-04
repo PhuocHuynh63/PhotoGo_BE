@@ -1,9 +1,10 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { User } from '../../../users/entities/user.entity';
+import { AttendanceAction } from 'src/constants/attendances-log.enums';
 
 @Entity('attendance_logs')
 export class AttendanceLog {
-    @PrimaryGeneratedColumn('bigint', { name: 'log_id' })
+    @PrimaryGeneratedColumn({ type: 'bigint', name: 'log_id' })
     id: string;
 
     @Column({ type: 'uuid', name: 'user_id' })

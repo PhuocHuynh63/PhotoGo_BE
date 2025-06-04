@@ -4,9 +4,9 @@ import { User } from '../../../users/entities/user.entity';
 @Entity('attendance')
 @Unique(['userId', 'date']) // Composite unique constraint
 export class Attendance {
-  @PrimaryGeneratedColumn('bigint', { name: 'attendance_id' })
+  @PrimaryGeneratedColumn({ type: 'bigint', name: 'attendance_id' })
   id: string;
-
+  
   @Column({ type: 'uuid', name: 'user_id' })
   userId: string;
 
@@ -17,23 +17,23 @@ export class Attendance {
   @Column({ type: 'date' })
   date: Date;
 
-  @Column({ 
-    type: 'boolean', 
+  @Column({
+    type: 'boolean',
     name: 'is_checked',
-    default: false 
+    default: false
   })
   isChecked: boolean;
 
-  @Column({ 
+  @Column({
     type: 'integer',
-    default: 0 
+    default: 0
   })
   streak: number;
 
-  @Column({ 
-    type: 'integer', 
+  @Column({
+    type: 'integer',
     name: 'points_earned',
-    default: 0 
+    default: 0
   })
   pointsEarned: number;
 }
