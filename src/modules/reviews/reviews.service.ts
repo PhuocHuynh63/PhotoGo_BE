@@ -121,7 +121,7 @@ export class ReviewService {
       }
     });
 
-    if (!reviews.length) {
+    if (reviews.length === 0) {
       throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
     }
 
