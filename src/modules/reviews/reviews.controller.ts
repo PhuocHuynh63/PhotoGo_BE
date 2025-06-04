@@ -5,7 +5,8 @@ import { UpdateReviewDto } from './dto/update-review.dto';
 import { Review } from './entities/review.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { Public, ResponseMessage } from 'src/decorator/custom';
+import { ResponseMessage } from 'src/decorator/custom';
+import { Public } from 'src/decorator/custom';
 
 // Define the response type for findAll
 interface ReviewSummary {
@@ -97,6 +98,7 @@ export class ReviewController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả đánh giá' })
   @ApiResponse({ status: 200, description: 'Danh sách tất cả đánh giá', type: [Review] })
   @ApiResponse({ status: 500, description: 'Lỗi máy chủ nội bộ' })
@@ -113,6 +115,7 @@ export class ReviewController {
   }
 
   @Get('vendor/:vendorId')
+  @Public()
   @Public()
   @ApiOperation({ summary: 'Lấy đánh giá theo ID nhà cung cấp' })
   @ApiResponse({ status: 200, description: 'Danh sách đánh giá cho ID nhà cung cấp đã cho', type: [Review] })
@@ -134,6 +137,7 @@ export class ReviewController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy đánh giá theo ID' })
   @ApiResponse({ status: 200, description: 'Đánh giá đã được tìm thấy', type: Review })
   @ApiResponse({ status: 400, description: 'ID đánh giá không hợp lệ' })

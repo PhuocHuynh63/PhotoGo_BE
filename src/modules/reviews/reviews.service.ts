@@ -98,7 +98,18 @@ export class ReviewService {
           'review.id',
           'review.rating',
           'review.comment',
+          'user.id',
+          'user.email',
           'user.fullName',
+          'user.phoneNumber',
+          'user.avatarUrl',
+          'user.status',
+          'user.rank',
+          'user.note',
+          'user.auth',
+          'user.lastLoginAt',
+          'user.createdAt',
+          'user.updatedAt',
           'vendor.name',
         ])
         .orderBy('review.created_at', 'DESC')
@@ -113,19 +124,45 @@ export class ReviewService {
     if (!isUUID(vendorId)) {
       throw new BadRequestException('Định dạng vendorId không hợp lệ');
     }
-    const reviews = await this.reviewRepository.find({
-      where: { vendorId },
-      relations: ['user', 'vendor', 'reviewImages'],
-      order: {
-        createdAt: 'DESC'
-      }
-    });
+
+    try {
+      const reviews = await this.reviewRepository
+        .createQueryBuilder('review')
+        .leftJoinAndSelect('review.user', 'user')
+        .leftJoinAndSelect('review.vendor', 'vendor')
+        .leftJoinAndSelect('review.images', 'images')
+        .where('review.vendorId = :vendorId', { vendorId })
+        .select([
+          'review',
+          'user.id',
+          'user.email',
+          'user.fullName',
+          'user.phoneNumber',
+          'user.avatarUrl',
+          'user.status',
+          'user.rank',
+          'user.note',
+          'user.auth',
+          'user.lastLoginAt',
+          'user.createdAt',
+          'user.updatedAt',
+          'vendor',
+          'images'
+        ])
+        .orderBy('review.createdAt', 'DESC')
+        .getMany();
 
     if (reviews.length === 0) {
       throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
     }
 
     return reviews;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
+    }
   }
 
   async findOne(id: string): Promise<Review> {
@@ -135,10 +172,32 @@ export class ReviewService {
     }
 
     try {
-      const review = await this.reviewRepository.findOne({
-        where: { id },
-        relations: ['user', 'vendor', 'booking', 'reviewImages'],
-      });
+      const review = await this.reviewRepository
+        .createQueryBuilder('review')
+        .leftJoinAndSelect('review.user', 'user')
+        .leftJoinAndSelect('review.vendor', 'vendor')
+        .leftJoinAndSelect('review.booking', 'booking')
+        .leftJoinAndSelect('review.images', 'images')
+        .where('review.id = :id', { id })
+        .select([
+          'review',
+          'user.id',
+          'user.email',
+          'user.fullName',
+          'user.phoneNumber',
+          'user.avatarUrl',
+          'user.status',
+          'user.rank',
+          'user.note',
+          'user.auth',
+          'user.lastLoginAt',
+          'user.createdAt',
+          'user.updatedAt',
+          'vendor',
+          'booking',
+          'images'
+        ])
+        .getOne();
 
       if (!review) {
         throw new NotFoundException(`Không tìm thấy đánh giá với ID: ${id}`);
