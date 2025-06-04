@@ -157,6 +157,12 @@ export class ReviewService {
     }
 
     return reviews;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
+    }
   }
 
   async findOne(id: string): Promise<Review> {
