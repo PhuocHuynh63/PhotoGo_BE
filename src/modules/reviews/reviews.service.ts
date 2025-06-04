@@ -98,7 +98,18 @@ export class ReviewService {
           'review.id',
           'review.rating',
           'review.comment',
+          'user.id',
+          'user.email',
           'user.fullName',
+          'user.phoneNumber',
+          'user.avatarUrl',
+          'user.status',
+          'user.rank',
+          'user.note',
+          'user.auth',
+          'user.lastLoginAt',
+          'user.createdAt',
+          'user.updatedAt',
           'vendor.name',
         ])
         .orderBy('review.created_at', 'DESC')
@@ -115,13 +126,31 @@ export class ReviewService {
     }
 
     try {
-      const reviews = await this.reviewRepository.find({
-        where: { vendorId },
-        relations: ['user', 'vendor', 'reviewImages'],
-        order: {
-          createdAt: 'DESC'
-        }
-      });
+      const reviews = await this.reviewRepository
+        .createQueryBuilder('review')
+        .leftJoinAndSelect('review.user', 'user')
+        .leftJoinAndSelect('review.vendor', 'vendor')
+        .leftJoinAndSelect('review.images', 'images')
+        .where('review.vendorId = :vendorId', { vendorId })
+        .select([
+          'review',
+          'user.id',
+          'user.email',
+          'user.fullName',
+          'user.phoneNumber',
+          'user.avatarUrl',
+          'user.status',
+          'user.rank',
+          'user.note',
+          'user.auth',
+          'user.lastLoginAt',
+          'user.createdAt',
+          'user.updatedAt',
+          'vendor',
+          'images'
+        ])
+        .orderBy('review.createdAt', 'DESC')
+        .getMany();
 
       if (!reviews.length) {
         throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
@@ -143,10 +172,32 @@ export class ReviewService {
     }
 
     try {
-      const review = await this.reviewRepository.findOne({
-        where: { id },
-        relations: ['user', 'vendor', 'booking', 'reviewImages'],
-      });
+      const review = await this.reviewRepository
+        .createQueryBuilder('review')
+        .leftJoinAndSelect('review.user', 'user')
+        .leftJoinAndSelect('review.vendor', 'vendor')
+        .leftJoinAndSelect('review.booking', 'booking')
+        .leftJoinAndSelect('review.images', 'images')
+        .where('review.id = :id', { id })
+        .select([
+          'review',
+          'user.id',
+          'user.email',
+          'user.fullName',
+          'user.phoneNumber',
+          'user.avatarUrl',
+          'user.status',
+          'user.rank',
+          'user.note',
+          'user.auth',
+          'user.lastLoginAt',
+          'user.createdAt',
+          'user.updatedAt',
+          'vendor',
+          'booking',
+          'images'
+        ])
+        .getOne();
 
       if (!review) {
         throw new NotFoundException(`Không tìm thấy đánh giá với ID: ${id}`);
