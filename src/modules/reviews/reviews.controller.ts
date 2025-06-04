@@ -5,7 +5,7 @@ import { UpdateReviewDto } from './dto/update-review.dto';
 import { Review } from './entities/review.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ResponseMessage } from 'src/decorator/custom';
+import { Public, ResponseMessage } from 'src/decorator/custom';
 
 // Define the response type for findAll
 interface ReviewSummary {
@@ -20,7 +20,7 @@ interface ReviewSummary {
 @Controller('reviews')
 @ApiBearerAuth('access-token')
 export class ReviewController {
-  constructor(private readonly reviewService: ReviewService) {}
+  constructor(private readonly reviewService: ReviewService) { }
 
   @Post()
   @ApiOperation({ summary: 'Tạo đánh giá mới' })
@@ -35,32 +35,32 @@ export class ReviewController {
     schema: {
       type: 'object',
       properties: {
-        userId: { 
-          type: 'string', 
+        userId: {
+          type: 'string',
           example: '123e4567-e89b-12d3-a456-426614174000',
           description: 'ID của người dùng đánh giá'
         },
-        rating: { 
-          type: 'number', 
+        rating: {
+          type: 'number',
           example: 5,
           description: 'Điểm đánh giá (1-5)'
         },
-        comment: { 
-          type: 'string', 
+        comment: {
+          type: 'string',
           example: 'Dịch vụ rất tốt, nhân viên nhiệt tình',
           description: 'Nội dung đánh giá'
         },
-        vendorId: { 
-          type: 'string', 
+        vendorId: {
+          type: 'string',
           example: '123e4567-e89b-12d3-a456-426614174000',
           description: 'ID của nhà cung cấp dịch vụ'
         },
-        bookingId: { 
-          type: 'string', 
+        bookingId: {
+          type: 'string',
           example: '123e4567-e89b-12d3-a456-426614174000',
           description: 'ID của đơn đặt chỗ'
         },
-        images: { 
+        images: {
           type: 'array',
           items: {
             type: 'string',
@@ -113,6 +113,7 @@ export class ReviewController {
   }
 
   @Get('vendor/:vendorId')
+  @Public()
   @ApiOperation({ summary: 'Lấy đánh giá theo ID nhà cung cấp' })
   @ApiResponse({ status: 200, description: 'Danh sách đánh giá cho ID nhà cung cấp đã cho', type: [Review] })
   @ApiResponse({ status: 400, description: 'ID nhà cung cấp không hợp lệ' })
@@ -164,27 +165,27 @@ export class ReviewController {
     schema: {
       type: 'object',
       properties: {
-        rating: { 
-          type: 'number', 
+        rating: {
+          type: 'number',
           example: 5,
           description: 'Điểm đánh giá (1-5)'
         },
-        comment: { 
-          type: 'string', 
+        comment: {
+          type: 'string',
           example: 'Dịch vụ rất tốt, nhân viên nhiệt tình',
           description: 'Nội dung đánh giá'
         },
-        vendorId: { 
-          type: 'string', 
+        vendorId: {
+          type: 'string',
           example: '123e4567-e89b-12d3-a456-426614174000',
           description: 'ID của nhà cung cấp dịch vụ'
         },
-        bookingId: { 
-          type: 'string', 
+        bookingId: {
+          type: 'string',
           example: '123e4567-e89b-12d3-a456-426614174000',
           description: 'ID của đơn đặt chỗ'
         },
-        images: { 
+        images: {
           type: 'array',
           items: {
             type: 'string',
