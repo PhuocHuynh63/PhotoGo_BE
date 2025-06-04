@@ -25,7 +25,7 @@ export class ReviewService {
     @InjectRepository(ReviewImage)
     private readonly reviewImageRepository: Repository<ReviewImage>,
     private readonly uploadService: UploadService,
-  ) {}
+  ) { }
 
   async create(createReviewDto: CreateReviewDto, files: { images?: Express.Multer.File[] }): Promise<Review> {
     // Validate required fields
@@ -68,9 +68,9 @@ export class ReviewService {
         }
 
         const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
-        
+
         // Create review images
-        const reviewImages = imageUrls.map(url => 
+        const reviewImages = imageUrls.map(url =>
           this.reviewImageRepository.create({
             reviewId: savedReview.id,
             imageUrl: url,
@@ -152,17 +152,11 @@ export class ReviewService {
         .orderBy('review.createdAt', 'DESC')
         .getMany();
 
-      if (!reviews.length) {
-        throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
-      }
-
-      return reviews;
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
+    if (reviews.length === 0) {
+      throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
     }
+
+    return reviews;
   }
 
   async findOne(id: string): Promise<Review> {
@@ -246,9 +240,9 @@ export class ReviewService {
         }
 
         const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
-        
+
         // Create review images
-        const reviewImages = imageUrls.map(url => 
+        const reviewImages = imageUrls.map(url =>
           this.reviewImageRepository.create({
             reviewId: review.id,
             imageUrl: url,
@@ -298,9 +292,9 @@ export class ReviewService {
         where: { vendorId },
         select: ['rating'],
       });
-    
+
       if (!reviews.length) return 0;
-    
+
       const total = reviews.reduce((sum, r) => sum + r.rating, 0);
       return parseFloat((total / reviews.length).toFixed(2));
     } catch (error) {
