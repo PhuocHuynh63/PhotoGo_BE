@@ -282,78 +282,181 @@ export class ReviewService {
   }
 
   async findByVendorId(vendorId: string, filterDto: FilterReviewDto): Promise<PaginatedResponse<Review>> {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình lấy danh sách đánh giá theo vendor');
+
     if (!isUUID(vendorId)) {
       throw new BadRequestException('Định dạng vendorId không hợp lệ');
     }
 
-    try {
-      const { 
-        current = 1, 
-        pageSize = 10, 
-        rating, 
-        sortBy = 'created_at',
-        sortDirection = 'DESC' 
-      } = filterDto;
-      const skip = (current - 1) * pageSize;
+    const currentPage = filterDto.current || 1;
+    const pageSize = filterDto.pageSize || 10;
+    const actualPageSize = pageSize * pageSize;
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = filterDto.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
-      const queryBuilder = this.reviewRepository
-        .createQueryBuilder('review')
-        .leftJoinAndSelect('review.user', 'user')
-        .leftJoinAndSelect('review.vendor', 'vendor')
-        .leftJoinAndSelect('review.images', 'images')
-        .where('review.vendorId = :vendorId', { vendorId })
-        .select([
-          'review',
-          'user.id',
-          'user.email',
-          'user.fullName',
-          'user.phoneNumber',
-          'user.avatarUrl',
-          'user.status',
-          'user.rank',
-          'user.note',
-          'user.auth',
-          'user.lastLoginAt',
-          'user.createdAt',
-          'user.updatedAt',
-          'vendor',
-          'images'
-        ]);
+    const filterConditions: string[] = [`v.id = $1`];
+    const baseParams: any[] = [vendorId];
 
-      // Apply rating filter if provided
-      if (rating) {
-        queryBuilder.andWhere('review.rating = :rating', { rating });
-      }
+    let baseQuery = `
+      WITH filtered_reviews AS (
+        SELECT DISTINCT r.id
+        FROM review r
+        LEFT JOIN "users" u ON u.id = r.user_id
+        LEFT JOIN "booking" b ON b.id = r.booking_id
+        LEFT JOIN "vendors" v ON v.id = b.vendor_id
+        LEFT JOIN "review_image" ri ON ri.review_id = r.id
+        WHERE 1=1
+    `;
 
-      // Apply sorting
-      queryBuilder.orderBy(`review.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
+    if (filterDto.rating) {
+      filterConditions.push(`r.rating = $${filterConditions.length + 1}`);
+      baseParams.push(filterDto.rating);
+    }
 
-      const [reviews, total] = await queryBuilder
-        .skip(skip)
-        .take(pageSize)
-        .getManyAndCount();
+    if (filterConditions.length > 0) {
+      baseQuery += ` AND ${filterConditions.join(' AND ')}`;
+    }
 
-      if (total === 0) {
-        throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
-      }
+    baseQuery += `
+      )
+      SELECT DISTINCT
+        r.id,
+        r.comment,
+        r.rating,
+        r.created_at,
+        r.updated_at,
+        u.id as user_id,
+        u.full_name as user_full_name,
+        u.avatar_url as user_avatar_url,
+        b.id as booking_id,
+        v.id as vendor_id,
+        v.name as vendor_name,
+        v.logo as vendor_logo_url,
+        v.banner as vendor_banner_url,
+        v.description as vendor_description,
+        v.status as vendor_status,
+        array_agg(ri.image_url) as review_image_urls
+      FROM filtered_reviews fr
+      JOIN review r ON r.id = fr.id
+      LEFT JOIN "users" u ON u.id = r.user_id
+      LEFT JOIN "booking" b ON b.id = r.booking_id
+      LEFT JOIN "vendors" v ON v.id = b.vendor_id
+      LEFT JOIN "review_image" ri ON ri.review_id = r.id
+      GROUP BY 
+        r.id,
+        r.comment,
+        r.rating,
+        r.created_at,
+        r.updated_at,
+        u.id,
+        u.full_name,
+        u.avatar_url,
+        b.id,
+        v.id,
+        v.name,
+        v.logo,
+        v.banner,
+        v.description,
+        v.status
+    `;
 
-      const totalPages = Math.ceil(total / pageSize);
+    switch (filterDto.sortBy) {
+      case 'rating':
+        baseQuery += ` ORDER BY r.rating ${sortDirection}`;
+        break;
+      case 'created_at':
+      default:
+        baseQuery += ` ORDER BY r.created_at ${sortDirection}`;
+    }
 
+    baseQuery += ` LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`;
+    baseParams.push(actualPageSize, skip);
+
+    const countFilterConditions: string[] = [`v.id = $1`];
+    const countParams: any[] = [vendorId];
+
+    let countQuery = `
+      WITH filtered_reviews AS (
+        SELECT DISTINCT r.id
+        FROM review r
+        LEFT JOIN "users" u ON u.id = r.user_id
+        LEFT JOIN "booking" b ON b.id = r.booking_id
+        LEFT JOIN "vendors" v ON v.id = b.vendor_id
+        LEFT JOIN "review_image" ri ON ri.review_id = r.id
+        WHERE 1=1
+    `;
+
+    if (filterDto.rating) {
+      countFilterConditions.push(`r.rating = $${countFilterConditions.length + 1}`);
+      countParams.push(filterDto.rating);
+    }
+
+    if (countFilterConditions.length > 0) {
+      countQuery += ` AND ${countFilterConditions.join(' AND ')}`;
+    }
+
+    countQuery += `
+      )
+      SELECT COUNT(DISTINCT id) as count
+      FROM filtered_reviews
+    `;
+
+    const [reviewData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (reviewData.length === 0) {
       return {
-        data: reviews,
+        data: [],
         pagination: {
-          current,
+          current: currentPage,
           pageSize,
-          totalPage: totalPages,
-          totalItem: total,
+          totalPage: 0,
+          totalItem: 0,
         },
       };
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể lấy đánh giá: ' + error.message);
     }
+
+    const reviews = reviewData.map((row: any) => ({
+      id: row.id,
+      comment: row.comment,
+      rating: row.rating,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      user: {
+        id: row.user_id,
+        fullName: row.user_full_name,
+        avatarUrl: row.user_avatar_url,
+      },
+      booking: {
+        id: row.booking_id,
+      },
+      images: row.review_image_urls?.filter(url => url !== null) || [],
+      vendor: {
+        id: row.vendor_id,
+        name: row.vendor_name,
+        logoUrl: row.vendor_logo_url,
+        bannerUrl: row.vendor_banner_url,
+        description: row.vendor_description,
+        status: row.vendor_status,
+      },
+    }));
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    this.logger.log(`Đã lấy danh sách đánh giá theo vendor thành công trong ${Date.now() - startTime}ms`);
+
+    return {
+      data: reviews.slice(0, pageSize),
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
   }
 
   async findOne(id: string): Promise<Review> {
