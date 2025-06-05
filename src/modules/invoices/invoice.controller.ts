@@ -6,6 +6,8 @@ import { Invoice } from './entities/invoice.entity';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ResponseMessage } from 'src/decorator/custom';
+import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
+import { Public } from 'src/decorator/custom';
 
 @Controller('invoices')
 @ApiTags('Invoice')
@@ -42,19 +44,58 @@ export class InvoiceController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả hóa đơn' })
   @ApiResponse({ status: 200, description: 'Danh sách tất cả hóa đơn', type: [CreateInvoiceDto] })
   @ApiResponse({ status: 400, description: 'Tham số tìm kiếm không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
   @ResponseMessage('Lấy danh sách hóa đơn thành công')
-  async findAll(@Query() query: FindAllInvoicesDto) {
+  @ApiQuery({ name: 'current', required: false, description: 'Số trang hiện tại' })
+  @ApiQuery({ name: 'pageSize', required: false, description: 'Số lượng item trên mỗi trang' })
+  @ApiQuery({ name: 'sortBy', required: false, description: 'Trường sắp xếp' })
+  @ApiQuery({ name: 'sortDirection', required: false, description: 'Hướng sắp xếp' })
+  async findAll(@Query() paginationDto: PaginationInvoiceDto): Promise<{
+    data: Invoice[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
     try {
-      return await this.invoiceService.findAll(query);
+      return await this.invoiceService.findAll(paginationDto);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException('Lỗi khi lấy danh sách hóa đơn', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('user/:userId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách hóa đơn của user' })
+  @ApiResponse({ status: 200, description: 'Danh sách hóa đơn của user', type: [CreateInvoiceDto] })
+  @ApiResponse({ status: 400, description: 'Tham số tìm kiếm không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
+  @ResponseMessage('Lấy danh sách hóa đơn của user thành công')
+  async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationInvoiceDto): Promise<{
+    data: Invoice[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      return await this.invoiceService.findAllByUserId(userId, paginationDto);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy danh sách hóa đơn của user', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 

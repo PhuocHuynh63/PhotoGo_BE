@@ -11,6 +11,7 @@ import { InvoiceService } from '../invoices/invoice.service';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { PaymentService } from '../payments/payment.service';
 import { PaymentType } from '../../constants/payment.enum';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class BookingService {
@@ -208,11 +209,73 @@ export class BookingService {
   }
   //#endregion
 
-  async findAll(): Promise<Booking[]> {
-    const bookings = await this.bookingRepository.find({
+  async findAll(paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10 } = paginationDto;
+    const skip = (current - 1) * pageSize;
+
+    const [bookings, total] = await this.bookingRepository.findAndCount({
       relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
+      skip,
+      take: pageSize,
+      order: {
+        created_at: 'DESC'
+      }
     });
-    return bookings.map(booking => this.formatBookingDates(booking));
+    const formattedBookings = bookings.map(booking => this.formatBookingDates(booking));
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      data: formattedBookings,
+      meta: {
+        current: current,
+        pageSize: pageSize,
+        totalPage: totalPages,
+        totalItem: total
+      }
+    };
+  }
+
+  async findAllByUserId(userId: string, paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10 } = paginationDto;
+    const skip = (current - 1) * pageSize;
+
+    const [bookings, total] = await this.bookingRepository.findAndCount({
+      where: { userId },
+      relations: ['user','histories'],
+      skip,
+      take: pageSize,
+      order: {
+        created_at: 'DESC'
+      }
+    });
+    const formattedBookings = bookings.map(booking => this.formatBookingDates(booking));
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      data: formattedBookings,
+      meta: {
+        current: current,
+        pageSize: pageSize,
+        totalPage: totalPages,
+        totalItem: total
+      }
+    };
   }
 
   async findOne(id: string): Promise<Booking> {

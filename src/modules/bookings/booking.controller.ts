@@ -7,6 +7,7 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags
 import { ApiExtraModels } from '@nestjs/swagger/dist/decorators/api-extra-models.decorator';
 import { BookingDepositType, BookingSourceType, BookingStatus } from 'src/constants/booking.enum';
 import { Public } from 'src/decorator/custom';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Controller('bookings')
 @ApiExtraModels(CreateBookingDto)
@@ -52,12 +53,48 @@ export class BookingController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   @ApiOperation({ summary: 'Lấy tất cả booking' })
-  async findAll(): Promise<Booking[]> {
+  async findAll(@Query() paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
     try {
-      return await this.bookingService.findAll();
+      return await this.bookingService.findAll(paginationDto);
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy danh sách booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get('user/:userId')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Danh sách booking của user', type: [Booking] })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy danh sách booking của user' })
+  async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      if (!userId) {
+        throw new HttpException('User ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.findAllByUserId(userId, paginationDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking của user',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
