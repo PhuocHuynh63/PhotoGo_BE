@@ -47,6 +47,9 @@ import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
 import { BullQueueModule } from './3rdService/bull/bull-queue.module';
 import { GeminiModule } from './3rdService/gemini/gemini.module';
 import { CheckoutSessionModule } from './modules/checkout-session/checkout-session.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { AttendanceLogsModule } from './modules/attendance-logs/attendance-logs.module';
+import { RewardConfigModule } from './modules/reward-config/reward-config.module';
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
   return moment(date).format(format);
@@ -148,6 +151,9 @@ if (!fs.existsSync(templateDir)) {
     SupportTicketsModule,
     ReviewModule,
     ServicePackageModule,
+    RewardConfigModule,
+    AttendanceModule,
+    AttendanceLogsModule,
     GeminiModule
   ],
   controllers: [AppController],

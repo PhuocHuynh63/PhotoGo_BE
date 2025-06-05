@@ -673,7 +673,7 @@ export class ServicePackageService {
   }): Promise<PaginatedFilteredServicePackageResponseDto> {
     const currentPage = params.current || 1;
     const pageSize = params.pageSize || 10;
-    const actualPageSize = pageSize * 2; // Process double the requested size
+    const actualPageSize = pageSize * pageSize; // Process double the requested size
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
 

@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseInterceptors, UploadedFiles, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseInterceptors, UploadedFiles, HttpException, HttpStatus, Query } from '@nestjs/common';
 import { ReviewService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { FilterReviewDto, SortField, SortDirection } from './dto/filter-review.dto';
 import { Review } from './entities/review.entity';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ResponseMessage } from 'src/decorator/custom';
 import { Public } from 'src/decorator/custom';
@@ -15,6 +16,14 @@ interface ReviewSummary {
   comment: string;
   user: { fullName: string };
   vendor: { name: string };
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 @ApiTags('Reviews')
@@ -100,34 +109,122 @@ export class ReviewController {
   @Get()
   @Public()
   @ApiOperation({ summary: 'Lấy tất cả đánh giá' })
-  @ApiResponse({ status: 200, description: 'Danh sách tất cả đánh giá', type: [Review] })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số lượng item trên mỗi trang' })
+  @ApiQuery({ 
+    name: 'rating', 
+    required: false, 
+    type: Number, 
+    description: 'Lọc theo điểm đánh giá (1-5)',
+    enum: [1, 2, 3, 4, 5]
+  })
+  @ApiQuery({ 
+    name: 'sortField', 
+    required: false, 
+    enum: SortField,
+    description: 'Sắp xếp theo: createdAt, rating'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách tất cả đánh giá',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Review' }
+        },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' }
+      }
+    }
+  })
   @ApiResponse({ status: 500, description: 'Lỗi máy chủ nội bộ' })
   @ResponseMessage('Lấy danh sách đánh giá thành công')
-  async findAll(): Promise<ReviewSummary[]> {
+  async findAll(@Query() filterDto: FilterReviewDto): Promise<PaginatedResponse<ReviewSummary>> {
     try {
-      return await this.reviewService.findAll();
+      // Validate filterDto
+      if (filterDto.rating && (filterDto.rating < 1 || filterDto.rating > 5)) {
+        throw new HttpException('Điểm đánh giá phải từ 1 đến 5', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.page && filterDto.page < 1) {
+        throw new HttpException('Số trang phải lớn hơn 0', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.limit && filterDto.limit < 1) {
+        throw new HttpException('Số lượng item trên mỗi trang phải lớn hơn 0', HttpStatus.BAD_REQUEST);
+      }
+
+      return await this.reviewService.findAll(filterDto);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new HttpException('Lỗi khi lấy danh sách đánh giá', HttpStatus.INTERNAL_SERVER_ERROR);
+      // Log the error for debugging
+      console.error('Error in findAll reviews:', error);
+      
+      // Check if it's a database connection error
+      if (error.message && error.message.includes('databaseName')) {
+        throw new HttpException('Lỗi kết nối cơ sở dữ liệu', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      
+      throw new HttpException(
+        'Lỗi khi lấy danh sách đánh giá: ' + error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
   @Get('vendor/:vendorId')
   @Public()
-  @Public()
   @ApiOperation({ summary: 'Lấy đánh giá theo ID nhà cung cấp' })
-  @ApiResponse({ status: 200, description: 'Danh sách đánh giá cho ID nhà cung cấp đã cho', type: [Review] })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số lượng item trên mỗi trang' })
+  @ApiQuery({ 
+    name: 'rating', 
+    required: false, 
+    type: Number, 
+    description: 'Lọc theo điểm đánh giá (1-5)',
+    enum: [1, 2, 3, 4, 5]
+  })
+  @ApiQuery({ 
+    name: 'sortField', 
+    required: false, 
+    enum: SortField,
+    description: 'Sắp xếp theo: createdAt, rating'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách đánh giá cho ID nhà cung cấp đã cho',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Review' }
+        },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' }
+      }
+    }
+  })
   @ApiResponse({ status: 400, description: 'ID nhà cung cấp không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá cho ID nhà cung cấp đã cho' })
   @ResponseMessage('Lấy danh sách đánh giá của nhà cung cấp thành công')
-  async findByVendorId(@Param('vendorId') vendorId: string): Promise<Review[]> {
+  async findByVendorId(
+    @Param('vendorId') vendorId: string,
+    @Query() filterDto: FilterReviewDto,
+  ): Promise<PaginatedResponse<Review>> {
     if (!vendorId) {
       throw new HttpException('ID nhà cung cấp không được để trống', HttpStatus.BAD_REQUEST);
     }
     try {
-      return await this.reviewService.findByVendorId(vendorId);
+      return await this.reviewService.findByVendorId(vendorId, filterDto);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
