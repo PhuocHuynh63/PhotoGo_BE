@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Attendance } from './entity/attendance.entity';
+import { Between, Repository } from 'typeorm';
 import { UserService } from '../../users/user.service';
+import { Attendance } from './entities/attendance.entity';
 
 @Injectable()
 export class AttendanceService {
@@ -10,7 +10,7 @@ export class AttendanceService {
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
     private userService: UserService,
-  ) {}
+  ) { }
 
   //#region Điểm danh hàng ngày
   async checkIn(userId: string): Promise<Attendance> {
@@ -22,8 +22,8 @@ export class AttendanceService {
     });
 
     if (attendance) {
-        // If already checked in today, throw an error
-        throw new Exception('Bạn đã điểm danh hôm nay rồi!');
+      // Nếu đã điểm danh hôm nay, ném lỗi
+      throw new BadRequestException('Bạn đã điểm danh hôm nay rồi!');
     }
 
     // kiểm tra xem người dùng có điểm danh hôm qua không
@@ -35,12 +35,12 @@ export class AttendanceService {
     });
 
     const streak = previousAttendance ? previousAttendance.streak + 1 : 1;
-    const pointsEarned = this.calculatePoints(streak);
+    const pointsEarned = await this.calculatePoints(userId);
 
     attendance = this.attendanceRepository.create({
       userId,
       date: today,
-      isChecked: true,
+      isChecked: true, // tạm thời để đó 
       streak,
       pointsEarned,
     });
@@ -49,20 +49,48 @@ export class AttendanceService {
   }
   //#endregion
 
+  //#region Lấy lịch sử điểm danh ngày hiện tại
+  async getRecentAttendance(userId: string): Promise<Attendance[]> {
+    const attendances = await this.attendanceRepository.find({
+      where: { userId },
+      order: { date: 'DESC' }
+    });
 
-  //#region Tính điểm thưởng
-  private calculatePoints(streak: number): number {
-    // Base points for attendance
-    let points = 10;
-    
-    // Bonus points for streaks
-    if (streak >= 7) points += 20;
-    else if (streak >= 3) points += 10;
-    
-    return points;
+    if (attendances.length === 0) {
+      throw new NotFoundException('Không tìm thấy lịch sử điểm danh gần đây.');
+    }
+
+    return attendances;
   }
   //#endregion
 
+  //#region Kiểm tra xem hôm nay đã điểm danh chưa
+  async hasCheckedInToday(userId: string): Promise<boolean> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const attendance = await this.attendanceRepository.findOne({
+      where: { userId, date: today }
+    });
+
+    return !!attendance;
+  }
+  //#endregion
+
+  //#region Tính điểm thưởng
+  private async calculatePoints(userId: string): Promise<number> {
+    // Lấy người dùng từ UserService
+    const user = await this.userService.findOne(userId);
+
+    // Base points for attendance
+    let points = 10;
+
+    // Áp dụng multiplier
+    points *= user.multiplier || 1;
+
+    return points;
+  }
+  //#endregion
 
   //#region Lấy thông tin điểm danh
   async getUserAttendance(userId: string): Promise<Attendance[]> {

@@ -1,19 +1,18 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { AttendanceLogService } from './attendance-log.service';
-import { GetUser } from '../../auth/decorators/get-user.decorator';
+import { JwtAuthGuard } from 'src/modules/auth/passport/jwt-auth.guard';
 
 @ApiTags('Attendance Logs')
 @Controller('attendance-logs')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AttendanceLogController {
-  constructor(private readonly attendanceLogService: AttendanceLogService) {}
+  constructor(private readonly attendanceLogService: AttendanceLogService) { }
 
-  @Get('my-logs')
+  @Get('my-logs/:userId')
   @ApiOperation({ summary: 'Get current user attendance logs' })
-  async getMyLogs(@GetUser('id') userId: string) {
+  async getMyLogs(@Param() userId: string) {
     return this.attendanceLogService.getUserLogs(userId);
   }
 
