@@ -11,6 +11,8 @@ import { VoucherModule } from '../vouchers/voucher.module';
 import { PaymentModule } from '../payments/payment.module';
 import { InvoiceModule } from '../invoices/invoice.module';
 import { Dispute } from '../disputes/entities/dispute.entity';
+import { KafkaModule } from '../../3rdService/kafka/kafka.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -24,6 +26,7 @@ import { Dispute } from '../disputes/entities/dispute.entity';
     VoucherModule,
     PaymentModule,
     InvoiceModule,
+    KafkaModule,
   ],
   controllers: [BookingController],
   providers: [BookingService],

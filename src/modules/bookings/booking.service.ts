@@ -11,6 +11,7 @@ import { InvoiceService } from '../invoices/invoice.service';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { PaymentService } from '../payments/payment.service';
 import { PaymentType } from '../../constants/payment.enum';
+import { KafkaService } from '../../3rdService/kafka/kafka.service';
 
 @Injectable()
 export class BookingService {
@@ -25,6 +26,7 @@ export class BookingService {
     private voucherRepository: Repository<Voucher>,
     private invoiceService: InvoiceService,
     private paymentService: PaymentService,
+    private kafkaService: KafkaService,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -174,6 +176,19 @@ export class BookingService {
     });
 
     const savedBooking = await this.bookingRepository.save(booking);
+
+    // Gửi event tới Kafka
+    await this.kafkaService.sendMessage('booking-requests', {
+      type: 'BOOKING_CREATED',
+      data: {
+        bookingId: savedBooking.id,
+        userId,
+        serviceConceptId,
+        status: BookingStatus.PENDING,
+        date: savedBooking.date,
+        time: savedBooking.time,
+      }
+    });
 
     // Find voucher if provided
     let voucher = null;
@@ -352,12 +367,35 @@ export class BookingService {
       });
       await this.bookingHistoryRepository.save(history);
 
+      // Gửi event tới Kafka khi booking được cập nhật
+      await this.kafkaService.sendMessage('booking-notifications', {
+        type: 'BOOKING_UPDATED',
+        data: {
+          bookingId: updatedBooking.id,
+          status: updatedBooking.status,
+          changes: updateBookingDto,
+        }
+      });
+
       return this.formatBookingDates(updatedBooking);
     }
 
     // Update other fields
-    Object.assign(booking, updateBookingDto);
-    const updatedBooking = await this.bookingRepository.save(booking);
+    const updatedBooking = await this.bookingRepository.save({
+      ...booking,
+      ...updateBookingDto,
+    });
+
+    // Gửi event tới Kafka khi booking được cập nhật
+    await this.kafkaService.sendMessage('booking-notifications', {
+      type: 'BOOKING_UPDATED',
+      data: {
+        bookingId: updatedBooking.id,
+        status: updatedBooking.status,
+        changes: updateBookingDto,
+      }
+    });
+
     return this.formatBookingDates(updatedBooking);
   }
 

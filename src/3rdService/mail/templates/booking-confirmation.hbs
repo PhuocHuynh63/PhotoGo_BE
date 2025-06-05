@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Xác nhận đặt lịch thành công</title>
+</head>
+<body>
+    <h2>Xin chào {{fullName}},</h2>
+    <p>Cảm ơn bạn đã đặt lịch với PhotoGo. Dưới đây là thông tin đặt lịch của bạn:</p>
+    
+    <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd;">
+        <p><strong>Mã đặt lịch:</strong> {{bookingId}}</p>
+        <p><strong>Ngày:</strong> {{date}}</p>
+        <p><strong>Giờ:</strong> {{time}}</p>
+        <p><strong>Dịch vụ:</strong> {{serviceName}}</p>
+        <p><strong>Địa điểm:</strong> {{location}}</p>
+        <p><strong>Số tiền đặt cọc:</strong> {{formatPrice depositAmount}} VNĐ</p>
+    </div>
+
+    <p>Vui lòng thanh toán đặt cọc để hoàn tất việc đặt lịch.</p>
+    <p>Nếu bạn có bất kỳ thắc mắc nào, vui lòng liên hệ với chúng tôi.</p>
+
+    <p>Trân trọng,<br>PhotoGo Team</p>
+</body>
+</html> 

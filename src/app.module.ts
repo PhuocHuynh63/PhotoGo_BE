@@ -31,6 +31,7 @@ import { GoogleAuthModule } from './3rdService/google/goole-auth.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
+import { KafkaModule } from './3rdService/kafka/kafka.module';
 
 import * as Handlebars from 'handlebars';
 import moment from 'moment';
@@ -154,7 +155,8 @@ if (!fs.existsSync(templateDir)) {
     RewardConfigModule,
     AttendanceModule,
     AttendanceLogsModule,
-    GeminiModule
+    GeminiModule,
+    KafkaModule
   ],
   controllers: [AppController],
   providers: [

@@ -15,6 +15,7 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { BookingHistory } from '../bookings/entities/booking-history.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { PaymentCallbackDto } from './dto/payment-callback.dto';
+import { KafkaService } from '../../3rdService/kafka/kafka.service';
 
 @Injectable()
 export class PaymentService {
@@ -30,6 +31,7 @@ export class PaymentService {
     @Inject('PAYOS_CLIENT') private readonly payos: PayOS,
     private readonly configService: ConfigService,
     private readonly voucherService: VoucherService,
+    private readonly kafkaService: KafkaService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
@@ -315,6 +317,27 @@ export class PaymentService {
           console.error('Error updating voucher usage:', error);
         }
       }
+
+      // Gửi event khi thanh toán thành công
+      await this.kafkaService.sendMessage('payment-processing', {
+        type: 'PAYMENT_SUCCESS',
+        data: {
+          bookingId: booking.id,
+          invoiceId: invoice.id,
+          email: booking.email,
+          fullName: booking.fullName,
+          serviceName: booking.serviceConcept.name,
+          date: booking.date,
+          time: booking.time,
+          totalAmount: payment.amount,
+          paidAmount: payment.amount,
+          voucherCode: activeVoucherUser?.voucher?.code,
+          discountAmount: invoice.discountAmount,
+          issuedAt: new Date(),
+        },
+      });
+
+      return payment;
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);

@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Redis } from 'ioredis'; // Dùng Redis từ ioredis thay vì RedisClientType
+import { KafkaService } from '../kafka/kafka.service';
 
 @Injectable()
 export class MailService {
@@ -9,8 +10,86 @@ export class MailService {
   constructor(
     private readonly mailerService: MailerService,
     @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
+    private readonly kafkaService: KafkaService,
   ) { }
 
+  async onModuleInit() {
+    // Subscribe to Kafka topics
+    await this.kafkaService.subscribe('booking-requests', this.handleBookingCreated.bind(this));
+    await this.kafkaService.subscribe('payment-processing', this.handlePaymentProcessed.bind(this));
+  }
+
+  private async handleBookingCreated(message: any) {
+    try {
+      if (message.type === 'BOOKING_CREATED') {
+        const { data } = message;
+        await this.sendBookingConfirmation(data);
+      }
+    } catch (error) {
+      this.logger.error('Error handling booking created event:', error);
+    }
+  }
+
+  private async handlePaymentProcessed(message: any) {
+    try {
+      if (message.type === 'PAYMENT_SUCCESS') {
+        const { data } = message;
+        await this.sendInvoice(data);
+      }
+    } catch (error) {
+      this.logger.error('Error handling payment processed event:', error);
+    }
+  }
+
+  async sendBookingConfirmation(data: any) {
+    try {
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: 'Xác nhận đặt lịch thành công - PhotoGo',
+        template: 'booking-confirmation',
+        context: {
+          fullName: data.fullName,
+          bookingId: data.bookingId,
+          date: data.date,
+          time: data.time,
+          serviceName: data.serviceName,
+          location: data.location,
+          depositAmount: data.depositAmount,
+        },
+      });
+      this.logger.log(`Booking confirmation email sent to ${data.email}`);
+    } catch (error) {
+      this.logger.error('Error sending booking confirmation email:', error);
+      throw error;
+    }
+  }
+
+  async sendInvoice(data: any) {
+    try {
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: 'Hóa đơn thanh toán - PhotoGo',
+        template: 'invoice',
+        context: {
+          fullName: data.fullName,
+          invoiceId: data.invoiceId,
+          bookingId: data.bookingId,
+          serviceName: data.serviceName,
+          date: data.date,
+          time: data.time,
+          totalAmount: data.totalAmount,
+          paidAmount: data.paidAmount,
+          voucherCode: data.voucherCode,
+          discountAmount: data.discountAmount,
+          issuedAt: data.issuedAt,
+        },
+      });
+      this.logger.log(`Invoice email sent to ${data.email}`);
+    } catch (error) {
+      this.logger.error('Error sending invoice email:', error);
+      throw error;
+    }
+  }
 
   async sendMail(to: string, subject: string, template: string, context: any): Promise<void> {
     try {
