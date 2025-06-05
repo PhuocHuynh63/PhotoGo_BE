@@ -6,7 +6,7 @@ import { VendorService } from './vendor.service';
 import { ReviewService } from '../reviews/reviews.service';
 import {
   CreateVendorDto, CreateVendorManagerDto,
-  CreateVendorLikeDto, CreateVendorAvailabilityDto
+  CreateVendorLikeDto
 } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { VendorStatus, VendorSortField } from 'src/constants/vendor.enum';
@@ -261,52 +261,6 @@ export class VendorController {
     }
   }
 
-  @Get('available')
-  @ApiOperation({ summary: 'Tìm kiếm nhà cung cấp có sẵn theo ngày/thời gian' })
-  @ApiQuery({ name: 'date', required: true, example: '2025-05-10' })
-  @ApiQuery({ name: 'startTime', required: true, example: '09:00' })
-  @ApiQuery({ name: 'endTime', required: true, example: '11:00' })
-  @ApiResponse({ status: 200, description: 'Nhà cung cấp có sẵn' })
-  @ApiResponse({ status: 400, description: 'Thời gian không hợp lệ' })
-  async findAllWithAvailability(
-    @Query('date') date: string,
-    @Query('startTime') startTime: string,
-    @Query('endTime') endTime: string,
-  ) {
-    try {
-      // Validate date format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(date)) {
-        throw new HttpException('Định dạng ngày không hợp lệ (YYYY-MM-DD)', HttpStatus.BAD_REQUEST);
-      }
-
-      // Validate time format
-      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
-        throw new HttpException('Định dạng thời gian không hợp lệ (HH:mm)', HttpStatus.BAD_REQUEST);
-      }
-
-      // Validate time range
-      const start = new Date(`2000-01-01T${startTime}`);
-      const end = new Date(`2000-01-01T${endTime}`);
-      if (start >= end) {
-        throw new HttpException('Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc', HttpStatus.BAD_REQUEST);
-      }
-
-      const vendors = await this.vendorService.findAllWithAvailability(date, startTime, endTime);
-      return {
-        message: 'Nhà cung cấp đã được tìm kiếm thành công',
-        data: vendors,
-      };
-    } catch (error) {
-      this.logger.error(`Error finding available vendors: ${error.message}`);
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException('Lỗi khi tìm kiếm nhà cung cấp có sẵn', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
   //#region Get by slug and all
   @Public()
   @Get('slug/:slug')
@@ -497,7 +451,7 @@ export class VendorController {
         throw new HttpException('ID người dùng không hợp lệ', HttpStatus.BAD_REQUEST);
       }
 
-      await this.vendorService.addManager(createVendorManagerDto);
+      await this.vendorService.addManager(createVendorManagerDto.vendorId, createVendorManagerDto);
     } catch (error) {
       this.logger.error(`Error adding manager: ${error.message}`);
       if (error instanceof HttpException) {
@@ -522,53 +476,13 @@ export class VendorController {
         throw new HttpException('ID người dùng không hợp lệ', HttpStatus.BAD_REQUEST);
       }
 
-      await this.vendorService.likeVendor(createVendorLikeDto);
+      await this.vendorService.likeVendor(createVendorLikeDto.vendorId, createVendorLikeDto);
     } catch (error) {
       this.logger.error(`Error liking vendor: ${error.message}`);
       if (error instanceof HttpException) {
         throw error;
       }
       throw new HttpException('Lỗi khi thích nhà cung cấp', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  @Post('availability')
-  @ApiOperation({ summary: 'Thêm thời gian có sẵn cho nhà cung cấp' })
-  @ApiResponse({ status: 201, description: 'Thời gian có sẵn đã được thêm thành công' })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy nhà cung cấp' })
-  async addAvailability(@Body() createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
-    try {
-      if (!createVendorAvailabilityDto.vendorId?.trim() || !isUUID(createVendorAvailabilityDto.vendorId)) {
-        throw new HttpException('ID nhà cung cấp không hợp lệ', HttpStatus.BAD_REQUEST);
-      }
-
-      // Validate date format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(createVendorAvailabilityDto.date.toString())) {
-        throw new HttpException('Định dạng ngày không hợp lệ (YYYY-MM-DD)', HttpStatus.BAD_REQUEST);
-      }
-
-      // Validate time format
-      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (!timeRegex.test(createVendorAvailabilityDto.startTime) || !timeRegex.test(createVendorAvailabilityDto.endTime)) {
-        throw new HttpException('Định dạng thời gian không hợp lệ (HH:mm)', HttpStatus.BAD_REQUEST);
-      }
-
-      // Validate time range
-      const start = new Date(`2000-01-01T${createVendorAvailabilityDto.startTime}`);
-      const end = new Date(`2000-01-01T${createVendorAvailabilityDto.endTime}`);
-      if (start >= end) {
-        throw new HttpException('Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc', HttpStatus.BAD_REQUEST);
-      }
-
-      await this.vendorService.addAvailability(createVendorAvailabilityDto);
-    } catch (error) {
-      this.logger.error(`Error adding availability: ${error.message}`);
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException('Lỗi khi thêm thời gian có sẵn', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }

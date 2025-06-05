@@ -7,16 +7,18 @@ import { VendorStatus } from 'src/constants/vendor.enum';
 import { Location } from '../locations/entities/location.entity';
 import { VendorManager } from './entities/vendor-manager.entity';
 import { VendorLike } from './entities/vendor-like.entity';
-import { VendorAvailability } from './entities/vendor-availability.entity';
-import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
+import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { slugify } from 'src/utils/utils';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
-import { UploadService } from 'src/3rdService/upload/upload.service'; // Assuming you have an UploadService for handling file uploads
+import { UploadService } from 'src/3rdService/upload/upload.service';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
-import { ReviewService } from '../reviews/reviews.service'; // Assuming you have a ReviewService for handling reviews
+import { ReviewService } from '../reviews/reviews.service';
 import { VendorSortField } from 'src/constants/vendor.enum';
 import { User } from '../users/entities/user.entity';
+import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
+import { CreateLocationDto } from '../locations/dto/create-location.dto';
+
 
 @Injectable()
 export class VendorService {
@@ -29,8 +31,6 @@ export class VendorService {
     private readonly vendorManagerRepository: Repository<VendorManager>,
     @InjectRepository(VendorLike)
     private readonly vendorLikeRepository: Repository<VendorLike>,
-    @InjectRepository(VendorAvailability)
-    private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(User)
@@ -408,50 +408,6 @@ export class VendorService {
   }
   //#endregion getVendorByUserID with role 'ROO8'
 
-  //#region findAllWithAvailability
-  async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
-    const vendors = await this.vendorRepository
-      .createQueryBuilder('vendor')
-      .select([
-        'vendor',
-        'category.id',
-        'category.name',
-        'locations',
-        'servicePackages',
-        'serviceConcepts',
-        'serviceConceptServiceTypes',
-        'serviceType',
-        'images',
-        'vendor_availability'
-      ])
-      .leftJoin('vendor.category', 'category')
-      .leftJoin('vendor.locations', 'locations')
-      .leftJoin('vendor.servicePackages', 'servicePackages')
-      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
-      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
-      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
-      .leftJoin('serviceConcepts.images', 'images')
-      .leftJoin('vendor.availabilities', 'vendor_availability', 
-        `vendor_availability.date = :date 
-         AND vendor_availability.isAvailable = true 
-         AND (
-           (vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :startTime)
-           OR (vendor_availability.startTime <= :endTime AND vendor_availability.endTime >= :endTime)
-           OR (vendor_availability.startTime >= :startTime AND vendor_availability.endTime <= :endTime)
-         )`,
-        { date, startTime, endTime }
-      )
-      .getMany();
-  
-    return vendors
-      .filter(vendor => vendor.availabilities && vendor.availabilities.length > 0)
-      .map(vendor => ({
-        ...vendor,
-        isAvailable: true
-      }));
-  }
-  //#endregion findAllWithAvailability  
-
   //#region update
   async update(
     id: string,
@@ -615,25 +571,62 @@ export class VendorService {
   //#endregion remove
 
   //#region VendorManager
-  async addManager(createVendorManagerDto: CreateVendorManagerDto): Promise<void> {
-    const manager = this.vendorManagerRepository.create(createVendorManagerDto);
-    await this.vendorManagerRepository.save(manager);
+  async addManager(id: string, createVendorManagerDto: CreateVendorManagerDto): Promise<void> {
+    const vendor = await this.vendorRepository.findOne({ where: { id } });
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: createVendorManagerDto.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingManager = await this.vendorManagerRepository.findOne({
+      where: { vendor: { id }, user: { id: createVendorManagerDto.userId } },
+    });
+
+    if (existingManager) {
+      throw new BadRequestException('User is already a manager of this vendor');
+    }
+
+    const vendorManager = this.vendorManagerRepository.create({
+      vendor,
+      user,
+    });
+
+    await this.vendorManagerRepository.save(vendorManager);
   }
   //#endregion VendorManager
 
   //#region VendorLike
-  async likeVendor(createVendorLikeDto: CreateVendorLikeDto): Promise<void> {
-    const like = this.vendorLikeRepository.create(createVendorLikeDto);
-    await this.vendorLikeRepository.save(like);
+  async likeVendor(id: string, createVendorLikeDto: CreateVendorLikeDto): Promise<void> {
+    const vendor = await this.vendorRepository.findOne({ where: { id } });
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: createVendorLikeDto.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingLike = await this.vendorLikeRepository.findOne({
+      where: { vendor: { id }, user: { id: createVendorLikeDto.userId } },
+    });
+
+    if (existingLike) {
+      throw new BadRequestException('User has already liked this vendor');
+    }
+
+    const vendorLike = this.vendorLikeRepository.create({
+      vendor,
+      user,
+    });
+
+    await this.vendorLikeRepository.save(vendorLike);
   }
   //#endregion VendorLike
-
-  //#region VendorAvailability
-  async addAvailability(createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
-    const availability = this.vendorAvailabilityRepository.create(createVendorAvailabilityDto);
-    await this.vendorAvailabilityRepository.save(availability);
-  }
-  //#endregion VendorAvailability
 
   //#region Utility
   private async generateUniqueSlug(

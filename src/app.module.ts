@@ -48,6 +48,7 @@ import { BullQueueModule } from './3rdService/bull/bull-queue.module';
 import { GeminiModule } from './3rdService/gemini/gemini.module';
 import { CheckoutSessionModule } from './modules/checkout-session/checkout-session.module';
 import { AttendanceModule } from './modules/attendances/attendance/attendance.module';
+import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -134,6 +135,7 @@ if (!fs.existsSync(templateDir)) {
     ChatModule,
     NotificationModule,
     LocationModule,
+    LocationAvailabilityModule,
     CommentModule,
     TeamMemberModule,
     SubscriptionModule,
