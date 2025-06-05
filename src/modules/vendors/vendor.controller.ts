@@ -247,7 +247,7 @@ export class VendorController {
         throw new HttpException('Từ khóa tìm kiếm không được để trống', HttpStatus.BAD_REQUEST);
       }
 
-      const result = await this.vendorService.searchLocationsWithCity(term);
+      const result = await this.vendorService.searchLocation(term);
       return {
         message: 'Nhà cung cấp đã được tìm kiếm thành công',
         ...result,

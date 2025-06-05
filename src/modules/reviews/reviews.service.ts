@@ -1,11 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Review } from './entities/review.entity';
 import { ReviewImage } from './entities/review_image.entity';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { FilterReviewDto, SortField, SortDirection } from './dto/filter-review.dto';
+import { FilterReviewDto } from './dto/filter-review.dto';
 import { isUUID } from 'class-validator';
 import { UploadService } from '../../3rdService/upload/upload.service';
 
@@ -20,50 +20,47 @@ interface ReviewSummary {
 
 interface PaginatedResponse<T> {
   data: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  pagination: {
+    current: number;
+    pageSize: number;
+    totalPage: number;
+    totalItem: number;
+  };
 }
 
 @Injectable()
 export class ReviewService {
+  private readonly logger = new Logger(ReviewService.name);
+
   constructor(
     @InjectRepository(Review)
     private readonly reviewRepository: Repository<Review>,
     @InjectRepository(ReviewImage)
     private readonly reviewImageRepository: Repository<ReviewImage>,
     private readonly uploadService: UploadService,
+    private readonly dataSource: DataSource,
   ) { }
 
   async create(createReviewDto: CreateReviewDto, files: { images?: Express.Multer.File[] }): Promise<Review> {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình tạo đánh giá');
+
     // Validate required fields
-    if (!createReviewDto.userId || !createReviewDto.bookingId || !createReviewDto.vendorId) {
-      throw new BadRequestException('userId, bookingId và vendorId là bắt buộc');
+    if (!createReviewDto.userId || !createReviewDto.bookingId) {
+      throw new BadRequestException('userId và bookingId là bắt buộc');
     }
 
     // Validate UUIDs
     if (!isUUID(createReviewDto.userId)) {
       throw new BadRequestException('Định dạng userId không hợp lệ');
     }
-    if (!isUUID(createReviewDto.bookingId)) {
+      if (!isUUID(createReviewDto.bookingId)) {
       throw new BadRequestException('Định dạng bookingId không hợp lệ');
-    }
-    if (!isUUID(createReviewDto.vendorId)) {
-      throw new BadRequestException('Định dạng vendorId không hợp lệ');
     }
 
     // Validate rating
     if (!createReviewDto.rating || createReviewDto.rating < 1 || createReviewDto.rating > 5) {
       throw new BadRequestException('Điểm đánh giá phải từ 1 đến 5');
-    }
-
-    // Check if review already exists for this booking
-    const existingReview = await this.reviewRepository.findOne({
-      where: { bookingId: createReviewDto.bookingId }
-    });
-    if (existingReview) {
-      throw new ConflictException('Đã tồn tại đánh giá cho đơn đặt chỗ này');
     }
 
     try {
@@ -75,89 +72,213 @@ export class ReviewService {
         if (files.images.length > 10) {
           throw new BadRequestException('Số lượng hình ảnh không được vượt quá 10');
         }
-
         const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
+        
+        // Create ReviewImage entities from the uploaded URLs
+        const reviewImages = imageUrls.map(url => {
+          const reviewImage = new ReviewImage();
+          reviewImage.imageUrl = url;
+          reviewImage.review = savedReview;
+          return reviewImage;
+        });
 
-        // Create review images
-        const reviewImages = imageUrls.map(url =>
-          this.reviewImageRepository.create({
-            reviewId: savedReview.id,
-            imageUrl: url,
-          })
-        );
-        await this.reviewImageRepository.save(reviewImages);
+        // Save the review images
+        savedReview.images = await this.reviewImageRepository.save(reviewImages);
+        await this.reviewRepository.save(savedReview);
       }
 
+      this.logger.log(`Đánh giá đã được tạo thành công trong ${Date.now() - startTime}ms`);
       return this.findOne(savedReview.id);
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof ConflictException) {
+      if (error instanceof BadRequestException) {
         throw error;
       }
       throw new BadRequestException('Không thể tạo đánh giá: ' + error.message);
     }
   }
 
-  async findAll(filterDto: FilterReviewDto): Promise<PaginatedResponse<ReviewSummary>> {
-    try {
-      const { 
-        page = 1, 
-        limit = 10, 
-        rating, 
-        sortField = SortField.CREATED_AT,
-        sortDirection = SortDirection.DESC 
-      } = filterDto;
-      const skip = (page - 1) * limit;
+  async findAll(filterDto: FilterReviewDto): Promise<PaginatedResponse<Review>> {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình lấy danh sách đánh giá');
 
-      const queryBuilder = this.reviewRepository
-        .createQueryBuilder('review')
-        .leftJoinAndSelect('review.user', 'user')
-        .leftJoinAndSelect('review.vendor', 'vendor')
-        .select([
-          'review.id',
-          'review.rating',
-          'review.comment',
-          'review.createdAt',
-          'user.id',
-          'user.email',
-          'user.fullName',
-          'user.phoneNumber',
-          'user.avatarUrl',
-          'user.status',
-          'user.rank',
-          'user.note',
-          'user.auth',
-          'user.lastLoginAt',
-          'user.createdAt',
-          'user.updatedAt',
-          'vendor.id',
-          'vendor.name',
-        ]);
+    const currentPage = filterDto.current || 1;
+    const pageSize = filterDto.pageSize || 10;
+    const actualPageSize = pageSize * pageSize; // Process double the requested size
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = filterDto.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
-      // Apply rating filter if provided
-      if (rating !== undefined && rating !== null) {
-        queryBuilder.andWhere('review.rating = :rating', { rating });
-      }
+    const filterConditions: string[] = [];
+    const baseParams: any[] = [];
 
-      // Apply sorting
-      queryBuilder.orderBy(`review.${sortField}`, sortDirection === SortDirection.ASC ? 'ASC' : 'DESC');
+    // Base query for review filtering
+    let baseQuery = `
+      WITH filtered_reviews AS (
+        SELECT DISTINCT r.id
+        FROM review r
+        LEFT JOIN "users" u ON u.id = r.user_id
+        LEFT JOIN "booking" b ON b.id = r.booking_id
+        LEFT JOIN "vendors" v ON v.id = b.vendor_id
+        LEFT JOIN "review_image" ri ON ri.review_id = r.id
+        WHERE 1=1
+    `;
 
-      const [reviews, total] = await queryBuilder
-        .skip(skip)
-        .take(limit)
-        .getManyAndCount();
-
-      const totalPages = Math.ceil(total / limit);
-
-      return {
-        data: reviews,
-        total,
-        page,
-        limit,
-        totalPages,
-      };
-    } catch (error) {
-      throw new BadRequestException('Không thể lấy danh sách đánh giá: ' + error.message);
+    // Add filters to base query dynamically
+    if (filterDto.rating) {
+      filterConditions.push(`r.rating = $${filterConditions.length + 1}`);
+      baseParams.push(filterDto.rating);
     }
+
+    // Append filters to the base query
+    if (filterConditions.length > 0) {
+      baseQuery += ` AND ${filterConditions.join(' AND ')}`;
+    }
+
+    baseQuery += `
+      )
+      SELECT DISTINCT
+        r.id,
+        r.comment,
+        r.rating,
+        r.created_at,
+        r.updated_at,
+        u.id as user_id,
+        u.full_name as user_full_name,
+        u.avatar_url as user_avatar_url,
+        b.id as booking_id,
+        v.id as vendor_id,
+        v.name as vendor_name,
+        v.logo as vendor_logo_url,
+        v.banner as vendor_banner_url,
+        v.description as vendor_description,
+        v.status as vendor_status,
+        array_agg(ri.image_url) as review_image_urls
+      FROM filtered_reviews fr
+      JOIN review r ON r.id = fr.id
+      LEFT JOIN "users" u ON u.id = r.user_id
+      LEFT JOIN "booking" b ON b.id = r.booking_id
+      LEFT JOIN "vendors" v ON v.id = b.vendor_id
+      LEFT JOIN "review_image" ri ON ri.review_id = r.id
+      GROUP BY 
+        r.id,
+        r.comment,
+        r.rating,
+        r.created_at,
+        r.updated_at,
+        u.id,
+        u.full_name,
+        u.avatar_url,
+        b.id,
+        v.id,
+        v.name,
+        v.logo,
+        v.banner,
+        v.description,
+        v.status
+    `;
+
+    // Add sorting
+    switch (filterDto.sortBy) {
+      case 'rating':
+        baseQuery += ` ORDER BY r.rating ${sortDirection}`;
+        break;
+      case 'created_at':
+      default:
+        baseQuery += ` ORDER BY r.created_at ${sortDirection}`;
+    }
+
+    // Add pagination
+    baseQuery += ` LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`;
+    baseParams.push(actualPageSize, skip);
+
+    // Get total count query
+    const countFilterConditions: string[] = [];
+    const countParams: any[] = [];
+
+    let countQuery = `
+      WITH filtered_reviews AS (
+        SELECT DISTINCT r.id
+        FROM review r
+        LEFT JOIN "users" u ON u.id = r.user_id
+        LEFT JOIN "booking" b ON b.id = r.booking_id
+        LEFT JOIN "vendors" v ON v.id = b.vendor_id
+        LEFT JOIN "review_image" ri ON ri.review_id = r.id
+        WHERE 1=1
+    `;
+
+    // Add filters to count query dynamically
+    if (filterDto.rating) {
+      countFilterConditions.push(`r.rating = $${countFilterConditions.length + 1}`);
+      countParams.push(filterDto.rating);
+    }
+
+    // Append filters to the count query
+    if (countFilterConditions.length > 0) {
+      countQuery += ` AND ${countFilterConditions.join(' AND ')}`;
+    }
+
+    countQuery += `
+      )
+      SELECT COUNT(DISTINCT id) as count
+      FROM filtered_reviews
+    `;
+
+    // Execute queries
+    const [reviewData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (reviewData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Transform the data
+    const reviews = reviewData.map((row: any) => ({
+      id: row.id,
+      comment: row.comment,
+      rating: row.rating,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      user: {
+        id: row.user_id,
+        fullName: row.user_full_name,
+        avatarUrl: row.user_avatar_url,
+      },
+      booking: {
+        id: row.booking_id,
+      },
+      images: row.review_image_urls?.filter(url => url !== null) || [],
+      vendor: {
+        id: row.vendor_id,
+        name: row.vendor_name,
+        logoUrl: row.vendor_logo_url,
+        bannerUrl: row.vendor_banner_url,
+        description: row.vendor_description,
+        status: row.vendor_status,
+      },
+    }));
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    this.logger.log(`Đã lấy danh sách đánh giá thành công trong ${Date.now() - startTime}ms`);
+
+    return {
+      data: reviews.slice(0, pageSize), // Only show requested page size
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
   }
 
   async findByVendorId(vendorId: string, filterDto: FilterReviewDto): Promise<PaginatedResponse<Review>> {
@@ -167,13 +288,13 @@ export class ReviewService {
 
     try {
       const { 
-        page = 1, 
-        limit = 10, 
+        current = 1, 
+        pageSize = 10, 
         rating, 
-        sortField = SortField.CREATED_AT,
-        sortDirection = SortDirection.DESC 
+        sortBy = 'created_at',
+        sortDirection = 'DESC' 
       } = filterDto;
-      const skip = (page - 1) * limit;
+      const skip = (current - 1) * pageSize;
 
       const queryBuilder = this.reviewRepository
         .createQueryBuilder('review')
@@ -205,25 +326,27 @@ export class ReviewService {
       }
 
       // Apply sorting
-      queryBuilder.orderBy(`review.${sortField}`, sortDirection === SortDirection.ASC ? 'ASC' : 'DESC');
+      queryBuilder.orderBy(`review.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
 
       const [reviews, total] = await queryBuilder
         .skip(skip)
-        .take(limit)
+        .take(pageSize)
         .getManyAndCount();
 
       if (total === 0) {
         throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
       }
 
-      const totalPages = Math.ceil(total / limit);
+      const totalPages = Math.ceil(total / pageSize);
 
       return {
         data: reviews,
-        total,
-        page,
-        limit,
-        totalPages,
+        pagination: {
+          current,
+          pageSize,
+          totalPage: totalPages,
+          totalItem: total,
+        },
       };
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -234,145 +357,79 @@ export class ReviewService {
   }
 
   async findOne(id: string): Promise<Review> {
-    // Validate id is a UUID
     if (!isUUID(id)) {
       throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
     }
 
-    try {
-      const review = await this.reviewRepository
-        .createQueryBuilder('review')
-        .leftJoinAndSelect('review.user', 'user')
-        .leftJoinAndSelect('review.vendor', 'vendor')
-        .leftJoinAndSelect('review.booking', 'booking')
-        .leftJoinAndSelect('review.images', 'images')
-        .where('review.id = :id', { id })
-        .select([
-          'review',
-          'user.id',
-          'user.email',
-          'user.fullName',
-          'user.phoneNumber',
-          'user.avatarUrl',
-          'user.status',
-          'user.rank',
-          'user.note',
-          'user.auth',
-          'user.lastLoginAt',
-          'user.createdAt',
-          'user.updatedAt',
-          'vendor',
-          'booking',
-          'images'
-        ])
-        .getOne();
+    const review = await this.reviewRepository.findOne({
+      where: { id },
+      relations: ['user', 'booking'],
+    });
 
-      if (!review) {
-        throw new NotFoundException(`Không tìm thấy đánh giá với ID: ${id}`);
-      }
-
-      return review;
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể lấy thông tin đánh giá: ' + error.message);
+    if (!review) {
+      throw new NotFoundException(`Không tìm thấy đánh giá với ID ${id}`);
     }
+
+    return review;
   }
 
   async update(id: string, updateReviewDto: UpdateReviewDto, files: { images?: Express.Multer.File[] }): Promise<Review> {
-    // Validate id is a UUID
-    if (!isUUID(id)) {
-      throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình cập nhật đánh giá');
+
+    const review = await this.findOne(id);
+
+    // Update basic fields
+    if (updateReviewDto.comment !== undefined) review.comment = updateReviewDto.comment;
+    if (updateReviewDto.rating !== undefined) {
+      if (updateReviewDto.rating < 1 || updateReviewDto.rating > 5) {
+        throw new BadRequestException('Điểm đánh giá phải từ 1 đến 5');
+      }
+      review.rating = updateReviewDto.rating;
     }
 
-    // Validate rating if provided
-    if (updateReviewDto.rating && (updateReviewDto.rating < 1 || updateReviewDto.rating > 5)) {
-      throw new BadRequestException('Điểm đánh giá phải từ 1 đến 5');
+    // Upload new images if provided
+    if (files?.images?.length) {
+      if (files.images.length > 10) {
+        throw new BadRequestException('Số lượng hình ảnh không được vượt quá 10');
+      }
+
+      const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
+      review.images = imageUrls.map(url => {
+        const reviewImage = new ReviewImage();
+        reviewImage.imageUrl = url;
+        reviewImage.review = review;
+        return reviewImage;
+      });
     }
 
-    try {
-      const review = await this.findOne(id);
-
-      // Check if trying to update bookingId
-      if (updateReviewDto.bookingId && updateReviewDto.bookingId !== review.bookingId) {
-        throw new BadRequestException('Không thể thay đổi đơn đặt chỗ của đánh giá');
-      }
-
-      // Check if trying to update vendorId
-      if (updateReviewDto.vendorId && updateReviewDto.vendorId !== review.vendorId) {
-        throw new BadRequestException('Không thể thay đổi nhà cung cấp của đánh giá');
-      }
-
-      Object.assign(review, updateReviewDto);
-      await this.reviewRepository.save(review);
-
-      // Upload new images if provided
-      if (files?.images?.length) {
-        if (files.images.length > 10) {
-          throw new BadRequestException('Số lượng hình ảnh không được vượt quá 10');
-        }
-
-        const imageUrls = await this.uploadService.uploadImages(files.images, 'reviews');
-
-        // Create review images
-        const reviewImages = imageUrls.map(url =>
-          this.reviewImageRepository.create({
-            reviewId: review.id,
-            imageUrl: url,
-          })
-        );
-        await this.reviewImageRepository.save(reviewImages);
-      }
-
-      return this.findOne(id);
-    } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể cập nhật đánh giá: ' + error.message);
-    }
+    const updatedReview = await this.reviewRepository.save(review);
+    this.logger.log(`Đánh giá đã được cập nhật thành công trong ${Date.now() - startTime}ms`);
+    return this.findOne(updatedReview.id);
   }
 
   async remove(id: string): Promise<void> {
-    // Validate id is a UUID
-    if (!isUUID(id)) {
-      throw new BadRequestException('Định dạng ID đánh giá không hợp lệ');
-    }
+    const review = await this.findOne(id);
+    await this.reviewRepository.remove(review);
+  }
 
-    try {
-      const review = await this.findOne(id);
+  async getAverageRatingByBookingId(bookingId: string): Promise<number> {
+    const result = await this.reviewRepository
+      .createQueryBuilder('review')
+      .select('AVG(review.rating)', 'averageRating')
+      .where('review.bookingId = :bookingId', { bookingId })
+      .getRawOne();
 
-      // Delete associated images
-      await this.reviewImageRepository.delete({ reviewId: id });
-
-      // Delete review
-      await this.reviewRepository.remove(review);
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể xóa đánh giá: ' + error.message);
-    }
+    return result ? Number(result.averageRating) : 0;
   }
 
   async getAverageRatingByVendorId(vendorId: string): Promise<number> {
-    if (!isUUID(vendorId)) {
-      throw new BadRequestException('Định dạng vendorId không hợp lệ');
-    }
+    const result = await this.reviewRepository
+      .createQueryBuilder('review')
+      .select('AVG(review.rating)', 'averageRating')
+      .where('review.vendorId = :vendorId', { vendorId })
+      .getRawOne();
 
-    try {
-      const reviews = await this.reviewRepository.find({
-        where: { vendorId },
-        select: ['rating'],
-      });
-
-      if (!reviews.length) return 0;
-
-      const total = reviews.reduce((sum, r) => sum + r.rating, 0);
-      return parseFloat((total / reviews.length).toFixed(2));
-    } catch (error) {
-      throw new BadRequestException('Không thể tính điểm đánh giá trung bình: ' + error.message);
-    }
+    return result ? Number(result.averageRating) : 0;
   }
 }

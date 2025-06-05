@@ -3,9 +3,10 @@ import { LocationService } from './location.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { Location } from './entities/location.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { SearchLocationDto } from './dto/search-location.dto';
 
 @ApiTags('Locations')
 @Controller('locations')
@@ -157,5 +158,27 @@ export class LocationController {
       }
       throw new HttpException('Lỗi khi xóa địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @Get('search')
+  @Public()
+  @ApiOperation({ summary: 'Tìm kiếm địa điểm' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách địa điểm tìm được',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Location' }
+        },
+        total: { type: 'number' }
+      }
+    }
+  })
+  @ResponseMessage('Tìm kiếm địa điểm thành công')
+  async searchLocations(@Query() searchDto: SearchLocationDto) {
+    return await this.locationService.searchLocations(searchDto);
   }
 }

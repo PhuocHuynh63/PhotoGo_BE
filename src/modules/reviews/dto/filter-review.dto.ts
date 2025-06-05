@@ -1,58 +1,37 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, Min } from 'class-validator';
-import { Transform } from 'class-transformer';
-
-export enum SortField {
-  CREATED_AT = 'createdAt',
-  RATING = 'rating',
-}
-
-export enum SortDirection {
-  ASC = 'asc',
-  DESC = 'desc',
-}
+import { IsOptional, IsNumber, IsString, IsEnum, Min, Max, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class FilterReviewDto {
-  @ApiProperty({ required: false, description: 'Số trang', default: 1 })
+  @ApiProperty({ required: false, description: 'Số trang hiện tại' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  @Transform(({ value }) => parseInt(value))
-  page?: number = 1;
+  @Min(1)
+  current?: number;
 
-  @ApiProperty({ required: false, description: 'Số lượng item trên mỗi trang', default: 10 })
+  @ApiProperty({ required: false, description: 'Số lượng item trên mỗi trang' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  @Transform(({ value }) => parseInt(value))
-  limit?: number = 10;
+  @Min(1)
+  pageSize?: number;
 
-  @ApiProperty({ 
-    required: false, 
-    description: 'Điểm đánh giá (1-5)',
-    enum: [1, 2, 3, 4, 5],
-    example: 5
-  })
+  @ApiProperty({ required: false, description: 'Lọc theo điểm đánh giá (1-5)' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  @Transform(({ value }) => parseInt(value))
+  @Min(1)
+  @Max(5)
   rating?: number;
 
-  @ApiProperty({ 
-    required: false, 
-    description: 'Trường sắp xếp',
-    enum: SortField,
-    example: SortField.CREATED_AT
-  })
+  @ApiProperty({ required: false, enum: ['rating', 'created_at'], description: 'Sắp xếp theo' })
   @IsOptional()
-  @IsEnum(SortField)
-  sortField?: SortField = SortField.CREATED_AT;
+  @IsEnum(['rating', 'created_at'])
+  sortBy?: 'rating' | 'created_at';
 
-  @ApiProperty({ 
-    required: false, 
-    description: 'Hướng sắp xếp',
-    enum: SortDirection,
-    example: SortDirection.DESC
-  })
+  @ApiProperty({ required: false, enum: ['asc', 'desc'], description: 'Hướng sắp xếp' })
   @IsOptional()
-  @IsEnum(SortDirection)
-  sortDirection?: SortDirection = SortDirection.DESC;
+  @IsEnum(['asc', 'desc'])
+  sortDirection?: 'asc' | 'desc';
 } 

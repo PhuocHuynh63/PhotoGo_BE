@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Like, Not, In } from 'typeorm';
+import { Repository, DataSource, Like, Not, In, ILike } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
@@ -731,21 +731,16 @@ export class VendorService {
   }
   //#endregion getConceptImage
 
-  //#region SearchLocations with City only link with vendor
-  async searchLocationsWithCity(city: string): Promise<Location[]> {
-    const locations = await this.locationRepository
-      .createQueryBuilder('location')
-      .leftJoinAndSelect('location.vendor', 'vendor')
-      .leftJoinAndSelect('vendor.category', 'category')
-      .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
-      .leftJoinAndSelect('servicePackages.serviceConcepts', 'serviceConcepts')
-      .leftJoinAndSelect('serviceConcepts.images', 'images')
-      .leftJoinAndSelect('vendor.reviews', 'reviews')
-      .where('location.city ILIKE :city', { city: `%${city}%` })
-      .getMany();
+  //#region SearchLocations with any FE term
+  async searchLocation(query: string): Promise<Location[]> {
+    const locations = await this.locationRepository.find({
+      where: {
+        city: ILike(`%${query}%`)
+      }
+    });
     return locations;
   }
-  //#endregion SearchLocations with City only link with vendor
+  //#endregion SearchLocations with any FE term
 
   //#region filterVendors
   async filterVendors(params: {
