@@ -1,12 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { Not } from 'typeorm';
+import { SearchLocationDto } from './dto/search-location.dto';
 
 @Injectable()
 export class LocationService {
@@ -210,4 +211,59 @@ export class LocationService {
     await this.locationRepository.remove(location);
   }
   //#endregion deleteLocation
+
+  async searchLocations(searchDto: SearchLocationDto) {
+    try {
+      const { keyword, address, district, ward, city, province } = searchDto;
+      
+      // Build where conditions
+      const whereConditions: any[] = [];
+
+      // If keyword is provided, search in all text fields
+      if (keyword) {
+        whereConditions.push(
+          { address: ILike(`%${keyword}%`) },
+          { district: ILike(`%${keyword}%`) },
+          { ward: ILike(`%${keyword}%`) },
+          { city: ILike(`%${keyword}%`) },
+          { province: ILike(`%${keyword}%`) }
+        );
+      }
+
+      // Add specific field conditions if provided
+      if (address) {
+        whereConditions.push({ address: ILike(`%${address}%`) });
+      }
+      if (district) {
+        whereConditions.push({ district: ILike(`%${district}%`) });
+      }
+      if (ward) {
+        whereConditions.push({ ward: ILike(`%${ward}%`) });
+      }
+      if (city) {
+        whereConditions.push({ city: ILike(`%${city}%`) });
+      }
+      if (province) {
+        whereConditions.push({ province: ILike(`%${province}%`) });
+      }
+
+      // If no conditions were provided, return all locations
+      const where = whereConditions.length > 0 ? whereConditions : {};
+
+      const locations = await this.locationRepository.find({
+        where,
+        relations: ['vendor'],
+        order: {
+          created_at: 'DESC'
+        }
+      });
+
+      return {
+        data: locations,
+        total: locations.length
+      };
+    } catch (error) {
+      throw new BadRequestException('Không thể tìm kiếm địa điểm: ' + error.message);
+    }
+  }
 }
