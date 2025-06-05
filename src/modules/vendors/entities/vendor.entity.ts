@@ -3,7 +3,6 @@ import { Category } from '../../categories/entities/category.entity';
 import { Location } from '../../locations/entities/location.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { ServicePackage } from '../../service-package/entities/service-package.entity';
-import { VendorAvailability } from './vendor-availability.entity';
 import { Review } from '../../reviews/entities/review.entity';
 import { User } from '../../users/entities/user.entity';
 
@@ -45,9 +44,6 @@ export class Vendor {
 
   @OneToMany(() => ServicePackage, (servicePackage) => servicePackage.vendor, { cascade: true })
   servicePackages: ServicePackage[];
-
-  @OneToMany(() => VendorAvailability, (availability) => availability.vendor, { cascade: true })
-  availabilities: VendorAvailability[];
 
   @OneToMany(() => Review, (review) => review.vendor, { cascade: true } )
   reviews: Review[];

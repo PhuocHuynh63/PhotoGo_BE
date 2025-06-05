@@ -11,6 +11,8 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherTypeDiscount } from '../../constants/voucher.enum';
 import { BookingStatus, BookingDepositType } from '../../constants/booking.enum';
 import { Booking } from '../bookings/entities/booking.entity';
+import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
+import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
 
 @Injectable()
 export class InvoiceService {
@@ -134,22 +136,75 @@ export class InvoiceService {
     return this.invoiceRepository.save(invoice);
   }
 
-  async findAll(query: FindAllInvoicesDto): Promise<Invoice[]> {
-    const qb = this.invoiceRepository.createQueryBuilder('invoice')
-      .leftJoinAndSelect('invoice.booking', 'booking')
-      .leftJoinAndSelect('invoice.payments', 'payments')
-      .leftJoinAndSelect('invoice.refunds', 'refunds');
+  async findAll(paginationDto: PaginationInvoiceDto): Promise<{
+    data: Invoice[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10, sortBy = InvoiceSortField.ISSUED_AT, sortDirection = SortDirection.DESC } = paginationDto;
+    const currentPage = Number(current);
+    const pageSizeNum = Number(pageSize);
+    const skip = (currentPage - 1) * pageSizeNum;
 
-    if (query.bookingId) {
-      qb.andWhere('invoice.bookingId = :bookingId', { bookingId: query.bookingId });
-    }
+    const [invoices, total] = await this.invoiceRepository.findAndCount({
+      skip,
+      take: pageSizeNum,
+      order: {
+        [sortBy]: sortDirection
+      }
+    });
+    const totalPages = Math.ceil(total / pageSizeNum);
 
-    if (query.status) {
-      qb.andWhere('invoice.status = :status', { status: query.status });
-    }
+    return {
+      data: invoices,
+      meta: {
+        current: currentPage,
+        pageSize: pageSizeNum,
+        totalPage: totalPages,
+        totalItem: total
+      }
+    };
+  }
 
-    qb.orderBy('invoice.created_at', 'DESC');
-    return await qb.getMany();
+  async findAllByUserId(userId: string, paginationDto: PaginationInvoiceDto): Promise<{
+
+    data: Invoice[];
+    meta: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10, sortBy = InvoiceSortField.ISSUED_AT, sortDirection = SortDirection.DESC } = paginationDto;
+    const currentPage = Number(current);
+    const pageSizeNum = Number(pageSize);
+    const skip = (currentPage - 1) * pageSizeNum;
+
+    const [invoices, total] = await this.invoiceRepository.findAndCount({
+      where: { booking: { userId } },
+      relations: ['booking', 'payments', 'refunds'],
+      skip,
+      take: pageSizeNum,
+      order: {
+        [sortBy]: sortDirection
+      }
+    });
+    const totalPages = Math.ceil(total / pageSizeNum);
+
+    return {
+      data: invoices,
+      meta: {
+        current: currentPage,
+        pageSize: pageSizeNum,
+        totalPage: totalPages,
+        totalItem: total
+      }
+    };
   }
 
   async findOne(id: string): Promise<Invoice> {

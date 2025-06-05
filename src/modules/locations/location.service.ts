@@ -113,8 +113,8 @@ export class LocationService {
     }
 
     // Apply sorting
-    const allowedSortFields = ['created_at', 'updated_at', 'address', 'city', 'province'];
-    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
+    const allowedSortFields = ['createdAt', 'updatedAt', 'address', 'city', 'province'];
+    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
     queryBuilder.orderBy(`location.${sortField}`, sortDirection);
@@ -254,7 +254,7 @@ export class LocationService {
         where,
         relations: ['vendor'],
         order: {
-          created_at: 'DESC'
+          createdAt: 'DESC'
         }
       });
 

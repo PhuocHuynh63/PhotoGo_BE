@@ -131,25 +131,3 @@ export class CreateVendorLikeDto {
   @IsNotEmpty()
   vendorId: string;
 }
-
-export class CreateVendorAvailabilityDto {
-  @IsUUID()
-  @IsNotEmpty()
-  vendorId: string;
-
-  @IsDate()
-  @IsNotEmpty()
-  date: Date;
-
-  @IsString()
-  @IsNotEmpty()
-  startTime: string;
-
-  @IsString()
-  @IsNotEmpty()
-  endTime: string;
-
-  @IsBoolean()
-  @IsOptional()
-  isAvailable?: boolean;
-}

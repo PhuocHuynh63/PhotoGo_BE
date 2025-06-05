@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
-import { CreateLocationDto } from './create-location.dto';
+import { CreateLocationAvailabilityDto, CreateLocationDto } from './create-location.dto';
 import { IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
