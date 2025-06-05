@@ -5,6 +5,7 @@ import { Review } from './entities/review.entity';
 import { ReviewImage } from './entities/review_image.entity';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { FilterReviewDto, SortField, SortDirection } from './dto/filter-review.dto';
 import { isUUID } from 'class-validator';
 import { UploadService } from '../../3rdService/upload/upload.service';
 
@@ -15,6 +16,14 @@ interface ReviewSummary {
   comment: string;
   user: { fullName: string };
   vendor: { name: string };
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 @Injectable()
@@ -88,9 +97,18 @@ export class ReviewService {
     }
   }
 
-  async findAll(): Promise<ReviewSummary[]> {
+  async findAll(filterDto: FilterReviewDto): Promise<PaginatedResponse<ReviewSummary>> {
     try {
-      return await this.reviewRepository
+      const { 
+        page = 1, 
+        limit = 10, 
+        rating, 
+        sortField = SortField.CREATED_AT,
+        sortDirection = SortDirection.DESC 
+      } = filterDto;
+      const skip = (page - 1) * limit;
+
+      const queryBuilder = this.reviewRepository
         .createQueryBuilder('review')
         .leftJoinAndSelect('review.user', 'user')
         .leftJoinAndSelect('review.vendor', 'vendor')
@@ -98,6 +116,7 @@ export class ReviewService {
           'review.id',
           'review.rating',
           'review.comment',
+          'review.createdAt',
           'user.id',
           'user.email',
           'user.fullName',
@@ -110,23 +129,53 @@ export class ReviewService {
           'user.lastLoginAt',
           'user.createdAt',
           'user.updatedAt',
+          'vendor.id',
           'vendor.name',
-        ])
-        .orderBy('review.created_at', 'DESC')
-        .getMany();
+        ]);
+
+      // Apply rating filter if provided
+      if (rating !== undefined && rating !== null) {
+        queryBuilder.andWhere('review.rating = :rating', { rating });
+      }
+
+      // Apply sorting
+      queryBuilder.orderBy(`review.${sortField}`, sortDirection === SortDirection.ASC ? 'ASC' : 'DESC');
+
+      const [reviews, total] = await queryBuilder
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data: reviews,
+        total,
+        page,
+        limit,
+        totalPages,
+      };
     } catch (error) {
       throw new BadRequestException('Không thể lấy danh sách đánh giá: ' + error.message);
     }
   }
 
-  async findByVendorId(vendorId: string): Promise<Review[]> {
-    // Validate vendorId is a UUID
+  async findByVendorId(vendorId: string, filterDto: FilterReviewDto): Promise<PaginatedResponse<Review>> {
     if (!isUUID(vendorId)) {
       throw new BadRequestException('Định dạng vendorId không hợp lệ');
     }
 
     try {
-      const reviews = await this.reviewRepository
+      const { 
+        page = 1, 
+        limit = 10, 
+        rating, 
+        sortField = SortField.CREATED_AT,
+        sortDirection = SortDirection.DESC 
+      } = filterDto;
+      const skip = (page - 1) * limit;
+
+      const queryBuilder = this.reviewRepository
         .createQueryBuilder('review')
         .leftJoinAndSelect('review.user', 'user')
         .leftJoinAndSelect('review.vendor', 'vendor')
@@ -148,15 +197,34 @@ export class ReviewService {
           'user.updatedAt',
           'vendor',
           'images'
-        ])
-        .orderBy('review.createdAt', 'DESC')
-        .getMany();
+        ]);
 
-    if (reviews.length === 0) {
-      throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
-    }
+      // Apply rating filter if provided
+      if (rating) {
+        queryBuilder.andWhere('review.rating = :rating', { rating });
+      }
 
-    return reviews;
+      // Apply sorting
+      queryBuilder.orderBy(`review.${sortField}`, sortDirection === SortDirection.ASC ? 'ASC' : 'DESC');
+
+      const [reviews, total] = await queryBuilder
+        .skip(skip)
+        .take(limit)
+        .getManyAndCount();
+
+      if (total === 0) {
+        throw new NotFoundException(`Không tìm thấy đánh giá cho vendor ID: ${vendorId}`);
+      }
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data: reviews,
+        total,
+        page,
+        limit,
+        totalPages,
+      };
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
