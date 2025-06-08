@@ -104,6 +104,17 @@ export class LocationController {
     return await this.locationService.searchLocations(searchDto);
   }
 
+  @Get('userLocation/:latitude/:longitude')
+  @Public()
+  @ApiOperation({ summary: 'Lấy địa điểm gần nhất theo tọa độ' })
+  @ApiResponse({ status: 200, description: 'Địa điểm được tìm thấy', type: Location })
+  @ApiResponse({ status: 400, description: 'Tọa độ không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
+  @ResponseMessage('Lấy địa điểm gần nhất thành công')
+  async getUserLocation(@Param('latitude') latitude: string, @Param('longitude') longitude: string) {
+    return await this.locationService.getUserLocation(Number(latitude), Number(longitude));
+  }
+
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Lấy địa điểm theo ID (Public)' })

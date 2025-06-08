@@ -10,8 +10,8 @@ export class CreateReviewDto {
   vendorId: string;
 
   @IsUUID()
-  @IsOptional()
-  bookingId?: string;
+  @IsNotEmpty()
+  bookingId: string;
 
   @IsNumber()
   @Min(1)

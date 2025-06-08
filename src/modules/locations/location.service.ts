@@ -266,4 +266,31 @@ export class LocationService {
       throw new BadRequestException('Không thể tìm kiếm địa điểm: ' + error.message);
     }
   }
+
+  //#region getUserLocation
+  async getUserLocation(latitude: number, longitude: number) {
+    const result = await this.locationRepository
+      .createQueryBuilder('location')
+      .addSelect(`
+        (
+          6371 * acos(
+            cos(radians(:lat)) * cos(radians(location.latitude)) *
+            cos(radians(location.longitude) - radians(:lng)) +
+            sin(radians(:lat)) * sin(radians(location.latitude))
+          )
+        )
+      `, 'distance')
+      .setParameters({ lat: latitude, lng: longitude })
+      .orderBy('distance', 'ASC')
+      .limit(1)
+      .getRawAndEntities();
+
+    const location = result.entities[0] || null;
+    const distance = result.raw[0]?.distance !== undefined ? Number(result.raw[0].distance) : null;
+
+    return location
+      ? { ...location, distance }
+      : null;
+  }
+  //#endregion getUserLocation
 }

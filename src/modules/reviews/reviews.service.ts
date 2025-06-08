@@ -10,6 +10,7 @@ import { isUUID } from 'class-validator';
 import { UploadService } from '../../3rdService/upload/upload.service';
 import { PaginationDto } from './dto/pagination.dto';
 import { Booking } from '../bookings/entities/booking.entity';
+import { BookingStatus } from 'src/constants/booking.enum';
 
 // Define the return type for findAll
 interface ReviewSummary {
@@ -90,6 +91,11 @@ export class ReviewService {
     });
     if (!booking) {
       throw new BadRequestException('vendorId và bookingId không trùng khớp');
+    }
+
+    // check the status of booking is completed
+    if (booking.status !== BookingStatus.COMPLETED) {
+      throw new BadRequestException('Đơn hàng chưa hoàn thành nên không thể đánh giá');
     }
 
     // Validate rating
@@ -389,7 +395,7 @@ export class ReviewService {
     };
   }
 
-  async findByVendorId(vendorId: string, filterDto: FilterReviewDto): Promise<PaginatedResponse<ReviewResponse>> {
+  async findByVendorId(vendorId: string, filterDto: FilterReviewDto): Promise<PaginatedResponse<ReviewResponse> & { averageRating: number }> {
     const startTime = Date.now();
     this.logger.log('Bắt đầu quá trình lấy danh sách đánh giá theo vendor');
 
@@ -403,6 +409,16 @@ export class ReviewService {
     const sortDirection = filterDto.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
     try {
+      // Tính averageRating cho tất cả review của vendor
+      const avgResult = await this.reviewRepository
+        .createQueryBuilder('review')
+        .leftJoin('review.booking', 'booking')
+        .leftJoin('booking.vendor', 'vendor')
+        .where('vendor.id = :vendorId', { vendorId })
+        .select('AVG(review.rating)', 'avg')
+        .getRawOne();
+      const averageRating = avgResult?.avg ? Number(avgResult.avg) : 0;
+
       // Build the base query
       const queryBuilder = this.reviewRepository
         .createQueryBuilder('review')
@@ -442,6 +458,7 @@ export class ReviewService {
             totalPage: 0,
             totalItem: 0,
           },
+          averageRating: Number(parseFloat(averageRating.toString()).toFixed(1)),
         };
       }
 
@@ -478,6 +495,7 @@ export class ReviewService {
           totalPage,
           totalItem: total,
         },
+        averageRating: Number(parseFloat(averageRating.toString()).toFixed(1)),
       };
     } catch (error) {
       this.logger.error(`Lỗi khi lấy đánh giá của nhà cung cấp: ${error.message}`);
@@ -553,12 +571,15 @@ export class ReviewService {
   }
 
   async getAverageRatingByVendorId(vendorId: string): Promise<number> {
-    const result = await this.reviewRepository
+    const avgResult = await this.reviewRepository
       .createQueryBuilder('review')
-      .select('AVG(review.rating)', 'averageRating')
-      .where('review.vendorId = :vendorId', { vendorId })
+      .leftJoin('review.booking', 'booking')
+      .leftJoin('booking.vendor', 'vendor')
+      .where('vendor.id = :vendorId', { vendorId })
+      .select('AVG(review.rating)', 'avg')
       .getRawOne();
 
-    return result ? Number(result.averageRating) : 0;
+    const averageRating = avgResult?.avg ? Number(avgResult.avg) : 0;
+    return averageRating;
   }
 }
