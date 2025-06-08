@@ -135,6 +135,7 @@ export class UserService {
       throw new NotFoundException(`Không tìm thấy người dùng với ID ${id}`);
     }
 
+    //#region có thể dùng để restPassword 
     // Nếu có trường passwordHash, kiểm tra mật khẩu cũ trước khi cập nhật
     if (updateUserDto.password && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
       const isMatch = await bcrypt.compare(updateUserDto.oldPasswordHash, user.passwordHash);
@@ -148,7 +149,9 @@ export class UserService {
       // Mã hóa mật khẩu mới
       updateUserDto.password = await hashPasswordHelper(updateUserDto.password);
     }
-
+    // ||=====================END========================||//
+    //#endregion
+    
     // Cập nhật thông tin user
     Object.assign(user, updateUserDto);
 
