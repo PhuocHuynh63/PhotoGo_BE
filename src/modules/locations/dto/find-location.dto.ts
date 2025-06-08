@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumberString, IsEnum, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsEnum, IsBoolean, IsNotEmpty, Matches } from 'class-validator';
 import { LocationSortField } from 'src/constants/location.enum';
 
 export class FindLocationDto {
@@ -93,8 +93,35 @@ export class FindLocationAvailabilityDto {
   @IsOptional()
   @ApiProperty({
     description: 'Hướng sắp xếp',
+    enum: ['asc', 'desc'],
     example: 'asc',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
 }
+
+export class FindLocationDateRangeDto extends FindLocationAvailabilityDto {
+  @ApiProperty({
+      description: 'Ngày bắt đầu',
+      example: '08/06/2025',
+      required: true,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+      message: 'startDate phải có định dạng DD/MM/YYYY'
+  })
+  startDate: string;
+
+  @ApiProperty({
+      description: 'Ngày kết thúc',
+      example: '12/06/2025',
+      required: true,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+      message: 'endDate phải có định dạng DD/MM/YYYY'
+  })
+  endDate: string;
+} 

@@ -34,4 +34,4 @@ export class FilterReviewDto {
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortDirection?: 'asc' | 'desc';
-} 
+}

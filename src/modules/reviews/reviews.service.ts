@@ -8,6 +8,7 @@ import { UpdateReviewDto } from './dto/update-review.dto';
 import { FilterReviewDto } from './dto/filter-review.dto';
 import { isUUID } from 'class-validator';
 import { UploadService } from '../../3rdService/upload/upload.service';
+import { PaginationDto } from './dto/pagination.dto';
 
 // Define the return type for findAll
 interface ReviewSummary {
@@ -16,6 +17,24 @@ interface ReviewSummary {
   comment: string;
   user: { fullName: string };
   vendor: { name: string };
+}
+
+interface ReviewResponse {
+  id: string;
+  comment: string;
+  rating: number;
+  createdAt: Date;
+  user: {
+    id: string;
+    fullName: string;
+    avatarUrl: string;
+  };
+  vendor: {
+    id: string;
+    name: string;
+    logoUrl: string;
+  };
+  images: string[];
 }
 
 interface PaginatedResponse<T> {
@@ -95,6 +114,91 @@ export class ReviewService {
       }
       throw new BadRequestException('Không thể tạo đánh giá: ' + error.message);
     }
+  }
+
+  async findByUserId(userId: string, paginationDto: PaginationDto): Promise<PaginatedResponse<ReviewResponse>> {
+    const startTime = Date.now();
+    this.logger.log('Bắt đầu quá trình lấy danh sách đánh giá theo userId');
+
+    if (!isUUID(userId)) {
+      throw new BadRequestException('Định dạng userId không hợp lệ');
+    }
+
+    const currentPage = paginationDto.current || 1;
+    const pageSize = paginationDto.pageSize || 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const [reviews, total] = await Promise.all([
+      this.reviewRepository.find({
+        where: { userId },
+        relations: ['user', 'booking', 'images', 'booking.vendor'],
+        skip,
+        take: pageSize,
+        order: { createdAt: 'DESC' }
+      }),
+      this.reviewRepository.count({ where: { userId } })
+    ]);
+
+    if (reviews.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    const totalPage = Math.ceil(total / pageSize);
+
+    this.logger.log(`Đã lấy danh sách đánh giá theo userId thành công trong ${Date.now() - startTime}ms`);
+
+    return {
+      data: reviews.map(review => ({
+        id: review.id,
+        comment: review.comment,
+        rating: review.rating,
+        createdAt: review.createdAt,
+        user: {
+          id: review.user.id,
+          fullName: review.user.fullName,
+          avatarUrl: review.user.avatarUrl,
+          rank: review.user.rank,
+          multiplier: review.user.multiplier,
+          note: review.user.note,
+          auth: review.user.auth
+        },
+        vendor: {
+          id: review.booking.vendor.id,
+          name: review.booking.vendor.name,
+          logoUrl: review.booking.vendor.logo,
+          bannerUrl: review.booking.vendor.banner,
+          description: review.booking.vendor.description,
+          status: review.booking.vendor.status
+        },
+        booking: {
+          id: review.booking.id,
+          date: review.booking.date,
+          time: review.booking.time,
+          depositAmount: review.booking.depositAmount,
+          depositType: review.booking.depositType,
+          userNote: review.booking.userNote,
+          fullName: review.booking.fullName,
+          phone: review.booking.phone,
+          email: review.booking.email,
+          status: review.booking.status,
+        },
+        images: review.images.map(img => img.imageUrl)
+      })),
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: total,
+      },
+    };
   }
 
   async findAll(filterDto: FilterReviewDto): Promise<PaginatedResponse<Review>> {

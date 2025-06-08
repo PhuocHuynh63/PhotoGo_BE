@@ -19,9 +19,9 @@ export class LocationService {
   ) { }
 
   //#region create
-  async create(createLocationDto: CreateLocationDto): Promise<Location> {
+  async create(vendor_id: string, createLocationDto: CreateLocationDto): Promise<Location> {
     // Validate required fields
-    if (!createLocationDto.vendor_id) {
+    if (!vendor_id) {
       throw new BadRequestException('ID vendor không được để trống');
     }
     if (!createLocationDto.address) {
@@ -36,16 +36,16 @@ export class LocationService {
 
     // Check if vendor exists
     const vendor = await this.vendorRepository.findOne({
-      where: { id: createLocationDto.vendor_id }
+      where: { id: vendor_id }
     });
     if (!vendor) {
-      throw new NotFoundException(`Không tìm thấy vendor với ID ${createLocationDto.vendor_id}`);
+      throw new NotFoundException(`Không tìm thấy vendor với ID ${vendor_id}`);
     }
 
     // Check if vendor already has a location with the same address
     const existingLocation = await this.locationRepository.findOne({
       where: {
-        vendor: { id: createLocationDto.vendor_id },
+        vendor: { id: vendor_id },
         address: createLocationDto.address,
         city: createLocationDto.city,
         province: createLocationDto.province

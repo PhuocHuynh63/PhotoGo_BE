@@ -12,6 +12,8 @@ import { Voucher } from '../vouchers/entities/voucher.entity';
 import { PaymentService } from '../payments/payment.service';
 import { PaymentType } from '../../constants/payment.enum';
 import { PaginationDto } from './dto/pagination.dto';
+import { LocationAvailabilityService } from '../locations/location-availability.service';
+import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot-time-working-date.entity';
 
 @Injectable()
 export class BookingService {
@@ -26,6 +28,9 @@ export class BookingService {
     private voucherRepository: Repository<Voucher>,
     private invoiceService: InvoiceService,
     private paymentService: PaymentService,
+    private locationAvailabilityService: LocationAvailabilityService,
+    @InjectRepository(LocationSlotTimeWorkingDate)
+    private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -60,6 +65,12 @@ export class BookingService {
     };
   }
 
+  // Helper function to convert time string (HH:mm) to minutes
+  private timeToMinutes(timeStr: string): number {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
   //#region Create Booking
   async create(
     createBookingDto: CreateBookingDto,
@@ -89,6 +100,56 @@ export class BookingService {
 
     if (!createBookingDto.time) {
       throw new BadRequestException('Giờ booking là bắt buộc');
+    }
+
+    // Check location availability
+    const locationAvailability = await this.locationAvailabilityService.findByDate(
+      createBookingDto.date,
+      { current: '1', pageSize: '1' }
+    );
+
+    if (!locationAvailability.data.length) {
+      throw new BadRequestException('Chi nhánh không làm việc vào ngày này');
+    }
+
+    const availability = locationAvailability.data[0];
+    const slotTimes = availability.slotTimes;
+    
+    // Find matching slot time
+    const bookingTimeMinutes = this.timeToMinutes(createBookingDto.time);
+    const matchingSlot = slotTimes.find(slot => {
+      const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
+      const slotEndMinutes = this.timeToMinutes(slot.endSlotTime);
+      return bookingTimeMinutes >= slotStartMinutes && bookingTimeMinutes <= slotEndMinutes;
+    });
+
+    if (!matchingSlot) {
+      throw new BadRequestException('Thời gian đặt lịch không nằm trong khung giờ làm việc');
+    }
+
+    // Get slot time working date to check maxParallel
+    const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+      where: {
+        slotTimeId: matchingSlot.id,
+        workingDateId: availability.workingDates[0].id
+      }
+    });
+
+    if (!slotTimeWorkingDate) {
+      throw new BadRequestException('Không tìm thấy thông tin slot time cho ngày này');
+    }
+
+    // Check max parallel bookings
+    const existingBookings = await this.bookingRepository.count({
+      where: {
+        date: new Date(convertedDate),
+        time: createBookingDto.time,
+        status: BookingStatus.PENDING,
+      }
+    });
+
+    if (existingBookings >= slotTimeWorkingDate.maxParallelBookings) {
+      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này`);
     }
 
     if (!createBookingDto.fullName) {

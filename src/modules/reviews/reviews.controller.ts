@@ -3,6 +3,7 @@ import { ReviewService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { FilterReviewDto } from './dto/filter-review.dto';
+import { PaginationDto } from './dto/pagination.dto';
 import { Review } from './entities/review.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
@@ -191,6 +192,27 @@ export class ReviewController {
     }
   }
 
+  @Get('user/:userId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy đánh giá theo ID người dùng' })
+  @ApiResponse({ status: 200, description: 'Đánh giá đã được tìm thấy', type: Review })
+  @ApiResponse({ status: 400, description: 'ID người dùng không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
+  @ResponseMessage('Lấy thông tin đánh giá thành công')
+  async findByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationDto): Promise<PaginatedResponse<Review>> {
+    if (!userId) {
+      throw new HttpException('ID người dùng không được để trống', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      return await this.reviewService.findByUserId(userId, paginationDto) as unknown as PaginatedResponse<Review>;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy đánh giá của người dùng', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Get('vendor/:vendorId')
   @Public()
   @ApiOperation({ summary: 'Lấy đánh giá theo ID nhà cung cấp' })
@@ -254,6 +276,37 @@ export class ReviewController {
         throw error;
       }
       throw new HttpException('Lỗi khi lấy đánh giá của nhà cung cấp', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('booking/:bookingId/average-rating')
+  @Public()
+  @ApiOperation({ summary: 'Lấy điểm đánh giá trung bình của gói dịch vụ' })
+  @ApiResponse({ status: 200, description: 'Điểm đánh giá trung bình', type: Number })
+  @ApiResponse({ status: 400, description: 'ID gói dịch vụ không hợp lệ' })
+  @ResponseMessage('Lấy điểm đánh giá trung bình thành công')
+  async getAverageRating(@Param('bookingId') bookingId: string): Promise<number> {
+    return await this.reviewService.getAverageRatingByBookingId(bookingId);
+  }
+
+  @Get(':id')
+  @Public()
+  @ApiOperation({ summary: 'Lấy đánh giá theo ID' })
+  @ApiResponse({ status: 200, description: 'Đánh giá đã được tìm thấy', type: Review })
+  @ApiResponse({ status: 400, description: 'ID đánh giá không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
+  @ResponseMessage('Lấy thông tin đánh giá thành công')
+  async findOne(@Param('id') id: string): Promise<Review> {
+    if (!id) {
+      throw new HttpException('ID đánh giá không được để trống', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      return await this.reviewService.findOne(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy thông tin đánh giá', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -345,34 +398,5 @@ export class ReviewController {
     }
   }
 
-  @Get('booking/:bookingId/average-rating')
-  @Public()
-  @ApiOperation({ summary: 'Lấy điểm đánh giá trung bình của gói dịch vụ' })
-  @ApiResponse({ status: 200, description: 'Điểm đánh giá trung bình', type: Number })
-  @ApiResponse({ status: 400, description: 'ID gói dịch vụ không hợp lệ' })
-  @ResponseMessage('Lấy điểm đánh giá trung bình thành công')
-  async getAverageRating(@Param('bookingId') bookingId: string): Promise<number> {
-    return await this.reviewService.getAverageRatingByBookingId(bookingId);
-  }
-
-  @Get(':id')
-  @Public()
-  @ApiOperation({ summary: 'Lấy đánh giá theo ID' })
-  @ApiResponse({ status: 200, description: 'Đánh giá đã được tìm thấy', type: Review })
-  @ApiResponse({ status: 400, description: 'ID đánh giá không hợp lệ' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy đánh giá' })
-  @ResponseMessage('Lấy thông tin đánh giá thành công')
-  async findOne(@Param('id') id: string): Promise<Review> {
-    if (!id) {
-      throw new HttpException('ID đánh giá không được để trống', HttpStatus.BAD_REQUEST);
-    }
-    try {
-      return await this.reviewService.findOne(id);
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException('Lỗi khi lấy thông tin đánh giá', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
+  
 }

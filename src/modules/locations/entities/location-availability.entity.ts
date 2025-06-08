@@ -6,8 +6,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { Location } from './location.entity';
+import { LocationWorkingDate } from './location-workingdate.entity';
+import { LocationSlotTime } from './location-slot-time.entity';
 
 @Entity('location_availability')
 export class LocationAvailability {
@@ -17,9 +20,6 @@ export class LocationAvailability {
   @ManyToOne(() => Location, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'location_id' })
   location: Location;
-
-  @Column({ type: 'date', nullable: false })
-  date: Date;
 
   @Column({ type: 'time', nullable: false })
   startTime: string;
@@ -35,4 +35,10 @@ export class LocationAvailability {
 
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
+
+  @OneToMany(() => LocationWorkingDate, (workingDate) => workingDate.locationAvailability)
+  workingDates: LocationWorkingDate[];
+
+  @OneToMany(() => LocationSlotTime, (slotTime) => slotTime.locationAvailability)
+  slotTimes: LocationSlotTime[];
 } 

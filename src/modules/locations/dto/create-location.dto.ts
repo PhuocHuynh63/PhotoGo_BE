@@ -2,17 +2,6 @@ import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsUUID, IsDate, IsB
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateLocationDto {
-  @IsUUID()
-  @IsOptional()
-  @ApiProperty({
-    example: '97004449-52d9-4a49-b071-ce5786f7645e',
-    description: 'ID của vendor',
-    required: false,
-    name: 'vendor_id',
-    title: 'Vendor Information'
-  })
-  vendor_id?: string;
-
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
@@ -91,52 +80,4 @@ export class CreateLocationDto {
     title: 'Coordinates'
   })
   longitude?: number;
-}
-
-export class CreateLocationAvailabilityDto {
-
-  @IsUUID()
-  @IsNotEmpty()
-  @ApiProperty({
-    example: '97004449-52d9-4a49-b071-ce5786f7645e',
-    description: 'ID của vị trí',
-    required: true,
-  })
-  locationId: string;
-  
-  @IsDate()
-  @IsNotEmpty()
-  @ApiProperty({
-    example: '2025-04-17',
-    description: 'Ngày của vị trí',
-    required: true,
-  })
-  date: Date;
-
-  @IsString()
-  @IsNotEmpty()
-  @ApiProperty({
-    example: '09:00',
-    description: 'Thời gian bắt đầu',
-    required: true,
-  })
-  startTime: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @ApiProperty({
-    example: '18:00',
-    description: 'Thời gian kết thúc',
-    required: true,
-  })
-  endTime: string;
-
-  @IsBoolean()
-  @IsOptional()
-  @ApiProperty({
-    example: true,
-    description: 'Trạng thái của vị trí',
-    required: false,
-  })
-  isAvailable?: boolean;
 }

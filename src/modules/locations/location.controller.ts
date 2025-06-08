@@ -14,7 +14,7 @@ import { SearchLocationDto } from './dto/search-location.dto';
 export class LocationController {
   constructor(private readonly locationService: LocationService) {}
 
-  @Post()
+  @Post(':vendor_id')
   @ApiOperation({ 
     summary: 'Tạo địa điểm mới (Protected)',
     description: 'Tạo một địa điểm mới với thông tin vendor và địa chỉ'
@@ -26,7 +26,6 @@ export class LocationController {
       example1: {
         summary: 'Tạo địa điểm với đầy đủ thông tin',
         value: {
-          vendor_id: '97004449-52d9-4a49-b071-ce5786f7645e',
           address: '321 Phạm Văn Đồng',
           district: 'Thủ Đức',
           ward: 'Linh Tây',
@@ -36,17 +35,6 @@ export class LocationController {
           longitude: 106.772400
         }
       },
-      example2: {
-        summary: 'Tạo địa điểm không có tọa độ',
-        value: {
-          vendor_id: '97004449-52d9-4a49-b071-ce5786f7645e',
-          address: '321 Phạm Văn Đồng',
-          district: 'Thủ Đức',
-          ward: 'Linh Tây',
-          city: 'Hồ Chí Minh',
-          province: 'Hồ Chí Minh'
-        }
-      }
     }
   })
   @ApiResponse({ status: 201, description: 'Địa điểm được tạo thành công', type: Location })
@@ -54,9 +42,9 @@ export class LocationController {
   @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy vendor' })
   @ResponseMessage('Tạo địa điểm thành công') 
-  async create(@Body() createLocationDto: CreateLocationDto): Promise<Location> {
+  async create(@Param('vendor_id') vendor_id: string, @Body() createLocationDto: CreateLocationDto): Promise<Location> {
     try {
-      return await this.locationService.create(createLocationDto);
+      return await this.locationService.create(vendor_id, createLocationDto);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -92,6 +80,28 @@ export class LocationController {
       }
       throw new HttpException('Lỗi khi lấy danh sách địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @Get('search')
+  @Public()
+  @ApiOperation({ summary: 'Tìm kiếm địa điểm' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách địa điểm tìm được',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Location' }
+        },
+        total: { type: 'number' }
+      }
+    }
+  })
+  @ResponseMessage('Tìm kiếm địa điểm thành công')
+  async searchLocations(@Query() searchDto: SearchLocationDto) {
+    return await this.locationService.searchLocations(searchDto);
   }
 
   @Public()
@@ -160,25 +170,5 @@ export class LocationController {
     }
   }
 
-  @Get('search')
-  @Public()
-  @ApiOperation({ summary: 'Tìm kiếm địa điểm' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Danh sách địa điểm tìm được',
-    schema: {
-      type: 'object',
-      properties: {
-        data: {
-          type: 'array',
-          items: { $ref: '#/components/schemas/Location' }
-        },
-        total: { type: 'number' }
-      }
-    }
-  })
-  @ResponseMessage('Tìm kiếm địa điểm thành công')
-  async searchLocations(@Query() searchDto: SearchLocationDto) {
-    return await this.locationService.searchLocations(searchDto);
-  }
+  
 }

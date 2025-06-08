@@ -45,7 +45,7 @@ export class CreateBookingDto {
   @IsOptional()
   @ApiProperty({
     description: 'Số tiền đặt cọc cho booking',
-    example: '100.00',
+    example: '30.00',
     required: false
   })
   depositAmount?: number;

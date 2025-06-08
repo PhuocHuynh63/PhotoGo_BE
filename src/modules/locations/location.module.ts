@@ -7,10 +7,20 @@ import { LocationService } from './location.service';
 import { LocationAvailabilityController } from './location-availability.controller';
 import { LocationAvailabilityService } from './location-availability.service';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { LocationWorkingDate } from './entities/location-workingdate.entity';
+import { LocationSlotTime } from './entities/location-slot-time.entity';
+import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Location, LocationAvailability, Vendor]),
+    TypeOrmModule.forFeature([
+      Location,
+      LocationAvailability,
+      Vendor,
+      LocationWorkingDate,
+      LocationSlotTime,
+      LocationSlotTimeWorkingDate,
+    ]),
   ],
   controllers: [LocationController, LocationAvailabilityController],
   providers: [LocationService, LocationAvailabilityService],
