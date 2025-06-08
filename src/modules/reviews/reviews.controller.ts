@@ -100,7 +100,7 @@ export class ReviewController {
           description: 'Danh sách hình ảnh đánh giá (tối đa 10 ảnh)'
         },
       },
-      required: ['rating', 'vendorId', 'bookingId', 'userId'],
+      required: ['rating', 'vendorId', 'userId'],
     },
   })
   @ResponseMessage('Tạo đánh giá thành công')
@@ -109,7 +109,7 @@ export class ReviewController {
     @UploadedFiles() files: { images?: Express.Multer.File[] },
   ): Promise<Review> {
     try {
-      if (!createReviewDto.userId || !createReviewDto.bookingId || !createReviewDto.vendorId) {
+      if (!createReviewDto.userId || !createReviewDto.vendorId) {
         throw new HttpException('Thiếu thông tin bắt buộc', HttpStatus.BAD_REQUEST);
       }
       if (!createReviewDto.rating || createReviewDto.rating < 1 || createReviewDto.rating > 5) {
