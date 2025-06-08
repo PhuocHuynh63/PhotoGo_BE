@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Param, Body, Query, ValidationPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WishlistService } from './wishlist.service';
 import { CreateWishlistDto } from './dto/create-wishlist.dto';
@@ -6,12 +6,22 @@ import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { UpdateWishlistDto } from './dto/update-wishlist.dto';
 import { Wishlist } from './entities/wishlist.entity';
 import { WishlistItem } from './entities/wishlist-item.entity';
+import { PaginationDto } from './dto/pagination.dto';
+import { FindByUserDto } from './dto/find-by-user.dto';
+import { Public } from 'src/decorator/custom';
 
 @ApiTags('Wishlists')
 @ApiBearerAuth('access-token')
 @Controller('wishlists')
 export class WishlistController {
   constructor(private readonly wishlistService: WishlistService) {}
+
+  @Post('items')
+  @ApiOperation({ summary: 'Thêm một mục vào danh sách mong muốn' })
+  @ApiResponse({ status: 201, description: 'Mục đã được thêm vào danh sách mong muốn thành công', type: WishlistItem })
+  async addWishlistItem(@Body(ValidationPipe) addWishlistItemDto: AddWishlistItemDto): Promise<WishlistItem> {
+    return await this.wishlistService.addWishlistItem(addWishlistItemDto);
+  }
 
   @Post(':user_id')
   @ApiOperation({ summary: 'Tạo danh sách mong muốn mới' })
@@ -20,21 +30,48 @@ export class WishlistController {
     return await this.wishlistService.createWishlist(userId);
   }
 
-  @Post('items')
-  @ApiOperation({ summary: 'Thêm một mục vào danh sách mong muốn' })
-  @ApiResponse({ status: 201, description: 'Mục đã được thêm vào danh sách mong muốn thành công', type: WishlistItem })
-  async addWishlistItem(@Body() addWishlistItemDto: AddWishlistItemDto): Promise<WishlistItem> {
-    return await this.wishlistService.addWishlistItem(addWishlistItemDto);
+  @Get()
+  @Public()
+  @ApiOperation({ summary: 'Lấy tất cả danh sách mong muốn' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách tất cả danh sách mong muốn', 
+    schema: {
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Wishlist' }
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            current: { type: 'number' },
+            pageSize: { type: 'number' },
+            total: { type: 'number' },
+            totalPages: { type: 'number' }
+          }
+        }
+      }
+    }
+  })
+  async findAllWishlists(@Query() paginationDto: PaginationDto) {
+    return await this.wishlistService.findAllWishlists(paginationDto);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Lấy tất cả danh sách mong muốn' })
-  @ApiResponse({ status: 200, description: 'Danh sách tất cả danh sách mong muốn', type: [Wishlist] })
-  async findAllWishlists(): Promise<Wishlist[]> {
-    return await this.wishlistService.findAllWishlists();
+  @Get('user')
+  @Public()
+  @ApiOperation({ summary: 'Tìm danh sách mong muốn theo userId' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách mong muốn của người dùng', 
+    type: Wishlist 
+  })
+  async findWishlistByUser(@Query(ValidationPipe) findByUserDto: FindByUserDto): Promise<Wishlist> {
+    return await this.wishlistService.findWishlistByUser(findByUserDto.userId);
   }
 
   @Get(':id/items')
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả các mục trong danh sách mong muốn' })
   @ApiResponse({ status: 200, description: 'Danh sách tất cả các mục trong danh sách mong muốn', type: [WishlistItem] })
   @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
@@ -44,6 +81,7 @@ export class WishlistController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy chi tiết của danh sách mong muốn' })
   @ApiResponse({ status: 200, description: 'Chi tiết của danh sách mong muốn', type: Wishlist })
   @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
@@ -55,7 +93,10 @@ export class WishlistController {
   @ApiOperation({ summary: 'Cập nhật danh sách mong muốn' })
   @ApiResponse({ status: 200, description: 'Danh sách mong muốn đã được cập nhật thành công', type: Wishlist })
   @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
-  async updateWishlist(@Param('id') id: string, @Body() updateWishlistDto: UpdateWishlistDto): Promise<Wishlist> {
+  async updateWishlist(
+    @Param('id') id: string, 
+    @Body(ValidationPipe) updateWishlistDto: UpdateWishlistDto
+  ): Promise<Wishlist> {
     return await this.wishlistService.updateWishlist(id, updateWishlistDto);
   }
 

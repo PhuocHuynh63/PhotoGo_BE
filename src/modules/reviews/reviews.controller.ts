@@ -10,6 +10,24 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ResponseMessage } from 'src/decorator/custom';
 import { Public } from 'src/decorator/custom';
 
+interface ReviewResponse {
+  id: string;
+  comment: string;
+  rating: number;
+  createdAt: Date;
+  user: {
+    id: string;
+    fullName: string;
+    avatarUrl: string;
+  };
+  vendor: {
+    id: string;
+    name: string;
+    logoUrl: string;
+  };
+  images: string[];
+}
+
 // Define the response type for findAll
 interface ReviewSummary {
   id: string;
@@ -265,7 +283,7 @@ export class ReviewController {
   async findByVendorId(
     @Param('vendorId') vendorId: string,
     @Query() filterDto: FilterReviewDto,
-  ): Promise<PaginatedResponse<Review>> {
+  ): Promise<PaginatedResponse<ReviewResponse>> {
     if (!vendorId) {
       throw new HttpException('ID nhà cung cấp không được để trống', HttpStatus.BAD_REQUEST);
     }

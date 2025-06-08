@@ -1092,30 +1092,51 @@ export class VendorService {
     });
   
     // Map vendors without filtering duplicates
-    const vendors = vendorData.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      description: row.description || '',
-      logo: row.logo || null,
-      banner: row.banner || null,
-      status: row.status,
-      slug: row.slug,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
-      reviewCount: parseInt(row.review_count) || 0,
-      minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
-      maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
-      subscriptionCount: parseInt(row.subscription_count) || 0,
-      isRemarkable: row.subscription_rank <= 3, // Vendor is remarkable if they are in top 3 by subscription count
-      locations: locationsByVendor.get(row.id) || [],
-      servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
-      category: row.category_id ? {
-        id: row.category_id,
-        name: row.category_name
-      } : null,
-      reviews: reviewsByVendor.get(row.id) || []
-    }));
+    const vendorMap = new Map();
+
+    vendorData.forEach((row: any) => {
+      if (!vendorMap.has(row.id)) {
+        vendorMap.set(row.id, {
+          id: row.id,
+          name: row.name,
+          description: row.description || '',
+          logo: row.logo || null,
+          banner: row.banner || null,
+          status: row.status,
+          slug: row.slug,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
+          reviewCount: parseInt(row.review_count) || 0,
+          minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
+          maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          subscriptionCount: parseInt(row.subscription_count) || 0,
+          isRemarkable: row.subscription_rank <= 3,
+          locations: [],
+          servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
+          category: row.category_id ? {
+            id: row.category_id,
+            name: row.category_name
+          } : null,
+          reviews: reviewsByVendor.get(row.id) || []
+        });
+      }
+      // Push location nếu có
+      if (row.location_id) {
+        vendorMap.get(row.id).locations.push({
+          id: row.location_id,
+          address: row.address || '',
+          district: row.district || '',
+          ward: row.ward || '',
+          city: row.city || '',
+          province: row.province || '',
+          latitude: row.latitude ? Number(parseFloat(row.latitude).toFixed(6)) : null,
+          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null
+        });
+      }
+    });
+
+    const vendors = Array.from(vendorMap.values());
   
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
   

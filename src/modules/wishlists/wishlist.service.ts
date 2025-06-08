@@ -6,6 +6,7 @@ import { WishlistItem } from './entities/wishlist-item.entity';
 import { CreateWishlistDto } from './dto/create-wishlist.dto';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { UpdateWishlistDto } from './dto/update-wishlist.dto';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class WishlistService {
@@ -57,9 +58,28 @@ export class WishlistService {
     return wishlist;
   }
 
-    async findAllWishlists(): Promise<Wishlist[]> {
-        return await this.wishlistRepository.find({ relations: ['items', 'items.serviceConcept'] });
-    }
+  async findAllWishlists(paginationDto: PaginationDto): Promise<{ data: Wishlist[]; pagination: any }> {
+    const { current = 1, pageSize = 10, sortBy = 'created_at', sortType = 'DESC' } = paginationDto;
+    
+    const [data, total] = await this.wishlistRepository.findAndCount({
+      relations: ['items', 'items.serviceConcept'],
+      skip: (current - 1) * pageSize,
+      take: pageSize,
+      order: {
+        [sortBy]: sortType
+      }
+    });
+
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize)
+      }
+    };
+  }
 
   async updateWishlist(id: string, updateWishlistDto: UpdateWishlistDto): Promise<Wishlist> {
     const wishlist = await this.wishlistRepository.findOne({ where: { id } });
@@ -83,12 +103,28 @@ export class WishlistService {
   }
   
   async deleteWishlistItem(id: string, itemId: string): Promise<void> {
-    const wishlistItem = await this.wishlistItemRepository.findOne({ where: { id }, relations: ['wishlist'] });
+    const wishlistItem = await this.wishlistItemRepository.findOne({ 
+      where: { id: itemId }, 
+      relations: ['wishlist'] 
+    });
 
     if (!wishlistItem) {
-      throw new NotFoundException(`Mục trong danh sách mong muốn với ID ${id} không tồn tại`);
+      throw new NotFoundException(`Mục trong danh sách mong muốn với ID ${itemId} không tồn tại`);
     }
 
     await this.wishlistItemRepository.remove(wishlistItem);
+  }
+
+  async findWishlistByUser(userId: string): Promise<Wishlist> {
+    const wishlist = await this.wishlistRepository.findOne({
+      where: { userId },
+      relations: ['items', 'items.serviceConcept']
+    });
+
+    if (!wishlist) {
+      throw new NotFoundException(`Không tìm thấy danh sách mong muốn cho người dùng với ID ${userId}`);
+    }
+
+    return wishlist;
   }
 }
