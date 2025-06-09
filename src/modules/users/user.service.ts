@@ -60,6 +60,7 @@ export class UserService {
   // }
   //#endregion create
 
+  //#region create
   async create(createAuthDto: CreateAuthDto): Promise<User> {
     try {
       const { passwordHash, ...userData } = createAuthDto;
@@ -107,7 +108,7 @@ export class UserService {
       await this.cartService.createCart(savedUser.id);
 
       // create wishlist for user
-      await this.wishlistService.createWishlist(savedUser.id);  
+      await this.wishlistService.createWishlist(savedUser.id);
 
       return savedUser;
     } catch (error) {
@@ -115,6 +116,7 @@ export class UserService {
       throw error;
     }
   }
+  //#endregion create
 
   //#region uploadImage
   async uploadImage(id: string, file: Express.Multer.File): Promise<User> {
@@ -147,11 +149,11 @@ export class UserService {
       }
       updateUserDto.oldPasswordHash = user.passwordHash; // Lưu mật khẩu cũ để so sánh
       // Mã hóa mật khẩu mới
-      updateUserDto.password = await hashPasswordHelper(updateUserDto.password);
+      user.passwordHash = await hashPasswordHelper(updateUserDto.password);
     }
     // ||=====================END========================||//
     //#endregion
-    
+
     // Cập nhật thông tin user
     Object.assign(user, updateUserDto);
 
