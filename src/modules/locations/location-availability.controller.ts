@@ -229,24 +229,6 @@ export class LocationAvailabilityController {
     }
   }
 
-  @Patch(':locationAvailabilityId/slot-time/:slotTimeId')
-  @ApiOperation({ summary: 'Cập nhật slot time' })
-  @ApiResponse({ status: 200, description: 'Slot time đã được cập nhật thành công' })
-  async updateSlotTime(@Param('locationAvailabilityId') locationAvailabilityId: string, @Param('slotTimeId') slotTimeId: string, @Body() updateLocationSlotTimeDto: UpdateLocationSlotTimeDto): Promise<LocationSlotTime> {
-    try {
-      if (!isUUID(locationAvailabilityId) || !isUUID(slotTimeId)) {
-        throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
-      }
-      return await this.locationAvailabilityService.updateSlotTime(locationAvailabilityId, slotTimeId, updateLocationSlotTimeDto);
-    } catch (error) {
-      this.logger.error(`Lỗi cập nhật thời gian làm việc: ${error.message}`);
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException('Lỗi cập nhật thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
   @Delete(':locationAvailabilityId/slot-time/:slotTimeId')
   @ApiOperation({ summary: 'Xóa slot time' })
   @ApiResponse({ status: 200, description: 'Slot time đã được xóa thành công' })
@@ -275,6 +257,24 @@ export class LocationAvailabilityController {
     } catch (error) {
       this.logger.error(`Lỗi tạo ngày làm việc: ${error.message}`);
       throw new HttpException('Lỗi tạo ngày làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Patch(':workingDateId/slot-time/:slotTimeId')
+  @ApiOperation({ summary: 'Cập nhật slot time' })
+  @ApiResponse({ status: 200, description: 'Slot time đã được cập nhật thành công' })
+  async updateSlotTime(@Param('workingDateId') workingDateId: string, @Param('slotTimeId') slotTimeId: string, @Body() updateLocationSlotTimeDto: UpdateLocationSlotTimeDto): Promise<LocationSlotTime> {
+    try {
+      if (!isUUID(workingDateId) || !isUUID(slotTimeId)) {
+        throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
+      }
+      return await this.locationAvailabilityService.updateSlot(workingDateId, slotTimeId, updateLocationSlotTimeDto);
+    } catch (error) {
+      this.logger.error(`Lỗi cập nhật thời gian làm việc: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi cập nhật thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }

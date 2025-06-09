@@ -67,6 +67,27 @@ export class LocationAvailabilityService {
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
   ) {}
 
+  // Helper function to generate dates for the current week
+  private generateWeekDates(dateStr: string): Date[] {
+    const dates: Date[] = [];
+    // Convert DD/MM/YYYY to Date object
+    const [day, month, year] = dateStr.split('/');
+    const currentDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    
+    // Set to start of week (Monday)
+    const dayOfWeek = currentDate.getDay();
+    const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
+    currentDate.setDate(diff);
+    
+    // Generate dates for the week
+    for (let i = 0; i < 7; i++) {
+      dates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return dates;
+  }
+
   async create(locationId: string, createLocationTimeScheduleDto: CreateLocationTimeScheduleDto): Promise<LocationAvailability> {
     const location = await this.locationRepository.findOne({
       where: { id: locationId },
@@ -93,29 +114,57 @@ export class LocationAvailabilityService {
 
     const savedAvailability = await this.locationAvailabilityRepository.save(availability);
 
-    console.log('Date input:', createLocationTimeScheduleDto.date);
-    if (typeof createLocationTimeScheduleDto.date === 'string') {
-      console.log('Date after convert:', this.convertDateFormat(createLocationTimeScheduleDto.date));
+    // Generate dates for the week using DD/MM/YYYY format
+    const weekDates = this.generateWeekDates(createLocationTimeScheduleDto.date);
+    
+    // Create working dates for each day in the week
+    const workingDates = await Promise.all(weekDates.map(async (date) => {
+      const workingDate = this.locationWorkingDateRepository.create({
+        date,
+        locationAvailability: savedAvailability,
+      });
+      return await this.locationWorkingDateRepository.save(workingDate);
+    }));
+
+    // Create slot times
+    const slotTimes: LocationSlotTime[] = [];
+    const startTime = new Date(`2000-01-01T${createLocationTimeScheduleDto.startTime}`);
+    const endTime = new Date(`2000-01-01T${createLocationTimeScheduleDto.endTime}`);
+    const duration = 60; // 60 minutes per slot
+    let currentTime = startTime;
+    let slotNumber = 1;
+
+    while (currentTime < endTime) {
+      const slotEndTime = new Date(currentTime.getTime() + duration * 60000);
+      if (slotEndTime > endTime) break;
+
+      const slotTime = this.locationSlotTimeRepository.create({
+        locationAvailabilityId: savedAvailability.id,
+        slot: slotNumber,
+        startSlotTime: currentTime.toTimeString().slice(0, 5),
+        endSlotTime: slotEndTime.toTimeString().slice(0, 5),
+        isStrictTimeBlocking: true,
+      });
+
+      const savedSlotTime = await this.locationSlotTimeRepository.save(slotTime);
+
+      // Create slot time working date relationships for each working date
+      for (const workingDate of workingDates) {
+        await this.locationSlotTimeWorkingDateRepository.save({
+          slotTimeId: savedSlotTime.id,
+          workingDateId: workingDate.id,
+          maxParallelBookings: 1
+        });
+      }
+
+      slotTimes.push(savedSlotTime);
+      currentTime = slotEndTime;
+      slotNumber++;
     }
-
-    // Convert date from DD/MM/YYYY to YYYY-MM-DD if it's a string
-    const workingDate = this.locationWorkingDateRepository.create({
-      date: typeof createLocationTimeScheduleDto.date === 'string' 
-        ? this.convertDateFormat(createLocationTimeScheduleDto.date)
-        : createLocationTimeScheduleDto.date,
-      locationAvailability: savedAvailability,
-    });
-
-    const savedWorkingDate = await this.locationWorkingDateRepository.save(workingDate);
-
-    const slotTimes = await this.createSlotTime(savedAvailability.id, {
-      isStrictTimeBlocking: true,
-      maxParallelBookings: 1,
-    });
 
     return {
       ...savedAvailability,
-      workingDates: [this.formatLocationWorkingDates(savedWorkingDate)],
+      workingDates: workingDates.map(date => this.formatLocationWorkingDates(date)),
       slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
     };
   }
@@ -565,38 +614,26 @@ export class LocationAvailabilityService {
   }
 
   // update slot time
-  async updateSlotTime(locationAvailabilityId: string, slotTimeId: string, updateLocationSlotTimeDto: UpdateLocationSlotTimeDto): Promise<LocationSlotTime> {
-    const availability = await this.locationAvailabilityRepository.findOne({
-      where: { id: locationAvailabilityId },
+  async updateSlot(workingDateId: string, slotTimeId: string, updateLocationSlotTimeDto: UpdateLocationSlotTimeDto): Promise<LocationSlotTime> {
+    const working = await this.locationSlotTimeWorkingDateRepository.findOne({
+      where: { slotTimeId, workingDateId },
     });
 
-    if (!availability) {
-      throw new NotFoundException('Lịch làm việc không tồn tại');
+    if (!working) {
+      throw new NotFoundException('Không tìm thấy slot time working date');
     }
 
     const slotTime = await this.locationSlotTimeRepository.findOne({
-      where: { id: slotTimeId, locationAvailabilityId },
+      where: { id: slotTimeId },
     });
 
-    if (!slotTime) {
-      throw new NotFoundException('Không tìm thấy slot time');
-    }
 
     // Check if we need to update isStrictTimeBlocking in slot time table
     if (updateLocationSlotTimeDto.isStrictTimeBlocking !== undefined) {
-      // If setting to true, we need to check if there are any maxParallel > 1 in slot time working date
       if (updateLocationSlotTimeDto.isStrictTimeBlocking) {
-        const slotTimeWorkingDates = await this.locationSlotTimeWorkingDateRepository.find({
-          where: { slotTimeId }
-        });
-
-        const hasMaxParallelGreaterThanOne = slotTimeWorkingDates.some(
-          stwd => stwd.maxParallelBookings > 1
-        );
-
-        if (hasMaxParallelGreaterThanOne) {
-          throw new BadRequestException('Không thể set strict time blocking khi đã có max parallel > 1');
-        }
+        working.maxParallelBookings = 1;
+        await this.locationSlotTimeWorkingDateRepository.save(working);
+        return this.formatSlotTimes(slotTime);
       }
 
       // Update isStrictTimeBlocking in slot time table
@@ -621,7 +658,7 @@ export class LocationAvailabilityService {
 
       // Update maxParallel in slot time working date table
       await this.locationSlotTimeWorkingDateRepository.update(
-        { slotTimeId },
+        { slotTimeId, workingDateId },
         { maxParallelBookings: updateLocationSlotTimeDto.maxParallelBookings }
       );
     }
