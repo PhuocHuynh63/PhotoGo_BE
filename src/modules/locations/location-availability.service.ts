@@ -171,10 +171,12 @@ export class LocationAvailabilityService {
 
   async findAll(query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
     const actualPageSize = Number(pageSize) * Number(pageSize);
@@ -228,10 +230,12 @@ export class LocationAvailabilityService {
 
     return {
       data: formattedData,
-      current: Number(current),
-      pageSize: Number(pageSize),
-      totalPage: Math.ceil(total / Number(pageSize)),
-      totalItem: total,
+      pagination: {
+        current: Number(current),
+        pageSize: Number(pageSize),
+        totalPage: Math.ceil(total / Number(pageSize)),
+        totalItem: total,
+      }
     };
   }
 
@@ -315,13 +319,23 @@ export class LocationAvailabilityService {
     await this.locationAvailabilityRepository.remove(availability);
   }
 
-  async findByLocationId(query: FindLocationAvailabilityDto, locationId: string): Promise<{
+  async findByLocationId(locationId: string, query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
+    // Check if location exists
+    const locationAvailability = await this.locationAvailabilityRepository.findOne({
+      where: { location: { id: locationId } },
+    });
+    if (!locationAvailability) {
+      throw new NotFoundException('Vị trí không tồn tại');
+    }
+
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
     const actualPageSize = Number(pageSize) * Number(pageSize);
     const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
@@ -331,7 +345,7 @@ export class LocationAvailabilityService {
       .where('location_availability.location_id = :locationId', { locationId })
       .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
 
-    if (isAvailable) {
+    if (isAvailable !== undefined) {
       queryBuilder.where('location_availability.isAvailable = :isAvailable', { isAvailable });
     }
 
@@ -378,19 +392,23 @@ export class LocationAvailabilityService {
 
     return {
       data: formattedData,
-      current: Number(current),
-      pageSize: Number(pageSize),
-      totalPage,
-      totalItem: total,
+      pagination: {
+        current: Number(current),
+        pageSize: Number(pageSize),
+        totalPage,
+        totalItem: total,
+      }
     };
   }
 
   async findByDateRange(startDate: string, endDate: string, query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
     const actualPageSize = Number(pageSize) * Number(pageSize);
@@ -473,19 +491,23 @@ export class LocationAvailabilityService {
 
     return {
       data: formattedData,
-      current: Number(current),
-      pageSize: Number(pageSize),
-      totalPage,
-      totalItem: total,
+      pagination: {
+        current: Number(current),
+        pageSize: Number(pageSize),
+        totalPage,
+        totalItem: total,
+      }
     };
   }
 
   async findByDate(date: string, query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
     const actualPageSize = Number(pageSize) * Number(pageSize);
@@ -547,10 +569,12 @@ export class LocationAvailabilityService {
 
     return {
       data: formattedData,
-      current: Number(current),
-      pageSize: Number(pageSize),
-      totalPage,
-      totalItem: total,
+      pagination: {
+        current: Number(current),
+        pageSize: Number(pageSize),
+        totalPage,
+        totalItem: total,
+      }
     };
   }
 

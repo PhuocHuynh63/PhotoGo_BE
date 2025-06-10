@@ -41,10 +41,12 @@ export class LocationAvailabilityController {
   @ApiResponse({ status: 200, description: 'Trả về tất cả thời gian làm việc' })
   async findAll(@Query() query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     try {
       return await this.locationAvailabilityService.findAll(query);
@@ -62,10 +64,12 @@ export class LocationAvailabilityController {
     @Query() query: FindLocationDateRangeDto
   ): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     if (new Date(query.endDate) < new Date(query.startDate)) {
       throw new HttpException('Ngày kết thúc phải lớn hơn ngày bắt đầu', HttpStatus.BAD_REQUEST);
@@ -84,10 +88,12 @@ export class LocationAvailabilityController {
   @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ngày' })
   async findByDate(@Param('date') date: string, @Query() query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     try {
       return await this.locationAvailabilityService.findByDate(date, query);
@@ -98,20 +104,23 @@ export class LocationAvailabilityController {
   }
 
   @Get('location/:locationId')
+  @Public()
   @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID vị trí' })
   @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ID vị trí' })
   async findByLocationId(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
-    current: number;
-    pageSize: number;
-    totalPage: number;
-    totalItem: number;
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
   }> {
     try {
       if (!isUUID(locationId)) {
         throw new HttpException('ID vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
       }
-      return await this.locationAvailabilityService.findByLocationId(query, locationId);
+      return await this.locationAvailabilityService.findByLocationId(locationId, query);
     } catch (error) {
       this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
       if (error instanceof HttpException) {

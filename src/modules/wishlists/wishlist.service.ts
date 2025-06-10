@@ -8,6 +8,14 @@ import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { UpdateWishlistDto } from './dto/update-wishlist.dto';
 import { PaginationDto } from './dto/pagination.dto';
 
+interface TransformedWishlist extends Omit<Wishlist, 'items'> {
+  items: Array<Omit<WishlistItem, 'serviceConcept'> & {
+    serviceConcept: Omit<NonNullable<WishlistItem['serviceConcept']>, 'images'> & {
+      images: string[];
+    } | null;
+  }>;
+}
+
 @Injectable()
 export class WishlistService {
   constructor(
@@ -20,15 +28,15 @@ export class WishlistService {
   async createWishlist(userId: string): Promise<Wishlist> {
     // Kiểm tra xem user đã có wishlist chưa
     const existingWishlist = await this.wishlistRepository.findOne({
-      where: { userId },
-      relations: ['items'],
+      where: { user: { id: userId } },
+      relations: ['items', 'user'],
     });
 
     if (existingWishlist) {
       return existingWishlist;
     }
 
-    const wishlist = this.wishlistRepository.create({ userId });
+    const wishlist = this.wishlistRepository.create({ user: { id: userId } });
     return await this.wishlistRepository.save(wishlist);
   }
 
@@ -58,11 +66,17 @@ export class WishlistService {
     return wishlist;
   }
 
-  async findAllWishlists(paginationDto: PaginationDto): Promise<{ data: Wishlist[]; pagination: any }> {
+  async findAllWishlists(paginationDto: PaginationDto): Promise<{ data: TransformedWishlist[]; pagination: any }> {
     const { current = 1, pageSize = 10, sortBy = 'created_at', sortType = 'DESC' } = paginationDto;
     
     const [data, total] = await this.wishlistRepository.findAndCount({
-      relations: ['items', 'items.serviceConcept'],
+      relations: {
+        items: {
+          serviceConcept: {
+            images: true
+          }
+        }
+      },
       skip: (current - 1) * pageSize,
       take: pageSize,
       order: {
@@ -70,8 +84,20 @@ export class WishlistService {
       }
     });
 
+    // Transform the data to only include image URLs
+    const transformedData = data.map(wishlist => ({
+      ...wishlist,
+      items: wishlist.items.map(item => ({
+        ...item,
+        serviceConcept: item.serviceConcept ? {
+          ...item.serviceConcept,
+          images: item.serviceConcept.images.map(img => img.imageUrl)
+        } : null
+      }))
+    })) as TransformedWishlist[];
+
     return {
-      data,
+      data: transformedData,
       pagination: {
         current,
         pageSize,
@@ -115,16 +141,45 @@ export class WishlistService {
     await this.wishlistItemRepository.remove(wishlistItem);
   }
 
-  async findWishlistByUser(userId: string): Promise<Wishlist> {
-    const wishlist = await this.wishlistRepository.findOne({
-      where: { userId },
-      relations: ['items', 'items.serviceConcept']
+  async findWishlistByUser(userId: string, paginationDto: PaginationDto): Promise<{ data: TransformedWishlist[]; pagination: any }> {
+    const { current = 1, pageSize = 10, sortBy = 'created_at', sortType = 'DESC' } = paginationDto;
+    
+    const [data, total] = await this.wishlistRepository.findAndCount({
+      where: { user: { id: userId } },
+      relations: {
+        user: true,
+        items: {
+          serviceConcept: {
+            images: true
+          }
+        }
+      },
+      skip: (current - 1) * pageSize,
+      take: pageSize,
+      order: {
+        [sortBy]: sortType
+      }
     });
 
-    if (!wishlist) {
-      throw new NotFoundException(`Không tìm thấy danh sách mong muốn cho người dùng với ID ${userId}`);
-    }
+    const transformedData = data.map(wishlist => ({
+      ...wishlist,
+      items: wishlist.items.map(item => ({
+        ...item,
+        serviceConcept: item.serviceConcept ? {
+          ...item.serviceConcept,
+          images: item.serviceConcept.images.map(img => img.imageUrl)
+        } : null
+      }))
+    })) as TransformedWishlist[];
 
-    return wishlist;
+    return {
+      data: transformedData,
+      pagination: {
+        current,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize)
+      }
+    };
   }
 }

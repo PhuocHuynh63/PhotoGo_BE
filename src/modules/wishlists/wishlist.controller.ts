@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Param, Body, Query, ValidationPipe } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Param, Body, Query, ValidationPipe, NotFoundException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WishlistService } from './wishlist.service';
 import { CreateWishlistDto } from './dto/create-wishlist.dto';
@@ -7,7 +7,6 @@ import { UpdateWishlistDto } from './dto/update-wishlist.dto';
 import { Wishlist } from './entities/wishlist.entity';
 import { WishlistItem } from './entities/wishlist-item.entity';
 import { PaginationDto } from './dto/pagination.dto';
-import { FindByUserDto } from './dto/find-by-user.dto';
 import { Public } from 'src/decorator/custom';
 
 @ApiTags('Wishlists')
@@ -54,11 +53,38 @@ export class WishlistController {
       }
     }
   })
-  async findAllWishlists(@Query() paginationDto: PaginationDto) {
+  async findAllWishlists(@Query() paginationDto: PaginationDto): Promise<{
+    data: {
+      id: string;
+      items: {
+        id: string;
+        wishlistId: string;
+        serviceConceptId: string;
+        serviceConcept: {
+          id: string;
+          servicePackageId: string;
+          name: string;
+          description: string;
+          images: string[];
+          price: number;
+          duration: number;
+          status: string;
+          createdAt: Date;
+          updatedAt: Date;
+        } | null;
+      }[];
+    }[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
     return await this.wishlistService.findAllWishlists(paginationDto);
   }
 
-  @Get('user')
+  @Get(':userId')
   @Public()
   @ApiOperation({ summary: 'Tìm danh sách mong muốn theo userId' })
   @ApiResponse({ 
@@ -66,27 +92,42 @@ export class WishlistController {
     description: 'Danh sách mong muốn của người dùng', 
     type: Wishlist 
   })
-  async findWishlistByUser(@Query(ValidationPipe) findByUserDto: FindByUserDto): Promise<Wishlist> {
-    return await this.wishlistService.findWishlistByUser(findByUserDto.userId);
-  }
-
-  @Get(':id/items')
-  @Public()
-  @ApiOperation({ summary: 'Lấy tất cả các mục trong danh sách mong muốn' })
-  @ApiResponse({ status: 200, description: 'Danh sách tất cả các mục trong danh sách mong muốn', type: [WishlistItem] })
-  @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
-  async findWishlistItems(@Param('id') id: string): Promise<WishlistItem[]> {
-    const wishlist = await this.wishlistService.findWishlistById(id);
-    return wishlist.items;
-  }
-
-  @Get(':id')
-  @Public()
-  @ApiOperation({ summary: 'Lấy chi tiết của danh sách mong muốn' })
-  @ApiResponse({ status: 200, description: 'Chi tiết của danh sách mong muốn', type: Wishlist })
-  @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
-  async findWishlistById(@Param('id') id: string): Promise<Wishlist> {
-    return await this.wishlistService.findWishlistById(id);
+  async findWishlistByUser(
+    @Param('userId') userId: string, 
+    @Query() paginationDto: PaginationDto
+  ): Promise<{
+    data: {
+      id: string;
+      items: {
+        id: string;
+        wishlistId: string;
+        serviceConceptId: string;
+        serviceConcept: {
+          id: string;
+          servicePackageId: string;
+          name: string;
+          description: string;
+          images: string[];
+          price: number;
+          duration: number;
+          status: string;
+          createdAt: Date;
+          updatedAt: Date;
+        } | null;
+      }[];
+    }[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    try {
+      return await this.wishlistService.findWishlistByUser(userId, paginationDto);
+    } catch (error) {
+      throw new NotFoundException(error.message);
+    }
   }
 
   @Put(':id')
@@ -114,5 +155,24 @@ export class WishlistController {
   @ApiResponse({ status: 404, description: 'Danh sách mong muốn hoặc mục không tồn tại' })
   async deleteWishlistItem(@Param('id') id: string, @Param('itemId') itemId: string): Promise<void> {
     return await this.wishlistService.deleteWishlistItem(id, itemId);
+  }
+
+  @Get(':id/items')
+  @Public()
+  @ApiOperation({ summary: 'Lấy tất cả các mục trong danh sách mong muốn' })
+  @ApiResponse({ status: 200, description: 'Danh sách tất cả các mục trong danh sách mong muốn', type: [WishlistItem] })
+  @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
+  async findWishlistItems(@Param('id') id: string): Promise<WishlistItem[]> {
+    const wishlist = await this.wishlistService.findWishlistById(id);
+    return wishlist.items;
+  }
+
+  @Get(':id')
+  @Public()
+  @ApiOperation({ summary: 'Lấy chi tiết của danh sách mong muốn' })
+  @ApiResponse({ status: 200, description: 'Chi tiết của danh sách mong muốn', type: Wishlist })
+  @ApiResponse({ status: 404, description: 'Danh sách mong muốn không tồn tại' })
+  async findWishlistById(@Param('id') id: string): Promise<Wishlist> {
+    return await this.wishlistService.findWishlistById(id);
   }
 }
