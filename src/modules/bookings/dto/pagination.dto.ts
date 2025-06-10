@@ -5,6 +5,7 @@ export class PaginationDto {
   @ApiProperty({
     description: 'Số trang hiện tại',
     default: 1,
+    required: false,
   })
   @IsNumber()
   @IsOptional()
@@ -14,6 +15,7 @@ export class PaginationDto {
   @ApiProperty({
     description: 'Số lượng item trên mỗi trang',
     default: 10,
+    required: false,
   })
   @IsNumber()
   @IsOptional()
@@ -24,6 +26,7 @@ export class PaginationDto {
     description: 'Sắp xếp theo trường nào',
     enum: ['createdAt', 'updatedAt', 'date', 'time', 'status', 'sourceType', 'sourceId', 'depositAmount'],
     default: 'createdAt',
+    required: false,
   })
   @IsString()
   @IsOptional()
@@ -33,6 +36,7 @@ export class PaginationDto {
     description: 'Sắp xếp theo hướng nào',
     enum: ['ASC', 'DESC'],
     default: 'DESC',
+    required: false,
   })
   @IsString()
   @IsOptional()

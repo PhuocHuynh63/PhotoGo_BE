@@ -12,6 +12,7 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { ResponseMessage } from 'src/decorator/custom';
 import { PaymentCallbackDto } from './dto/payment-callback.dto';
 import { Public } from '../../decorator/custom';
+import { PaginationDto } from './dto/pagination.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth('access-token')
@@ -38,13 +39,22 @@ export class PaymentController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả thanh toán' })
   @ApiResponse({ status: 200, description: 'Danh sách thanh toán', type: [Payment] })
   @ApiResponse({ status: 400, description: 'Tham số tìm kiếm không hợp lệ' })
   @ResponseMessage('Lấy danh sách thanh toán thành công')
-  async findAll(@Query() query: FindAllPaymentsDto): Promise<Payment[]> {
+  async findAll(@Query() paginationDto: PaginationDto): Promise<{
+    data: Payment[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
     try {
-      return await this.paymentService.findAll(query);
+      return await this.paymentService.findAll(paginationDto);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -54,18 +64,19 @@ export class PaymentController {
   }  
 
   @Get('/invoice/:invoiceId')
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách thanh toán của hóa đơn' })
   @ApiResponse({ status: 200, description: 'Danh sách thanh toán của hóa đơn', type: [Payment] })
   @ApiResponse({ status: 400, description: 'ID hóa đơn không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
   @ResponseMessage('Lấy danh sách thanh toán của hóa đơn thành công')
-  async getPaymentsByInvoice(@Param('invoiceId') invoiceId: string): Promise<Payment[]> {
+  async getPaymentsByInvoice(@Param('invoiceId') invoiceId: string): Promise<Payment> {
     if (!invoiceId) {
       throw new HttpException('ID hóa đơn không được để trống', HttpStatus.BAD_REQUEST);
     }
 
     try {
-      return await this.paymentService.findAll({ invoiceId });
+      return await this.paymentService.findOne(invoiceId);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

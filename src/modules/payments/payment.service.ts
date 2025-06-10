@@ -15,6 +15,7 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { BookingHistory } from '../bookings/entities/booking-history.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { PaymentCallbackDto } from './dto/payment-callback.dto';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class PaymentService {
@@ -79,24 +80,37 @@ export class PaymentService {
     return await this.paymentRepository.save(payment);
   }
 
-  async findAll(query: FindAllPaymentsDto): Promise<Payment[]> {
+  async findAll(paginationDto: PaginationDto): Promise<{
+    data: Payment[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = paginationDto;
+    const skip = (current - 1) * pageSize;
     const qb = this.paymentRepository.createQueryBuilder('payment')
       .leftJoinAndSelect('payment.invoice', 'invoice')
       .leftJoinAndSelect('invoice.booking', 'booking')
       .leftJoinAndSelect('booking.user', 'user');
 
-    if (query.invoiceId) {
-      qb.andWhere('payment.invoiceId = :invoiceId', { invoiceId: query.invoiceId });
-    }
+    qb.orderBy(`payment.${sortBy}`, sortDirection as 'DESC' | 'ASC')
+      .skip(skip)
+      .take(pageSize);
 
-    if (query.status) {
-      qb.andWhere('payment.status = :status', { status: query.status });
-    }
+    const [data, total] = await qb.getManyAndCount();
 
-    // Sort by created_at desc
-    qb.orderBy('payment.created_at', 'DESC');
-
-    return await qb.getMany();
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total
+      }
+    };
   }
 
   async findOne(id: string): Promise<Payment> {

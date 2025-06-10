@@ -7,7 +7,7 @@ import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } 
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { SearchLocationDto } from './dto/search-location.dto';
-
+import { PaginationDto } from './dto/pagination.dto';
 @ApiTags('Locations')
 @Controller('locations')
 @ApiBearerAuth('access-token')
@@ -104,15 +104,15 @@ export class LocationController {
     return await this.locationService.searchLocations(searchDto);
   }
 
-  @Get('userLocation/:latitude/:longitude')
+  @Get(':vendor_id/:latitude/:longitude')
   @Public()
   @ApiOperation({ summary: 'Lấy địa điểm gần nhất theo tọa độ' })
   @ApiResponse({ status: 200, description: 'Địa điểm được tìm thấy', type: Location })
   @ApiResponse({ status: 400, description: 'Tọa độ không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy địa điểm' })
   @ResponseMessage('Lấy địa điểm gần nhất thành công')
-  async getUserLocation(@Param('latitude') latitude: string, @Param('longitude') longitude: string) {
-    return await this.locationService.getUserLocation(Number(latitude), Number(longitude));
+  async getUserLocation(@Param('vendor_id') vendor_id: string, @Param('latitude') latitude: string, @Param('longitude') longitude: string, @Query() paginationDto: PaginationDto) {
+    return await this.locationService.getUserLocation(vendor_id, Number(latitude), Number(longitude), paginationDto);
   }
 
   @Public()

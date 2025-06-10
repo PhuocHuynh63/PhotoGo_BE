@@ -8,6 +8,9 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { Not } from 'typeorm';
 import { SearchLocationDto } from './dto/search-location.dto';
+import { VendorStatus } from 'src/constants/vendor.enum';
+import { DataSource } from 'typeorm';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class LocationService {
@@ -16,6 +19,7 @@ export class LocationService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
+    private readonly dataSource: DataSource,
   ) { }
 
   //#region create
@@ -268,29 +272,128 @@ export class LocationService {
   }
 
   //#region getUserLocation
-  async getUserLocation(latitude: number, longitude: number) {
-    const result = await this.locationRepository
-      .createQueryBuilder('location')
-      .addSelect(`
-        (
-          6371 * acos(
-            cos(radians(:lat)) * cos(radians(location.latitude)) *
-            cos(radians(location.longitude) - radians(:lng)) +
-            sin(radians(:lat)) * sin(radians(location.latitude))
-          )
-        )
-      `, 'distance')
-      .setParameters({ lat: latitude, lng: longitude })
-      .orderBy('distance', 'ASC')
-      .limit(1)
-      .getRawAndEntities();
+  async getUserLocation(vendor_id: string, latitude: number, longitude: number, paginationDto: PaginationDto) {
+    const { current, pageSize, sortBy, sortDirection } = paginationDto;
 
-    const location = result.entities[0] || null;
-    const distance = result.raw[0]?.distance !== undefined ? Number(result.raw[0].distance) : null;
+    const currentPage = current ? Number(current) : 1;
+    const limit = pageSize ? Number(pageSize) : 10;
+    const skip = (currentPage - 1) * limit;
 
-    return location
-      ? { ...location, distance }
-      : null;
+    // Check if vendor exists and has locations
+    const vendor = await this.vendorRepository.findOne({
+      where: { id: vendor_id, status: VendorStatus.ACTIVE },
+      relations: ['locations']
+    });
+
+    if (!vendor) {
+      throw new NotFoundException(`Không tìm thấy vendor với ID ${vendor_id}`);
+    }
+
+    if (!vendor.locations || vendor.locations.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize: limit,
+          totalPage: 0,
+          totalItem: 0
+        }
+      };
+    }
+
+    // Query to get total count of locations for this vendor
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM locations l
+      WHERE l.vendor_id = $1
+      AND l.latitude IS NOT NULL 
+      AND l.longitude IS NOT NULL
+    `;
+
+    // Main query to get locations with distance calculation
+    const query = `
+      WITH vendor_locations AS (
+        SELECT 
+          v.id as vendor_id,
+          v.name as vendor_name,
+          v.logo as vendor_logo,
+          l.id as location_id,
+          l.address,
+          l.district,
+          l.ward,
+          l.city,
+          l.province,
+          l.latitude,
+          l.longitude,
+          (
+            6371 * acos(
+              cos(radians($2)) * 
+              cos(radians(l.latitude)) * 
+              cos(radians(l.longitude) - radians($3)) + 
+              sin(radians($2)) * 
+              sin(radians(l.latitude))
+            )
+          ) as distance
+        FROM vendors v
+        JOIN locations l ON l.vendor_id = v.id
+        WHERE v.id = $1
+        AND v.status = 'hoạt động'
+        AND l.latitude IS NOT NULL 
+        AND l.longitude IS NOT NULL
+      )
+      SELECT 
+        vendor_id,
+        vendor_name,
+        vendor_logo,
+        location_id,
+        address,
+        district,
+        ward,
+        city,
+        province,
+        latitude,
+        longitude,
+        ROUND(distance::numeric, 2) as distance
+      FROM vendor_locations
+      ORDER BY distance ${sortDirection === 'desc' ? 'DESC' : 'ASC'}
+      LIMIT $4 OFFSET $5
+    `;
+
+    // Execute both queries
+    const [locations, totalResult] = await Promise.all([
+      this.dataSource.query(query, [vendor_id, latitude, longitude, limit, skip]),
+      this.dataSource.query(countQuery, [vendor_id])
+    ]);
+
+    const totalItem = Number(totalResult[0].total);
+    const totalPage = Math.ceil(totalItem / limit);
+
+    return {
+      data: locations.map(loc => ({
+        vendor: {
+          id: loc.vendor_id,
+          name: loc.vendor_name,
+          logo: loc.vendor_logo
+        },
+        location: {
+          id: loc.location_id,
+          address: loc.address,
+          district: loc.district,
+          ward: loc.ward,
+          city: loc.city,
+          province: loc.province,
+          latitude: loc.latitude,
+          longitude: loc.longitude
+        },
+        distance: loc.distance // Khoảng cách tính bằng km
+      })),
+      pagination: {
+        current: currentPage,
+        pageSize: limit,
+        totalPage,
+        totalItem
+      }
+    };
   }
   //#endregion getUserLocation
 }

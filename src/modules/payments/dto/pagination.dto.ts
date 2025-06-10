@@ -24,7 +24,7 @@ export class PaginationDto {
 
   @ApiProperty({
     description: 'Sắp xếp theo trường nào',
-    enum: ['createdAt'],
+    enum: ['createdAt','amount'],
     default: 'createdAt',
     required: false,
   })

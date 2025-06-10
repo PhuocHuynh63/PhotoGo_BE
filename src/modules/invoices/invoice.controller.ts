@@ -56,7 +56,7 @@ export class InvoiceController {
   @ApiQuery({ name: 'sortDirection', required: false, description: 'Hướng sắp xếp' })
   async findAll(@Query() paginationDto: PaginationInvoiceDto): Promise<{
     data: Invoice[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;
@@ -82,7 +82,7 @@ export class InvoiceController {
   @ResponseMessage('Lấy danh sách hóa đơn của user thành công')
   async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationInvoiceDto): Promise<{
     data: Invoice[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;

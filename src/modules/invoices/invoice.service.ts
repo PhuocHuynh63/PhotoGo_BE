@@ -138,7 +138,7 @@ export class InvoiceService {
 
   async findAll(paginationDto: PaginationInvoiceDto): Promise<{
     data: Invoice[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;
@@ -161,7 +161,7 @@ export class InvoiceService {
 
     return {
       data: invoices,
-      meta: {
+      pagination: {
         current: currentPage,
         pageSize: pageSizeNum,
         totalPage: totalPages,
@@ -173,7 +173,7 @@ export class InvoiceService {
   async findAllByUserId(userId: string, paginationDto: PaginationInvoiceDto): Promise<{
 
     data: Invoice[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;
@@ -198,7 +198,7 @@ export class InvoiceService {
 
     return {
       data: invoices,
-      meta: {
+      pagination: {
         current: currentPage,
         pageSize: pageSizeNum,
         totalPage: totalPages,

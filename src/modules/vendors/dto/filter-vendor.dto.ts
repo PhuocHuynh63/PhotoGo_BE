@@ -116,6 +116,37 @@ export class FilterVendorDto {
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  @ApiProperty({
+    description: 'Vĩ độ của người dùng',
+    example: 10.762622,
+    required: false,
+  })
+  userLatitude?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  @ApiProperty({
+    description: 'Kinh độ của người dùng',
+    example: 106.660172,
+    required: false,
+  })
+  userLongitude?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Type(() => Number)
+  @ApiProperty({
+    description: 'Khoảng cách tối đa (km) từ vị trí người dùng',
+    example: 5,
+    required: false,
+  })
+  maxDistance?: number;
 }
 
 export class RemarkableVendorDto {

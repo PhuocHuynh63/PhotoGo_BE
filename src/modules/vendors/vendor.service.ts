@@ -748,6 +748,9 @@ export class VendorService {
     pageSize?: string;
     sortBy?: VendorSortField;
     sortDirection?: 'asc' | 'desc';
+    userLatitude?: number;
+    userLongitude?: number;
+    maxDistance?: number;
   }): Promise<{
     data: Vendor[];
     pagination: {
@@ -758,12 +761,25 @@ export class VendorService {
     };
   }> {
     const currentPage = params.current ? Number(params.current) : 1;
-    const pageSize = params.pageSize ? Number(params.pageSize) : 3; // Mặc định pageSize là 3
+    const pageSize = params.pageSize ? Number(params.pageSize) : 3;
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
     let paramIndex = 1;
     const baseParams: any[] = [];
-  
+
+    // Function to calculate distance using Haversine formula
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371; // Radius of the earth in km
+      const dLat = this.deg2rad(lat2 - lat1);
+      const dLon = this.deg2rad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c; // Distance in km
+    };
+
     // Base query for vendor filtering
     let baseQuery = `
       WITH vendor_stats AS (
@@ -806,6 +822,20 @@ export class VendorService {
           AND unaccent(l2.city) ILIKE unaccent($${paramIndex})
         )` : ''}
         ${params.category ? `AND c.id = $${paramIndex}` : ''}
+        ${params.maxDistance !== undefined && params.userLatitude && params.userLongitude ? `
+        AND EXISTS (
+          SELECT 1 FROM locations l3
+          WHERE l3.vendor_id = v.id
+          AND (
+            6371 * acos(
+              cos(radians($${paramIndex})) * 
+              cos(radians(l3.latitude)) * 
+              cos(radians(l3.longitude) - radians($${paramIndex + 1})) + 
+              sin(radians($${paramIndex})) * 
+              sin(radians(l3.latitude))
+            )
+          ) <= $${paramIndex + 2}
+        )` : ''}
       )
       SELECT DISTINCT 
         v.id,
@@ -832,7 +862,18 @@ export class VendorService {
         l.city,
         l.province,
         l.latitude,
-        l.longitude
+        l.longitude,
+        ${params.userLatitude && params.userLongitude ? `
+        (
+          6371 * acos(
+            cos(radians($${paramIndex})) * 
+            cos(radians(l.latitude)) * 
+            cos(radians(l.longitude) - radians($${paramIndex + 1})) + 
+            sin(radians($${paramIndex})) * 
+            sin(radians(l.latitude))
+          )
+        ) as distance
+        ` : 'NULL as distance'}
       FROM filtered_vendors fv
       JOIN vendors v ON v.id = fv.id
       LEFT JOIN locations l ON l.vendor_id = v.id
@@ -841,20 +882,34 @@ export class VendorService {
       LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
-  
+    
+
+    // Add user location parameters if provided
+    if (params.userLatitude && params.userLongitude) {
+      baseParams.push(params.userLatitude);
+      baseParams.push(params.userLongitude);
+      paramIndex += 2;
+    }
+
+    // Add maxDistance parameter if provided
+    if (params.maxDistance !== undefined && params.userLatitude && params.userLongitude) {
+      baseParams.push(params.maxDistance);
+      paramIndex++;
+    }
+
     // Add filters to base query
     if (params.name) {
       baseQuery += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
       baseParams.push(`%${params.name}%`);
       paramIndex++;
     }
-  
+
     if (params.location) {
       baseQuery += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
       baseParams.push(`%${params.location}%`);
       paramIndex++;
     }
-  
+
     if (params.minPrice !== undefined) {
       baseQuery += ` AND vp.min_price >= $${paramIndex}`;
       baseParams.push(params.minPrice);
@@ -866,7 +921,7 @@ export class VendorService {
       baseParams.push(params.maxPrice);
       paramIndex++;
     }
-  
+
     if (params.minRating !== undefined) {
       baseQuery += ` AND vs.avg_rating >= $${paramIndex}`;
       baseParams.push(params.minRating);
@@ -884,7 +939,7 @@ export class VendorService {
       baseParams.push(params.category);
       paramIndex++;
     }
-  
+
     // Add sorting
     switch (params.sortBy) {
       case VendorSortField.SUBSCRIPTION_COUNT:
@@ -899,14 +954,21 @@ export class VendorService {
       case VendorSortField.NAME:
         baseQuery += ` ORDER BY v.name ${sortDirection}`;
         break;
+      case VendorSortField.DISTANCE:
+        if (params.userLatitude && params.userLongitude) {
+          baseQuery += ` ORDER BY distance ${sortDirection} NULLS LAST`;
+        } else {
+          baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
+        }
+        break;
       default:
         baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
     }
-  
+
     // Add pagination to base query
     baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     baseParams.push(pageSize, skip);
-  
+
     // Get total count query
     let countQuery = `
       WITH vendor_stats AS (
@@ -935,22 +997,42 @@ export class VendorService {
       LEFT JOIN category c ON c.id = v.category_id
       WHERE v.status = 'hoạt động'
     `;
-  
+
     const countParams: any[] = [];
     let countParamIndex = 1;
-  
+
+    // Add distance calculation to count query if location is provided
+    if (params.userLatitude && params.userLongitude) {
+      countQuery = countQuery.replace(
+        'WHERE v.status = \'hoạt động\'',
+        `WHERE v.status = 'hoạt động'
+        AND (
+          6371 * acos(
+            cos(radians($${countParamIndex})) * 
+            cos(radians(l.latitude)) * 
+            cos(radians(l.longitude) - radians($${countParamIndex + 1})) + 
+            sin(radians($${countParamIndex})) * 
+            sin(radians(l.latitude))
+          )
+        ) <= $${countParamIndex + 2}`
+      );
+      countParams.push(params.userLatitude, params.userLongitude, params.maxDistance || 999999);
+      countParamIndex += 3;
+    }
+
+    // Add other filters to count query
     if (params.name) {
       countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.name}%`);
       countParamIndex++;
     }
-  
+
     if (params.location) {
       countQuery += ` AND unaccent(l.city) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.location}%`);
       countParamIndex++;
     }
-  
+
     if (params.minPrice !== undefined) {
       countQuery += ` AND vp.min_price >= $${countParamIndex}`;
       countParams.push(params.minPrice);
@@ -962,7 +1044,7 @@ export class VendorService {
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
-  
+
     if (params.minRating !== undefined) {
       countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
       countParams.push(params.minRating);
@@ -980,13 +1062,13 @@ export class VendorService {
       countParams.push(params.category);
       countParamIndex++;
     }
-  
+
     // Execute queries
     const [vendorData, totalItem] = await Promise.all([
       this.dataSource.query(baseQuery, baseParams),
       this.dataSource.query(countQuery, countParams),
     ]);
-  
+
     if (vendorData.length === 0) {
       return {
         data: [],
@@ -998,7 +1080,7 @@ export class VendorService {
         },
       };
     }
-  
+
     // Fetch service packages and reviews for the filtered vendors
     const vendorIds = vendorData.map(v => v.id);
     const [servicePackages, reviews] = await Promise.all([
@@ -1112,6 +1194,7 @@ export class VendorService {
           maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
           subscriptionCount: parseInt(row.subscription_count) || 0,
           isRemarkable: row.subscription_rank <= 3,
+          distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
           locations: [],
           servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
           category: row.category_id ? {
@@ -1121,7 +1204,7 @@ export class VendorService {
           reviews: reviewsByVendor.get(row.id) || []
         });
       }
-      // Push location nếu có
+      // Push location if exists
       if (row.location_id) {
         vendorMap.get(row.id).locations.push({
           id: row.location_id,
@@ -1151,4 +1234,9 @@ export class VendorService {
     };
   }
   //#endregion filterVendors
+
+  // Helper function to convert degrees to radians
+  private deg2rad(deg: number): number {
+    return deg * (Math.PI / 180);
+  }
 }
