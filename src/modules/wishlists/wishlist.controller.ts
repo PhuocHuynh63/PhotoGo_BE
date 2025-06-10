@@ -46,8 +46,8 @@ export class WishlistController {
           properties: {
             current: { type: 'number' },
             pageSize: { type: 'number' },
-            total: { type: 'number' },
-            totalPages: { type: 'number' }
+            totalPage: { type: 'number' },
+            totalItem: { type: 'number' }
           }
         }
       }
@@ -77,8 +77,8 @@ export class WishlistController {
     pagination: {
       current: number;
       pageSize: number;
-      total: number;
-      totalPages: number;
+      totalPage: number;
+      totalItem: number;
     };
   }> {
     return await this.wishlistService.findAllWishlists(paginationDto);
@@ -119,8 +119,8 @@ export class WishlistController {
     pagination: {
       current: number;
       pageSize: number;
-      total: number;
-      totalPages: number;
+      totalPage: number;
+      totalItem: number;
     };
   }> {
     try {

@@ -5,6 +5,7 @@ import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { UpdateCartDto } from './dto/update-cart.dto';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class CartService {
@@ -88,7 +89,7 @@ export class CartService {
     return cart;
   }
 
-  async findAllCarts(): Promise<{ data: Cart[]; 
+  async findAllCarts(paginationDto: PaginationDto): Promise<{ data: Cart[]; 
     pagination: {
       current: number;
       pageSize: number;
@@ -96,13 +97,17 @@ export class CartService {
       totalItem: number;
     }
   }> {
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = paginationDto;
+    const skip = (current - 1) * pageSize;
     const carts = await this.cartRepository.find({ 
       relations: ['items', 'items.serviceConcept', 'items.serviceConcept.images'],
       order: {
-        createdAt: 'DESC'
-      }
+        [sortBy]: sortDirection
+      },
+      skip,
+      take: pageSize
     });
-    const total = carts.length;
+    const total = await this.cartRepository.count();
 
     // Format the response while maintaining type safety
     const formattedCarts = carts.map(cart => {
@@ -126,9 +131,9 @@ export class CartService {
     return {
       data: formattedCarts,
       pagination: {
-        current: 1,
-        pageSize: 10,
-        totalPage: Math.ceil(total / 10),
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
         totalItem: total
       }
     };
@@ -144,15 +149,29 @@ export class CartService {
   }> {
     const cart = await this.cartRepository.findOne({ 
       where: { id: cartId }, 
-      relations: ['items', 'items.serviceConcept'],
+      relations: ['items', 'items.serviceConcept', 'items.serviceConcept.images'],
       order: {
         items: {
           created_at: 'DESC'
         }
       }
     });
-    const total = cart.items.length;
-    const formattedItems = cart.items.map(item => ({
+
+    if (!cart) {
+      throw new NotFoundException(`Giỏ hàng với ID ${cartId} không tồn tại`);
+    }
+
+    const totalItems = cart.items.length;
+    const pageSize = 10;
+    const current = 1;
+    const startIndex = (current - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    // Slice the items array based on pagination
+    const paginatedItems = cart.items.slice(startIndex, endIndex);
+
+    // Format the items
+    const formattedItems = paginatedItems.map(item => ({
       ...item,
       serviceConcept: {
         ...item.serviceConcept,
@@ -162,27 +181,14 @@ export class CartService {
         }))
       }
     }));
+
     return {
       data: formattedItems,
       pagination: {
-        current: 1,
-        pageSize: 10,
-        totalPage: Math.ceil(total / 10),
-        totalItem: total
-      }
-    };
-
-    if (!cart) {
-      throw new NotFoundException(`Giỏ hàng với ID ${cartId} không tồn tại`);
-    }
-
-    return {
-      data: cart.items,
-      pagination: {
-        current: 1,
-        pageSize: 10,
-        totalPage: Math.ceil(total / 10),
-        totalItem: total
+        current,
+        pageSize,
+        totalPage: Math.ceil(totalItems / pageSize),
+        totalItem: totalItems
       }
     };
   }
@@ -197,13 +203,16 @@ export class CartService {
   }> {
     const cart = await this.cartRepository.findOne({
       where: { userId },
-      relations: ['items', 'items.serviceConcept'],
+      relations: ['items', 'items.serviceConcept', 'items.serviceConcept.images'],
       order: {
         items: {
           created_at: 'DESC'
         }
       }
     });
+    if (!cart) {
+      throw new NotFoundException(`Không tìm thấy giỏ hàng cho người dùng với ID ${userId}`);
+    }
     const total = cart.items.length;
     const formattedItems = cart.items.map(item => ({
       ...item,

@@ -101,8 +101,8 @@ export class WishlistService {
       pagination: {
         current,
         pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize)
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total
       }
     };
   }
@@ -144,7 +144,8 @@ export class WishlistService {
   async findWishlistByUser(userId: string, paginationDto: PaginationDto): Promise<{ data: TransformedWishlist[]; pagination: any }> {
     const { current = 1, pageSize = 10, sortBy = 'created_at', sortType = 'DESC' } = paginationDto;
     
-    const [data, total] = await this.wishlistRepository.findAndCount({
+    // First get the wishlist with all items
+    const wishlist = await this.wishlistRepository.findOne({
       where: { user: { id: userId } },
       relations: {
         user: true,
@@ -154,31 +155,51 @@ export class WishlistService {
           }
         }
       },
-      skip: (current - 1) * pageSize,
-      take: pageSize,
       order: {
-        [sortBy]: sortType
+        items: {
+          [sortBy]: sortType
+        }
       }
     });
 
-    const transformedData = data.map(wishlist => ({
+    if (!wishlist) {
+      return {
+        data: [],
+        pagination: {
+          current,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0
+        }
+      };
+    }
+
+    const totalItems = wishlist.items.length;
+    const startIndex = (current - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    // Slice the items array based on pagination
+    const paginatedItems = wishlist.items.slice(startIndex, endIndex);
+
+    // Create a new wishlist object with paginated items
+    const transformedWishlist = {
       ...wishlist,
-      items: wishlist.items.map(item => ({
+      items: paginatedItems.map(item => ({
         ...item,
         serviceConcept: item.serviceConcept ? {
           ...item.serviceConcept,
           images: item.serviceConcept.images.map(img => img.imageUrl)
         } : null
       }))
-    })) as TransformedWishlist[];
+    } as TransformedWishlist;
 
     return {
-      data: transformedData,
+      data: [transformedWishlist],
       pagination: {
         current,
         pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize)
+        totalPage: Math.ceil(totalItems / pageSize),
+        totalItem: totalItems
       }
     };
   }

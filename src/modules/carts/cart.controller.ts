@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, Put, Delete } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Put, Delete, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { CreateCartDto } from './dto/create-cart.dto';
@@ -8,6 +8,7 @@ import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
 import { GetUser } from 'src/decorator/user.decorator';
 import { Public } from 'src/decorator/custom';
+import { PaginationDto } from './dto/pagination.dto';
 
 @ApiTags('Carts')
 @ApiBearerAuth('access-token')
@@ -38,7 +39,7 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Lấy tất cả giỏ hàng' })
   @ApiResponse({ status: 200, description: 'Danh sách giỏ hàng', type: [Cart] })
-  async findAllCarts(): Promise<{ data: Cart[]; 
+  async findAllCarts(@Query() paginationDto: PaginationDto): Promise<{ data: Cart[]; 
     pagination: {
       current: number;
       pageSize: number;
@@ -46,7 +47,7 @@ export class CartController {
       totalItem: number;
     }
   }> {
-    return await this.cartService.findAllCarts();
+    return await this.cartService.findAllCarts(paginationDto);
   }
 
   @Get('items/:cartId')
