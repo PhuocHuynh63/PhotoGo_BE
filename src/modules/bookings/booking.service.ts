@@ -272,7 +272,7 @@ export class BookingService {
 
   async findAll(paginationDto: PaginationDto): Promise<{
     data: Booking[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;
@@ -295,7 +295,7 @@ export class BookingService {
 
     return {
       data: formattedBookings,
-      meta: {
+      pagination: {
         current: current,
         pageSize: pageSize,
         totalPage: totalPages,
@@ -306,7 +306,7 @@ export class BookingService {
 
   async findAllByUserId(userId: string, paginationDto: PaginationDto): Promise<{
     data: Booking[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;
@@ -330,7 +330,7 @@ export class BookingService {
 
     return {
       data: formattedBookings,
-      meta: {
+      pagination: {
         current: current,
         pageSize: pageSize,
         totalPage: totalPages,

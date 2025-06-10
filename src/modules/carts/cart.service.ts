@@ -3,8 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cart } from './entities/cart.entity';
 import { CartItem } from './entities/cart-item.entity';
-import { CreateCartDto } from './dto/create-cart.dto';
-import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartDto } from './dto/update-cart.dto';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
 
@@ -90,16 +88,60 @@ export class CartService {
     return cart;
   }
 
-  async findAllCarts(): Promise<Cart[]> {
-    return await this.cartRepository.find({ 
-      relations: ['items', 'items.serviceConcept'],
+  async findAllCarts(): Promise<{ data: Cart[]; 
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
+    const carts = await this.cartRepository.find({ 
+      relations: ['items', 'items.serviceConcept', 'items.serviceConcept.images'],
       order: {
         createdAt: 'DESC'
       }
     });
+    const total = carts.length;
+
+    // Format the response while maintaining type safety
+    const formattedCarts = carts.map(cart => {
+      const formattedItems = cart.items.map(item => ({
+        ...item,
+        serviceConcept: {
+          ...item.serviceConcept,
+          images: item.serviceConcept.images.map(img => ({
+            ...img,
+            imageUrl: img.imageUrl
+          }))
+        }
+      }));
+
+      return {
+        ...cart,
+        items: formattedItems
+      };
+    });
+
+    return {
+      data: formattedCarts,
+      pagination: {
+        current: 1,
+        pageSize: 10,
+        totalPage: Math.ceil(total / 10),
+        totalItem: total
+      }
+    };
   }
 
-  async findCartItems(cartId: string): Promise<CartItem[]> {
+  async findCartItems(cartId: string): Promise<{ data: CartItem[]; 
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
     const cart = await this.cartRepository.findOne({ 
       where: { id: cartId }, 
       relations: ['items', 'items.serviceConcept'],
@@ -109,15 +151,50 @@ export class CartService {
         }
       }
     });
+    const total = cart.items.length;
+    const formattedItems = cart.items.map(item => ({
+      ...item,
+      serviceConcept: {
+        ...item.serviceConcept,
+        images: item.serviceConcept.images.map(img => ({
+          ...img,
+          imageUrl: img.imageUrl
+        }))
+      }
+    }));
+    return {
+      data: formattedItems,
+      pagination: {
+        current: 1,
+        pageSize: 10,
+        totalPage: Math.ceil(total / 10),
+        totalItem: total
+      }
+    };
 
     if (!cart) {
       throw new NotFoundException(`Giỏ hàng với ID ${cartId} không tồn tại`);
     }
 
-    return cart.items;
+    return {
+      data: cart.items,
+      pagination: {
+        current: 1,
+        pageSize: 10,
+        totalPage: Math.ceil(total / 10),
+        totalItem: total
+      }
+    };
   }
 
-  async findCartItemsByUserId(userId: string): Promise<CartItem[]> {
+  async findCartItemsByUserId(userId: string): Promise<{ data: CartItem[]; 
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
     const cart = await this.cartRepository.findOne({
       where: { userId },
       relations: ['items', 'items.serviceConcept'],
@@ -127,12 +204,39 @@ export class CartService {
         }
       }
     });
-
+    const total = cart.items.length;
+    const formattedItems = cart.items.map(item => ({
+      ...item,
+      serviceConcept: {
+        ...item.serviceConcept,
+        images: item.serviceConcept.images.map(img => ({
+          ...img,
+          imageUrl: img.imageUrl
+        }))
+      }
+    }));
+    return {
+      data: formattedItems,
+      pagination: {
+        current: 1,
+        pageSize: 10,
+        totalPage: Math.ceil(total / 10),
+        totalItem: total
+      }
+    };
     if (!cart) {
       throw new NotFoundException(`Không tìm thấy giỏ hàng cho người dùng với ID ${userId}`);
     }
 
-    return cart.items;
+    return {
+      data: cart.items,
+      pagination: {
+        current: 1,
+        pageSize: 10,
+        totalPage: Math.ceil(total / 10),
+        totalItem: total
+      }
+    };
   }
 
   async updateCart(id: string, updateCartDto: UpdateCartDto): Promise<Cart> {

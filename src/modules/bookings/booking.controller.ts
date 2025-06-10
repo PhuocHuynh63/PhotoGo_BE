@@ -55,7 +55,7 @@ export class BookingController {
   @ApiOperation({ summary: 'Lấy tất cả booking' })
   async findAll(@Query() paginationDto: PaginationDto): Promise<{
     data: Booking[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;
@@ -80,7 +80,7 @@ export class BookingController {
   @ApiOperation({ summary: 'Lấy danh sách booking của user' })
   async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationDto): Promise<{
     data: Booking[];
-    meta: {
+    pagination: {
       current: number;
       pageSize: number;
       totalPage: number;

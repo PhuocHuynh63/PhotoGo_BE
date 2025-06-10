@@ -38,7 +38,14 @@ export class CartController {
   @Public()
   @ApiOperation({ summary: 'Lấy tất cả giỏ hàng' })
   @ApiResponse({ status: 200, description: 'Danh sách giỏ hàng', type: [Cart] })
-  async findAllCarts(): Promise<Cart[]> {
+  async findAllCarts(): Promise<{ data: Cart[]; 
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
     return await this.cartService.findAllCarts();
   }
 
@@ -47,7 +54,14 @@ export class CartController {
   @ApiOperation({ summary: 'Lấy tất cả mục trong giỏ hàng' })
   @ApiResponse({ status: 200, description: 'Danh sách mục giỏ hàng', type: [CartItem] })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giỏ hàng' })
-  async findCartItems(@Param('cartId') cartId: string): Promise<CartItem[]> {
+  async findCartItems(@Param('cartId') cartId: string): Promise<{ data: CartItem[]; 
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
     return await this.cartService.findCartItems(cartId);
   }
 
@@ -56,7 +70,14 @@ export class CartController {
   @ApiOperation({ summary: 'Lấy tất cả mục trong giỏ hàng theo ID người dùng' })
   @ApiResponse({ status: 200, description: 'Danh sách mục giỏ hàng', type: [CartItem] })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giỏ hàng' })
-  async findCartItemsByUserId(@Param('userId') userId: string): Promise<CartItem[]> {
+  async findCartItemsByUserId(@Param('userId') userId: string): Promise<{ data: CartItem[]; 
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
     return await this.cartService.findCartItemsByUserId(userId);
   }
 

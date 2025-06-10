@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNumber, IsOptional, Min } from "class-validator";
+import { IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class PaginationDto {
   @ApiProperty({
@@ -19,4 +19,22 @@ export class PaginationDto {
   @IsOptional()
   @Min(1)
   pageSize?: number = 10;
+
+  @ApiProperty({
+    description: 'Sắp xếp theo trường nào',
+    enum: ['createdAt', 'updatedAt', 'date', 'time', 'status', 'sourceType', 'sourceId', 'depositAmount'],
+    default: 'createdAt',
+  })
+  @IsString()
+  @IsOptional()
+  sortBy?: string = 'createdAt';
+
+  @ApiProperty({
+    description: 'Sắp xếp theo hướng nào',
+    enum: ['ASC', 'DESC'],
+    default: 'DESC',
+  })
+  @IsString()
+  @IsOptional()
+  sortDirection?: string = 'DESC';
 }

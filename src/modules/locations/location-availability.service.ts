@@ -346,7 +346,7 @@ export class LocationAvailabilityService {
       .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
 
     if (isAvailable !== undefined) {
-      queryBuilder.where('location_availability.isAvailable = :isAvailable', { isAvailable });
+      queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
     }
 
     if (sortBy) {
