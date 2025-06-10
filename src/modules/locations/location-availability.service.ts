@@ -46,6 +46,7 @@ export class LocationAvailabilityService {
   private formatSlotTimes(slotTime: LocationSlotTime & { maxParallelBookings?: number }): any {
     if (!slotTime) return slotTime;
     return {
+      id: slotTime.id,
       slot: slotTime.slot,
       startSlotTime: slotTime.startSlotTime,
       endSlotTime: slotTime.endSlotTime,
@@ -95,6 +96,23 @@ export class LocationAvailabilityService {
 
     if (!location) {
       throw new NotFoundException('Vị trí không tồn tại');
+    }
+
+    //check date, startTime, endTime, location_id duplicated?
+    const existingAvailability = await this.locationAvailabilityRepository.findOne({
+      where: {
+        location: {
+          id: locationId
+        },
+        workingDates: {
+          date: new Date(this.convertDateFormat(createLocationTimeScheduleDto.date)),
+        },
+        startTime: createLocationTimeScheduleDto.startTime,
+        endTime: createLocationTimeScheduleDto.endTime,
+      },
+    });
+    if (existingAvailability) {
+      throw new BadRequestException('Thời gian và ngày của vendor này đã tồn tại');
     }
 
     // Validate time range
