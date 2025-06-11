@@ -39,7 +39,10 @@ export class LocationAvailabilityService {
       // Helper function to format location availability dates
       private formatLocationWorkingDates(locationWorkingDate: LocationWorkingDate): any {
         if (!locationWorkingDate) return locationWorkingDate;
-        return this.formatDate(locationWorkingDate.date);
+        return {
+          id: locationWorkingDate.id,
+          date: this.formatDate(locationWorkingDate.date),
+        };
       }
 
   // Helper function to format slot times
