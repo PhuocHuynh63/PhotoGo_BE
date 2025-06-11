@@ -137,6 +137,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('markRead')
+  async handleMarkRead(
+    @MessageBody() data: { chatId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const userId = client.data.user?.userId || client.data.user?.sub;
+      if (!userId) {
+        client.emit('markReadError', { message: 'Phiên làm việc không hợp lệ.' });
+        return;
+      }
+      // Mark the messages as read using your service method.
+      await this.chatService.markMessagesAsRead(data.chatId, userId);
+      // Emit readReceipt event to notify all clients in the chat.
+      this.server.in(data.chatId).emit('readReceipt', { chatId: data.chatId, readerId: userId });
+    } catch (error) {
+      console.error(`Error in markRead: ${error.message}`);
+      client.emit('markReadError', { message: 'Không thể đánh dấu tin nhắn đã đọc.' });
+    }
+  }
+
   @SubscribeMessage('leaveChat')
   async handleLeaveChat(
     @MessageBody() data: { chatId: string },
