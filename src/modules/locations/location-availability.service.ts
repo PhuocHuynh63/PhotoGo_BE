@@ -14,6 +14,7 @@ import { UpdateLocationSlotTimeDto } from './dto/update-location-slot-time.dto';
 import { CreateLocationWorkingDateDto } from './dto/create-location-working-date.dto';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
 import { In } from 'typeorm';
+import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-saturday.dto';
 
 @Injectable()
 export class LocationAvailabilityService {
@@ -108,7 +109,7 @@ export class LocationAvailabilityService {
           id: locationId
         },
         workingDates: {
-          date: new Date(this.convertDateFormat(createLocationTimeScheduleDto.date)),
+          date: new Date(this.convertDateFormat(createLocationTimeScheduleDto.startDate)),
         },
         startTime: createLocationTimeScheduleDto.startTime,
         endTime: createLocationTimeScheduleDto.endTime,
@@ -135,11 +136,22 @@ export class LocationAvailabilityService {
 
     const savedAvailability = await this.locationAvailabilityRepository.save(availability);
 
-    // Generate dates for the week using DD/MM/YYYY format
-    const weekDates = this.generateWeekDates(createLocationTimeScheduleDto.date);
+    // Generate dates between startDate and endDate, excluding Sundays
+    const startDate = new Date(this.convertDateFormat(createLocationTimeScheduleDto.startDate));
+    const endDate = new Date(this.convertDateFormat(createLocationTimeScheduleDto.endDate));
+    const workingDates: Date[] = [];
     
-    // Create working dates for each day in the week
-    const workingDates = await Promise.all(weekDates.map(async (date) => {
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      // Skip Sundays (day 0)
+      if (currentDate.getDay() !== 0) {
+        workingDates.push(new Date(currentDate));
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Create working dates for each day
+    const savedWorkingDates = await Promise.all(workingDates.map(async (date) => {
       const workingDate = this.locationWorkingDateRepository.create({
         date,
         locationAvailability: savedAvailability,
@@ -170,7 +182,7 @@ export class LocationAvailabilityService {
       const savedSlotTime = await this.locationSlotTimeRepository.save(slotTime);
 
       // Create slot time working date relationships for each working date
-      for (const workingDate of workingDates) {
+      for (const workingDate of savedWorkingDates) {
         await this.locationSlotTimeWorkingDateRepository.save({
           slotTimeId: savedSlotTime.id,
           workingDateId: workingDate.id,
@@ -185,7 +197,7 @@ export class LocationAvailabilityService {
 
     return {
       ...savedAvailability,
-      workingDates: workingDates.map(date => this.formatLocationWorkingDates(date)),
+      workingDates: savedWorkingDates.map(date => this.formatLocationWorkingDates(date)),
       slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
     };
   }
@@ -765,5 +777,119 @@ export class LocationAvailabilityService {
       });
     }
     return this.formatLocationWorkingDates(savedWorkingDate);
+  }
+
+  // update time only for saturday
+  async updateTimeOnlyForDay(locationId: string, updateTimeOnlyForDayDto: UpdateTimeOnlyForDayDto): Promise<LocationAvailability> {
+    // 1. Find the location
+    const location = await this.locationRepository.findOne({
+      where: { id: locationId },
+    });
+
+    if (!location) {
+      throw new NotFoundException('Vị trí không tồn tại');
+    }
+
+    // 2. Create new LocationAvailability for the specified day
+    const newAvailability = this.locationAvailabilityRepository.create({
+      startTime: updateTimeOnlyForDayDto.startTime,
+      endTime: updateTimeOnlyForDayDto.endTime,
+      isAvailable: true,
+      location,
+    });
+
+    const savedAvailability = await this.locationAvailabilityRepository.save(newAvailability);
+
+    // 3. Find all working dates that you want to update
+    const workingDates = await this.locationWorkingDateRepository
+      .createQueryBuilder('workingDate')
+      .leftJoinAndSelect('workingDate.locationAvailability', 'locationAvailability')
+      .where('locationAvailability.location_id = :locationId', { locationId })
+      .getMany();
+
+    // Map day names to their corresponding day numbers
+    const dayToNumber = {
+      [DayOfWeek.Monday]: 1,
+      [DayOfWeek.Tuesday]: 2,
+      [DayOfWeek.Wednesday]: 3,
+      [DayOfWeek.Thursday]: 4,
+      [DayOfWeek.Friday]: 5,
+      [DayOfWeek.Saturday]: 6,
+    };
+
+    const workingDatesToUpdate = workingDates.filter(wd => {
+      const date = new Date(wd.date);
+      return date.getDay() === dayToNumber[updateTimeOnlyForDayDto.day];
+    });
+
+    // 4. Update working dates to point to new availability
+    for (const workingDate of workingDatesToUpdate) {
+      workingDate.locationAvailability = savedAvailability;
+      await this.locationWorkingDateRepository.save(workingDate);
+    }
+
+    // 5. Create new slot times for the new availability
+    const slotTimes: LocationSlotTime[] = [];
+    const startTime = new Date(`2000-01-01T${updateTimeOnlyForDayDto.startTime}`);
+    const endTime = new Date(`2000-01-01T${updateTimeOnlyForDayDto.endTime}`);
+    const duration = 60; // 60 minutes per slot
+    let currentTime = startTime;
+    let slotNumber = 1;
+
+    while (currentTime < endTime) {
+      const slotEndTime = new Date(currentTime.getTime() + duration * 60000);
+      if (slotEndTime > endTime) break;
+
+      const slotTime = this.locationSlotTimeRepository.create({
+        locationAvailabilityId: savedAvailability.id,
+        slot: slotNumber,
+        startSlotTime: currentTime.toTimeString().slice(0, 5),
+        endSlotTime: slotEndTime.toTimeString().slice(0, 5),
+        isStrictTimeBlocking: true,
+      });
+
+      const savedSlotTime = await this.locationSlotTimeRepository.save(slotTime);
+      slotTimes.push(savedSlotTime);
+      currentTime = slotEndTime;
+      slotNumber++;
+    }
+
+    // 6. Update existing slot time working date relationships
+    for (const workingDate of workingDatesToUpdate) {
+      // Find existing slot time working date relationships for this working date
+      const existingRelationships = await this.locationSlotTimeWorkingDateRepository.find({
+        where: { workingDateId: workingDate.id }
+      });
+
+      // Update each relationship with new slot time IDs
+      for (let i = 0; i < existingRelationships.length; i++) {
+        if (i < slotTimes.length) {
+          // Update existing relationship with new slot time ID
+          existingRelationships[i].slotTimeId = slotTimes[i].id;
+          await this.locationSlotTimeWorkingDateRepository.save(existingRelationships[i]);
+        } else {
+          // Remove extra relationships if new slot times are fewer
+          await this.locationSlotTimeWorkingDateRepository.remove(existingRelationships[i]);
+        }
+      }
+
+      // Create new relationships if new slot times are more
+      if (slotTimes.length > existingRelationships.length) {
+        for (let i = existingRelationships.length; i < slotTimes.length; i++) {
+          await this.locationSlotTimeWorkingDateRepository.save({
+            slotTimeId: slotTimes[i].id,
+            workingDateId: workingDate.id,
+            maxParallelBookings: 1
+          });
+        }
+      }
+    }
+
+    // 7. Return the updated availability with all related data
+    return {
+      ...savedAvailability,
+      workingDates: workingDatesToUpdate.map(date => this.formatLocationWorkingDates(date)),
+      slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
+    };
   }
 }

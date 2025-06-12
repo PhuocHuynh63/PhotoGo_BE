@@ -15,6 +15,7 @@ import { LocationAvailabilityService } from './location-availability.service';
 import { CreateLocationTimeScheduleDto } from './dto/create-location-time-schedule.dto';
 import { CreateLocationSlotTimeDto } from './dto/create-location-slot-time.dto';
 import { UpdateLocationAvailabilityDto } from './dto/update-location-availability.dto';
+import { UpdateTimeOnlyForDayDto } from './dto/update-time-only-for-saturday.dto';
 import { LocationAvailability } from './entities/location-availability.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { isUUID } from 'class-validator';
@@ -146,37 +147,35 @@ export class LocationAvailabilityController {
     }
   }
 
-  @Get(':id')
-  @Public()
-  @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID' })
-  @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ID' })
-  async findOne(@Param('id') id: string): Promise<LocationAvailability> {
+  
+
+  @Patch(':locationId/update-time-only-for-day')
+  @ApiOperation({ summary: 'Đồng bộ thời gian làm việc cho thứ cụ thể' })
+  @ApiResponse({ status: 200, description: 'Thời gian làm việc đã được cập nhật thành công' })
+  async updateTimeOnlyForDay(@Param('locationId') locationId: string, @Body() updateTimeOnlyForDayDto: UpdateTimeOnlyForDayDto): Promise<LocationAvailability> {
     try {
-      if (!isUUID(id)) {
+      if (!isUUID(locationId)) {
         throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
       }
-      return await this.locationAvailabilityService.findOne(id);
+      return await this.locationAvailabilityService.updateTimeOnlyForDay(locationId, updateTimeOnlyForDayDto);
     } catch (error) {
-      this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
+      this.logger.error(`Lỗi cập nhật thời gian làm việc: ${error.message}`);
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new HttpException('Lỗi tìm kiếm thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException('Lỗi cập nhật thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật thời gian làm việc' })
-  @ApiResponse({ status: 200, description: 'Thời gian làm việc đã được cập nhật thành công' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateLocationAvailabilityDto: UpdateLocationAvailabilityDto,
-  ): Promise<LocationAvailability> {
+  @Patch(':workingDateId/slot-time/:slotTimeId')
+  @ApiOperation({ summary: 'Cập nhật slot time' })
+  @ApiResponse({ status: 200, description: 'Slot time đã được cập nhật thành công' })
+  async updateSlotTime(@Param('workingDateId') workingDateId: string, @Param('slotTimeId') slotTimeId: string, @Body() updateLocationSlotTimeDto: UpdateLocationSlotTimeDto): Promise<LocationSlotTime> {
     try {
-      if (!isUUID(id)) {
+      if (!isUUID(workingDateId) || !isUUID(slotTimeId)) {
         throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
       }
-      return await this.locationAvailabilityService.update(id, updateLocationAvailabilityDto);
+      return await this.locationAvailabilityService.updateSlot(workingDateId, slotTimeId, updateLocationSlotTimeDto);
     } catch (error) {
       this.logger.error(`Lỗi cập nhật thời gian làm việc: ${error.message}`);
       if (error instanceof HttpException) {
@@ -269,15 +268,37 @@ export class LocationAvailabilityController {
     }
   }
 
-  @Patch(':workingDateId/slot-time/:slotTimeId')
-  @ApiOperation({ summary: 'Cập nhật slot time' })
-  @ApiResponse({ status: 200, description: 'Slot time đã được cập nhật thành công' })
-  async updateSlotTime(@Param('workingDateId') workingDateId: string, @Param('slotTimeId') slotTimeId: string, @Body() updateLocationSlotTimeDto: UpdateLocationSlotTimeDto): Promise<LocationSlotTime> {
+  @Get(':id')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID' })
+  @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ID' })
+  async findOne(@Param('id') id: string): Promise<LocationAvailability> {
     try {
-      if (!isUUID(workingDateId) || !isUUID(slotTimeId)) {
+      if (!isUUID(id)) {
         throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
       }
-      return await this.locationAvailabilityService.updateSlot(workingDateId, slotTimeId, updateLocationSlotTimeDto);
+      return await this.locationAvailabilityService.findOne(id);
+    } catch (error) {
+      this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi tìm kiếm thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Cập nhật thời gian làm việc' })
+  @ApiResponse({ status: 200, description: 'Thời gian làm việc đã được cập nhật thành công' })
+  async update(
+    @Param('id') id: string,
+    @Body() updateLocationAvailabilityDto: UpdateLocationAvailabilityDto,
+  ): Promise<LocationAvailability> {
+    try {
+      if (!isUUID(id)) {
+        throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
+      }
+      return await this.locationAvailabilityService.update(id, updateLocationAvailabilityDto);
     } catch (error) {
       this.logger.error(`Lỗi cập nhật thời gian làm việc: ${error.message}`);
       if (error instanceof HttpException) {
@@ -286,4 +307,6 @@ export class LocationAvailabilityController {
       throw new HttpException('Lỗi cập nhật thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
+
+
 }
