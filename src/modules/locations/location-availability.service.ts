@@ -353,9 +353,7 @@ export class LocationAvailabilityService {
     const locationAvailability = await this.locationAvailabilityRepository.findOne({
       where: { location: { id: locationId } },
     });
-    if (!locationAvailability) {
-      throw new NotFoundException('Vị trí không tồn tại');
-    }
+
 
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
     const actualPageSize = Number(pageSize) * Number(pageSize);
@@ -363,7 +361,7 @@ export class LocationAvailabilityService {
       .leftJoinAndSelect('location_availability.location', 'location')
       .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
       .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
-      .where('location_availability.location_id = :locationId', { locationId })
+      .andWhere('location_availability.location_id = :locationId', { locationId })
       .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
 
     if (isAvailable !== undefined) {
