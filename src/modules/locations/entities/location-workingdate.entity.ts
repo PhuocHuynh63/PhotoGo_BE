@@ -12,6 +12,9 @@ export class LocationWorkingDate {
   @Column({ type: 'date' })
   date: Date;
 
+  @Column({ type: 'boolean', default: true, name: 'isavailable' })
+  isAvailable: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
   createdAt: Date;
 

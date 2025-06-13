@@ -14,6 +14,7 @@ import { PaymentType } from '../../constants/payment.enum';
 import { PaginationDto } from './dto/pagination.dto';
 import { LocationAvailabilityService } from '../locations/location-availability.service';
 import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot-time-working-date.entity';
+import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 
 @Injectable()
 export class BookingService {
@@ -31,6 +32,8 @@ export class BookingService {
     private locationAvailabilityService: LocationAvailabilityService,
     @InjectRepository(LocationSlotTimeWorkingDate)
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
+    @InjectRepository(LocationWorkingDate)
+    private locationWorkingDateRepository: Repository<LocationWorkingDate>,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -90,6 +93,18 @@ export class BookingService {
     // Validate required fields
     if (!createBookingDto.date) {
       throw new BadRequestException('Ngày booking là bắt buộc');
+    }
+
+    // check the date is available
+    const workingDate = await this.locationWorkingDateRepository.findOne({
+      where: {
+        date: new Date(this.convertDateFormat(createBookingDto.date)),
+        isAvailable: true
+      }
+    });
+
+    if (!workingDate) {
+      throw new BadRequestException('Ngày này không làm việc');
     }
 
     // Convert date format from DD/MM/YYYY to YYYY-MM-DD

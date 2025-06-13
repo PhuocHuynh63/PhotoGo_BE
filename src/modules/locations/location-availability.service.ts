@@ -15,6 +15,7 @@ import { CreateLocationWorkingDateDto } from './dto/create-location-working-date
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
 import { In } from 'typeorm';
 import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-saturday.dto';
+import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
 
 @Injectable()
 export class LocationAvailabilityService {
@@ -43,6 +44,7 @@ export class LocationAvailabilityService {
         return {
           id: locationWorkingDate.id,
           date: this.formatDate(locationWorkingDate.date),
+          isAvailable: locationWorkingDate.isAvailable,
         };
       }
 
@@ -891,5 +893,21 @@ export class LocationAvailabilityService {
       workingDates: workingDatesToUpdate.map(date => this.formatLocationWorkingDates(date)),
       slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
     };
+  }
+
+  // update working date status
+  async updateWorkingDateStatus(workingDateId: string, updateLocationWorkingDateStatusDto: UpdateLocationWorkingDateStatusDto): Promise<LocationWorkingDate> {
+    const workingDate = await this.locationWorkingDateRepository.findOne({
+      where: { id: workingDateId },
+    });
+    
+    if (!workingDate) {
+      throw new NotFoundException('Ngày làm việc không tồn tại');
+    }
+
+    workingDate.isAvailable = updateLocationWorkingDateStatusDto.isAvailable;
+    await this.locationWorkingDateRepository.save(workingDate);
+
+    return this.formatLocationWorkingDates(workingDate);
   }
 }

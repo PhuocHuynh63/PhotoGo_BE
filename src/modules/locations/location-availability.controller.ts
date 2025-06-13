@@ -17,7 +17,7 @@ import { CreateLocationSlotTimeDto } from './dto/create-location-slot-time.dto';
 import { UpdateLocationAvailabilityDto } from './dto/update-location-availability.dto';
 import { UpdateTimeOnlyForDayDto } from './dto/update-time-only-for-saturday.dto';
 import { LocationAvailability } from './entities/location-availability.entity';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { isUUID } from 'class-validator';
 import { Public } from 'src/decorator/custom';
 import { FindLocationAvailabilityDto } from './dto/find-location.dto';
@@ -26,6 +26,7 @@ import { UpdateLocationSlotTimeDto } from './dto/update-location-slot-time.dto';
 import { LocationWorkingDate } from './entities/location-workingdate.entity';
 import { CreateLocationWorkingDateDto } from './dto/create-location-working-date.dto';
 import { FindLocationDateRangeDto } from './dto/find-location.dto';
+import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
 
 @ApiTags('Location Availability')
 @Controller('location-availability')
@@ -182,6 +183,27 @@ export class LocationAvailabilityController {
         throw error;
       }
       throw new HttpException('Lỗi cập nhật thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Patch(':workingDateId/status')
+  @ApiOperation({ summary: 'Cập nhật trạng thái ngày làm việc' })
+  @ApiResponse({ status: 200, description: 'Trạng thái ngày làm việc đã được cập nhật thành công' })
+  async updateWorkingDateStatus(
+    @Param('workingDateId') workingDateId: string, 
+    @Body() updateLocationWorkingDateStatusDto: UpdateLocationWorkingDateStatusDto
+  ): Promise<LocationWorkingDate> {
+    try {
+      if (!isUUID(workingDateId)) {
+        throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
+      }
+      return await this.locationAvailabilityService.updateWorkingDateStatus(workingDateId, updateLocationWorkingDateStatusDto);
+    } catch (error) {
+      this.logger.error(`Lỗi cập nhật trạng thái ngày làm việc: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi cập nhật trạng thái ngày làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
