@@ -11,9 +11,14 @@ import { BullQueueModule } from 'src/3rdService/bull/bull-queue.module';
 import { UserProcessor } from './bull/user.processor';
 import { CartModule } from 'src/modules/carts/cart.module';
 import { WishlistModule } from 'src/modules/wishlists/wishlist.module'; 
+import { UserCampaign } from '../campaign/entities/user-campaign.entity';
+import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { Voucher } from '../vouchers/entities/voucher.entity';
+import { Campaign } from '../campaign/entities/campaign.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, UserCampaign, CampaignVoucher, VoucherUser, Voucher, Campaign]),
     RoleModule,
     UploadModule,
     MailModule,

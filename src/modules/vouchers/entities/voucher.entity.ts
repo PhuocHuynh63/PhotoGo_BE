@@ -1,6 +1,7 @@
 import { Invoice } from 'src/modules/invoices/entities/invoice.entity';
 import { Column, Entity, CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 import { VoucherStatusEnum, VoucherTypePoint } from '../../../constants/voucher.enum';
+import { CampaignVoucher } from 'src/modules/campaign/entities/campaign-voucher.entity';
 
 @Entity('voucher')
 export class Voucher {
@@ -51,4 +52,7 @@ export class Voucher {
 
   @UpdateDateColumn({ type: 'timestamptz', default: () => 'NOW()', onUpdate: 'NOW()' })
   updated_at: Date;
+
+  @OneToMany(() => CampaignVoucher, campaignVoucher => campaignVoucher.voucher)
+  campaignVouchers: CampaignVoucher[];
 }

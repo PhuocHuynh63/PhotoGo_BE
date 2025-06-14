@@ -49,6 +49,7 @@ import { GeminiModule } from './3rdService/gemini/gemini.module';
 import { CheckoutSessionModule } from './modules/checkout-session/checkout-session.module';
 import { AttendanceModule } from './modules/attendances/attendance/attendance.module';
 import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
+import { CampaignModule } from './modules/campaign/campaign.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -144,6 +145,7 @@ if (!fs.existsSync(templateDir)) {
     TeamMemberModule,
     SubscriptionModule,
     VoucherModule,
+    CampaignModule,
     PointModule,
     PayosModule,
     RefundModule,
