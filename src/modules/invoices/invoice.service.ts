@@ -13,6 +13,7 @@ import { BookingStatus, BookingDepositType } from '../../constants/booking.enum'
 import { Booking } from '../bookings/entities/booking.entity';
 import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 
 @Injectable()
 export class InvoiceService {
@@ -23,6 +24,8 @@ export class InvoiceService {
     private readonly bookingRepository: Repository<Booking>,
     private servicePackageService: ServicePackageService,
     private voucherService: VoucherService,
+    @InjectRepository(VoucherUser)
+    private readonly voucherUserRepository: Repository<VoucherUser>,
   ) {}
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
@@ -70,7 +73,9 @@ export class InvoiceService {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
       }
 
-      const voucherUser = await this.voucherService.findOneVoucherUser(voucherId, booking.userId);
+      const voucherUser = await this.voucherUserRepository.findOne({
+        where: { user_id: booking.userId, voucher_id: voucherId },
+      });
       if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
         throw new BadRequestException(`Bạn đã sử dụng voucher này hoặc voucher không khả dụng`);
       }
