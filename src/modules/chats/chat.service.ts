@@ -105,7 +105,7 @@ export class ChatService {
           FROM message msg
           WHERE msg."chat_id" = chat.id
           AND msg."sender_id" != :userId
-          AND msg."isRead" = false)`,
+          AND msg."is_read" = false)`,
         'chat_unreadCount',
       )
       .where(':userId = ANY(chat.members)')
