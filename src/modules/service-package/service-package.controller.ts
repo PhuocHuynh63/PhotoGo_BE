@@ -30,6 +30,7 @@ import { FilterServicePackageDto } from './dto/filter-service-package.dto';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 import { Roles } from 'src/decorator/role.decorator';
 import { Role } from 'src/modules/roles/entities/role.entity';
+import { PaginationDto } from './dto/pagination.dto';
 
 @ApiTags('Service Packages')
 @Controller('service-packages')
@@ -97,8 +98,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả gói dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách gói dịch vụ đã được lấy thành công', type: [ServicePackage] })
-  async findAll(): Promise<{ data: ServicePackage[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAll();
+  async findAll(@Query() query: PaginationDto): Promise<{ data: ServicePackage[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAll(query);
   }
 
   @Get('filter')
@@ -129,8 +130,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả metadata' })
   @ApiResponse({ status: 200, description: 'Danh sách metadata đã được lấy thành công', type: [ServicePackageMetadata] })
-  async findAllMetadata(): Promise<{ data: ServicePackageMetadata[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllMetadata();
+  async findAllMetadata(@Query() query: PaginationDto): Promise<{ data: ServicePackageMetadata[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllMetadata(query);
   }
 
   @Get('metadata/:id')
@@ -176,8 +177,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách loại dịch vụ đã được lấy thành công', type: [ServiceType] })
-  async findAllServiceType(): Promise<{ data: ServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllServiceTypes();
+  async findAllServiceType(@Query() query: PaginationDto): Promise<{ data: ServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllServiceTypes(query);
   }
 
   @Get('service-type/:id')
@@ -289,8 +290,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả concept dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách concept dịch vụ đã được lấy thành công', type: [ServiceConcept] })
-  async findAllServiceConcepts(): Promise<{ data: ServiceConcept[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllServiceConcepts();
+  async findAllServiceConcepts(@Query() query: PaginationDto): Promise<{ data: ServiceConcept[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllServiceConcepts(query);
   }
 
   @Get('service-concept/:id')
@@ -402,8 +403,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả liên kết concept dịch vụ và loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách liên kết đã được lấy thành công', type: [ServiceConceptServiceType] })
-  async findAllServiceConceptServiceType(): Promise<{ data: ServiceConceptServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllServiceConceptServiceType();
+  async findAllServiceConceptServiceType(@Query() query: PaginationDto): Promise<{ data: ServiceConceptServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllServiceConceptServiceType(query);
   }
 
   @Get('service-concept-service-type/:serviceConceptId/:serviceTypeId')

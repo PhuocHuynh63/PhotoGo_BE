@@ -1,18 +1,7 @@
-import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsUUID, IsDate, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateLocationDto {
-  @IsUUID()
-  @IsOptional()
-  @ApiProperty({
-    example: '97004449-52d9-4a49-b071-ce5786f7645e',
-    description: 'ID của vendor',
-    required: false,
-    name: 'vendor_id',
-    title: 'Vendor Information'
-  })
-  vendor_id?: string;
-
   @IsString()
   @IsNotEmpty()
   @ApiProperty({

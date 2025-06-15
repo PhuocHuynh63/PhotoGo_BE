@@ -11,9 +11,6 @@ export class Wishlist {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ type: 'uuid', nullable: false })
-  userId: string;
-
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 

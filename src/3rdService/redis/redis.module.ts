@@ -16,7 +16,7 @@ import { Redis } from 'ioredis';
                 const client = new Redis(redisUri, {
                     maxRetriesPerRequest: 3,
                     retryStrategy: (times) => Math.min(times * 50, 2000),
-                    connectTimeout: 10000,
+                    connectTimeout: 30000,
                 });
                 client.on('error', (err) => console.error('Redis Client Error:', err));
                 client.on('connect', () => console.log('Connected to Redis'));

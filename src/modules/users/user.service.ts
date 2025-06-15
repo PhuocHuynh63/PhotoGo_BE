@@ -16,7 +16,8 @@ import { Cron } from '@nestjs/schedule';
 import { BullQueueService } from 'src/3rdService/bull/bull-queue.service';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-
+import { CartService } from 'src/modules/carts/cart.service';
+import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -25,6 +26,8 @@ export class UserService {
     private readonly roleService: RoleService,
     private readonly uploadService: UploadService,
     private readonly MailService: MailService,
+    private readonly cartService: CartService,
+    private readonly wishlistService: WishlistService,
     private readonly bullQueueService: BullQueueService,
     @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
   ) { }
@@ -57,6 +60,7 @@ export class UserService {
   // }
   //#endregion create
 
+  //#region create
   async create(createAuthDto: CreateAuthDto): Promise<User> {
     try {
       const { passwordHash, ...userData } = createAuthDto;
@@ -100,12 +104,19 @@ export class UserService {
         this.logger.warn(`Đã tạo người dùng ID ${savedUser.id} nhưng không thể lập lịch xóa do lỗi Redis`);
       }
 
+      // create cart for user
+      await this.cartService.createCart(savedUser.id);
+
+      // create wishlist for user
+      await this.wishlistService.createWishlist(savedUser.id);
+
       return savedUser;
     } catch (error) {
       this.logger.error(`Lỗi khi tạo người dùng: ${error.message}`, error.stack);
       throw error;
     }
   }
+  //#endregion create
 
   //#region uploadImage
   async uploadImage(id: string, file: Express.Multer.File): Promise<User> {
@@ -126,6 +137,7 @@ export class UserService {
       throw new NotFoundException(`Không tìm thấy người dùng với ID ${id}`);
     }
 
+    //#region có thể dùng để restPassword 
     // Nếu có trường passwordHash, kiểm tra mật khẩu cũ trước khi cập nhật
     if (updateUserDto.password && updateUserDto.oldPasswordHash && updateUserDto.confirmPassword) {
       const isMatch = await bcrypt.compare(updateUserDto.oldPasswordHash, user.passwordHash);
@@ -137,8 +149,10 @@ export class UserService {
       }
       updateUserDto.oldPasswordHash = user.passwordHash; // Lưu mật khẩu cũ để so sánh
       // Mã hóa mật khẩu mới
-      updateUserDto.password = await hashPasswordHelper(updateUserDto.password);
+      user.passwordHash = await hashPasswordHelper(updateUserDto.password);
     }
+    // ||=====================END========================||//
+    //#endregion
 
     // Cập nhật thông tin user
     Object.assign(user, updateUserDto);
@@ -258,7 +272,21 @@ export class UserService {
     //#endregion
 
     //#region Filter
-    const queryBuilder = this.userRepository.createQueryBuilder('user').select(['-user.passwordHash', '-user.oldPasswordHash']);
+    const queryBuilder = this.userRepository.createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.fullName',
+        'user.email',
+        'user.phoneNumber',
+        'user.status',
+        'user.rank',
+        'user.auth',
+        'user.createdAt',
+        'user.updatedAt',
+        'user.avatarUrl',
+        'role.id',
+        'role.name'
+      ]);
 
     // Thêm join để lấy thông tin role
     queryBuilder.leftJoinAndSelect('user.role', 'role');

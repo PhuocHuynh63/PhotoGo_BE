@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, ConflictException, NotFoundException, Logger } from '@nestjs/common';
 import { comparePasswordHelper, getInitials } from 'src/utils/utils';
 import { JwtService } from '@nestjs/jwt';
 import { CreateAuthDto } from './dto/create-auth.dto';
@@ -7,14 +7,18 @@ import { UserService } from 'src/modules/users/user.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { RestPasswordhDto } from './dto/rest-password.dto';
-
-
+import { CartService } from 'src/modules/carts/cart.service';
+import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly cartService: CartService,
+    private readonly wishlistService: WishlistService,
   ) { }
 
   //#region Validate User
@@ -48,10 +52,10 @@ export class AuthService {
         role: user.role,
       },
       access_token: this.jwtService.sign(payload, {
-        expiresIn: '1d',
+        expiresIn: '365d', // 1 year
       }),
       refresh_token: this.jwtService.sign(payload, {
-        expiresIn: '7d',
+        expiresIn: '30d', // 30 days
       }),
     };
   }
@@ -84,7 +88,11 @@ export class AuthService {
 
     // Send email
     this.mailService.generateAndSendOtp(registerEmailLowerCase, template, content, body);
-
+    // create cart for user
+    await this.cartService.createCart(user.id);
+    // create wishlist for user
+    await this.wishlistService.createWishlist(user.id);
+    
     return user;
   }
   //#endregion

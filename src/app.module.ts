@@ -47,6 +47,9 @@ import { FacebookAuthModule } from './3rdService/facebook/facebook.module';
 import { BullQueueModule } from './3rdService/bull/bull-queue.module';
 import { GeminiModule } from './3rdService/gemini/gemini.module';
 import { CheckoutSessionModule } from './modules/checkout-session/checkout-session.module';
+import { AttendanceModule } from './modules/attendances/attendance/attendance.module';
+import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
+
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
   return moment(date).format(format);
@@ -121,34 +124,35 @@ if (!fs.existsSync(templateDir)) {
     }),
     BullQueueModule,
     CheckoutSessionModule,
-    UserModule,
-    RoleModule,
     GoogleAuthModule,
     FacebookAuthModule,
-    AuthModule,
-    UploadModule,
-    VendorModule,
-    CategoryModule,
     ChatModule,
-    NotificationModule,
+    GeminiModule,
+    AuthModule,
+    UserModule,
+    RoleModule,
+    VendorModule,
+    ServicePackageModule,
+    BookingModule,
+    InvoiceModule,
+    PaymentModule,
+    ReviewModule,
+    AttendanceModule,
+    CategoryModule,
     LocationModule,
-    CommentModule,
+    LocationAvailabilityModule,
     TeamMemberModule,
     SubscriptionModule,
     VoucherModule,
     PointModule,
-    BookingModule,
-    InvoiceModule,
-    PaymentModule,
     PayosModule,
     RefundModule,
     WalletModule,
     CartModule,
     WishlistModule,
     SupportTicketsModule,
-    ReviewModule,
-    ServicePackageModule,
-    GeminiModule
+    NotificationModule,
+
   ],
   controllers: [AppController],
   providers: [

@@ -1,22 +1,24 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Like, Not, In } from 'typeorm';
+import { Repository, DataSource, Like, Not, In, ILike } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
 import { Category } from '../categories/entities/category.entity';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { Location } from '../locations/entities/location.entity';
 import { VendorManager } from './entities/vendor-manager.entity';
 import { VendorLike } from './entities/vendor-like.entity';
-import { VendorAvailability } from './entities/vendor-availability.entity';
-import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto, CreateVendorAvailabilityDto } from './dto/create-vendor.dto';
+import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { slugify } from 'src/utils/utils';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
-import { UploadService } from 'src/3rdService/upload/upload.service'; // Assuming you have an UploadService for handling file uploads
+import { UploadService } from 'src/3rdService/upload/upload.service';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
-import { ReviewService } from '../reviews/reviews.service'; // Assuming you have a ReviewService for handling reviews
+import { ReviewService } from '../reviews/reviews.service';
 import { VendorSortField } from 'src/constants/vendor.enum';
 import { User } from '../users/entities/user.entity';
+import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
+import { CreateLocationDto } from '../locations/dto/create-location.dto';
+
 
 @Injectable()
 export class VendorService {
@@ -29,8 +31,6 @@ export class VendorService {
     private readonly vendorManagerRepository: Repository<VendorManager>,
     @InjectRepository(VendorLike)
     private readonly vendorLikeRepository: Repository<VendorLike>,
-    @InjectRepository(VendorAvailability)
-    private readonly vendorAvailabilityRepository: Repository<VendorAvailability>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(User)
@@ -408,50 +408,6 @@ export class VendorService {
   }
   //#endregion getVendorByUserID with role 'ROO8'
 
-  //#region findAllWithAvailability
-  async findAllWithAvailability(date: string, startTime: string, endTime: string): Promise<Vendor[]> {
-    const vendors = await this.vendorRepository
-      .createQueryBuilder('vendor')
-      .select([
-        'vendor',
-        'category.id',
-        'category.name',
-        'locations',
-        'servicePackages',
-        'serviceConcepts',
-        'serviceConceptServiceTypes',
-        'serviceType',
-        'images',
-        'vendor_availability'
-      ])
-      .leftJoin('vendor.category', 'category')
-      .leftJoin('vendor.locations', 'locations')
-      .leftJoin('vendor.servicePackages', 'servicePackages')
-      .leftJoin('servicePackages.serviceConcepts', 'serviceConcepts')
-      .leftJoin('serviceConcepts.serviceConceptServiceTypes', 'serviceConceptServiceTypes')
-      .leftJoin('serviceConceptServiceTypes.serviceType', 'serviceType')
-      .leftJoin('serviceConcepts.images', 'images')
-      .leftJoin('vendor.availabilities', 'vendor_availability', 
-        `vendor_availability.date = :date 
-         AND vendor_availability.isAvailable = true 
-         AND (
-           (vendor_availability.startTime <= :startTime AND vendor_availability.endTime >= :startTime)
-           OR (vendor_availability.startTime <= :endTime AND vendor_availability.endTime >= :endTime)
-           OR (vendor_availability.startTime >= :startTime AND vendor_availability.endTime <= :endTime)
-         )`,
-        { date, startTime, endTime }
-      )
-      .getMany();
-  
-    return vendors
-      .filter(vendor => vendor.availabilities && vendor.availabilities.length > 0)
-      .map(vendor => ({
-        ...vendor,
-        isAvailable: true
-      }));
-  }
-  //#endregion findAllWithAvailability  
-
   //#region update
   async update(
     id: string,
@@ -615,25 +571,62 @@ export class VendorService {
   //#endregion remove
 
   //#region VendorManager
-  async addManager(createVendorManagerDto: CreateVendorManagerDto): Promise<void> {
-    const manager = this.vendorManagerRepository.create(createVendorManagerDto);
-    await this.vendorManagerRepository.save(manager);
+  async addManager(id: string, createVendorManagerDto: CreateVendorManagerDto): Promise<void> {
+    const vendor = await this.vendorRepository.findOne({ where: { id } });
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: createVendorManagerDto.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingManager = await this.vendorManagerRepository.findOne({
+      where: { vendor: { id }, user: { id: createVendorManagerDto.userId } },
+    });
+
+    if (existingManager) {
+      throw new BadRequestException('User is already a manager of this vendor');
+    }
+
+    const vendorManager = this.vendorManagerRepository.create({
+      vendor,
+      user,
+    });
+
+    await this.vendorManagerRepository.save(vendorManager);
   }
   //#endregion VendorManager
 
   //#region VendorLike
-  async likeVendor(createVendorLikeDto: CreateVendorLikeDto): Promise<void> {
-    const like = this.vendorLikeRepository.create(createVendorLikeDto);
-    await this.vendorLikeRepository.save(like);
+  async likeVendor(id: string, createVendorLikeDto: CreateVendorLikeDto): Promise<void> {
+    const vendor = await this.vendorRepository.findOne({ where: { id } });
+    if (!vendor) {
+      throw new NotFoundException('Vendor not found');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: createVendorLikeDto.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existingLike = await this.vendorLikeRepository.findOne({
+      where: { vendor: { id }, user: { id: createVendorLikeDto.userId } },
+    });
+
+    if (existingLike) {
+      throw new BadRequestException('User has already liked this vendor');
+    }
+
+    const vendorLike = this.vendorLikeRepository.create({
+      vendor,
+      user,
+    });
+
+    await this.vendorLikeRepository.save(vendorLike);
   }
   //#endregion VendorLike
-
-  //#region VendorAvailability
-  async addAvailability(createVendorAvailabilityDto: CreateVendorAvailabilityDto): Promise<void> {
-    const availability = this.vendorAvailabilityRepository.create(createVendorAvailabilityDto);
-    await this.vendorAvailabilityRepository.save(availability);
-  }
-  //#endregion VendorAvailability
 
   //#region Utility
   private async generateUniqueSlug(
@@ -665,22 +658,82 @@ export class VendorService {
     return `${baseSlug}-${maxSuffix + 1}`;
   }
   //#endregion Utility
+  
+  //#region getConceptImage
+  async getConceptImage(
+    vendorId: string,
+    current: number = 1,
+    pageSize: number = 10
+  ): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    // Calculate offset
+    const skip = (current - 1) * pageSize;
 
-  //#region SearchLocations with City only link with vendor
-  async searchLocationsWithCity(city: string): Promise<Location[]> {
-    const locations = await this.locationRepository
-      .createQueryBuilder('location')
-      .leftJoinAndSelect('location.vendor', 'vendor')
-      .leftJoinAndSelect('vendor.category', 'category')
-      .leftJoinAndSelect('vendor.servicePackages', 'servicePackages')
-      .leftJoinAndSelect('servicePackages.serviceConcepts', 'serviceConcepts')
-      .leftJoinAndSelect('serviceConcepts.images', 'images')
-      .leftJoinAndSelect('vendor.reviews', 'reviews')
-      .where('location.city ILIKE :city', { city: `%${city}%` })
-      .getMany();
+    // Get total count
+    const totalCountQuery = `
+      SELECT COUNT(*) 
+      FROM service_concept_image 
+      WHERE service_concept_id IN (
+        SELECT id FROM service_concept
+        WHERE service_package_id IN (
+          SELECT id FROM service_package
+          WHERE vendor_id = $1
+        )
+      )
+    `;
+
+    // Get paginated data
+    const dataQuery = `
+      SELECT * FROM service_concept_image 
+      WHERE service_concept_id IN (
+        SELECT id FROM service_concept
+        WHERE service_package_id IN (
+          SELECT id FROM service_package
+          WHERE vendor_id = $1
+        )
+      )
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    // Execute both queries
+    const [totalCount, conceptImages] = await Promise.all([
+      this.dataSource.query(totalCountQuery, [vendorId]),
+      this.dataSource.query(dataQuery, [vendorId, pageSize, skip])
+    ]);
+
+    const totalItem = parseInt(totalCount[0].count);
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    return {
+      data: conceptImages,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem
+      }
+    };
+  }
+  //#endregion getConceptImage
+
+  //#region SearchLocations with any FE term
+  async searchLocation(query: string): Promise<Location[]> {
+    const locations = await this.locationRepository.find({
+      where: {
+        city: ILike(`%${query}%`)
+      }
+    });
     return locations;
   }
-  //#endregion SearchLocations with City only link with vendor
+  //#endregion SearchLocations with any FE term
 
   //#region filterVendors
   async filterVendors(params: {
@@ -695,6 +748,9 @@ export class VendorService {
     pageSize?: string;
     sortBy?: VendorSortField;
     sortDirection?: 'asc' | 'desc';
+    userLatitude?: number;
+    userLongitude?: number;
+    maxDistance?: number;
   }): Promise<{
     data: Vendor[];
     pagination: {
@@ -705,12 +761,25 @@ export class VendorService {
     };
   }> {
     const currentPage = params.current ? Number(params.current) : 1;
-    const pageSize = params.pageSize ? Number(params.pageSize) : 3; // Mặc định pageSize là 3
+    const pageSize = params.pageSize ? Number(params.pageSize) : 3;
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
     let paramIndex = 1;
     const baseParams: any[] = [];
-  
+
+    // Function to calculate distance using Haversine formula
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371; // Radius of the earth in km
+      const dLat = this.deg2rad(lat2 - lat1);
+      const dLon = this.deg2rad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c; // Distance in km
+    };
+
     // Base query for vendor filtering
     let baseQuery = `
       WITH vendor_stats AS (
@@ -753,6 +822,20 @@ export class VendorService {
           AND unaccent(l2.city) ILIKE unaccent($${paramIndex})
         )` : ''}
         ${params.category ? `AND c.id = $${paramIndex}` : ''}
+        ${params.maxDistance !== undefined && params.userLatitude && params.userLongitude ? `
+        AND EXISTS (
+          SELECT 1 FROM locations l3
+          WHERE l3.vendor_id = v.id
+          AND (
+            6371 * acos(
+              cos(radians($${paramIndex})) * 
+              cos(radians(l3.latitude)) * 
+              cos(radians(l3.longitude) - radians($${paramIndex + 1})) + 
+              sin(radians($${paramIndex})) * 
+              sin(radians(l3.latitude))
+            )
+          ) <= $${paramIndex + 2}
+        )` : ''}
       )
       SELECT DISTINCT 
         v.id,
@@ -779,7 +862,18 @@ export class VendorService {
         l.city,
         l.province,
         l.latitude,
-        l.longitude
+        l.longitude,
+        ${params.userLatitude && params.userLongitude ? `
+        (
+          6371 * acos(
+            cos(radians($${paramIndex})) * 
+            cos(radians(l.latitude)) * 
+            cos(radians(l.longitude) - radians($${paramIndex + 1})) + 
+            sin(radians($${paramIndex})) * 
+            sin(radians(l.latitude))
+          )
+        ) as distance
+        ` : 'NULL as distance'}
       FROM filtered_vendors fv
       JOIN vendors v ON v.id = fv.id
       LEFT JOIN locations l ON l.vendor_id = v.id
@@ -788,20 +882,34 @@ export class VendorService {
       LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
-  
+    
+
+    // Add user location parameters if provided
+    if (params.userLatitude && params.userLongitude) {
+      baseParams.push(params.userLatitude);
+      baseParams.push(params.userLongitude);
+      paramIndex += 2;
+    }
+
+    // Add maxDistance parameter if provided
+    if (params.maxDistance !== undefined && params.userLatitude && params.userLongitude) {
+      baseParams.push(params.maxDistance);
+      paramIndex++;
+    }
+
     // Add filters to base query
     if (params.name) {
       baseQuery += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
       baseParams.push(`%${params.name}%`);
       paramIndex++;
     }
-  
+
     if (params.location) {
       baseQuery += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
       baseParams.push(`%${params.location}%`);
       paramIndex++;
     }
-  
+
     if (params.minPrice !== undefined) {
       baseQuery += ` AND vp.min_price >= $${paramIndex}`;
       baseParams.push(params.minPrice);
@@ -813,7 +921,7 @@ export class VendorService {
       baseParams.push(params.maxPrice);
       paramIndex++;
     }
-  
+
     if (params.minRating !== undefined) {
       baseQuery += ` AND vs.avg_rating >= $${paramIndex}`;
       baseParams.push(params.minRating);
@@ -831,7 +939,7 @@ export class VendorService {
       baseParams.push(params.category);
       paramIndex++;
     }
-  
+
     // Add sorting
     switch (params.sortBy) {
       case VendorSortField.SUBSCRIPTION_COUNT:
@@ -846,14 +954,21 @@ export class VendorService {
       case VendorSortField.NAME:
         baseQuery += ` ORDER BY v.name ${sortDirection}`;
         break;
+      case VendorSortField.DISTANCE:
+        if (params.userLatitude && params.userLongitude) {
+          baseQuery += ` ORDER BY distance ${sortDirection} NULLS LAST`;
+        } else {
+          baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
+        }
+        break;
       default:
         baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
     }
-  
+
     // Add pagination to base query
     baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     baseParams.push(pageSize, skip);
-  
+
     // Get total count query
     let countQuery = `
       WITH vendor_stats AS (
@@ -882,22 +997,42 @@ export class VendorService {
       LEFT JOIN category c ON c.id = v.category_id
       WHERE v.status = 'hoạt động'
     `;
-  
+
     const countParams: any[] = [];
     let countParamIndex = 1;
-  
+
+    // Add distance calculation to count query if location is provided
+    if (params.userLatitude && params.userLongitude) {
+      countQuery = countQuery.replace(
+        'WHERE v.status = \'hoạt động\'',
+        `WHERE v.status = 'hoạt động'
+        AND (
+          6371 * acos(
+            cos(radians($${countParamIndex})) * 
+            cos(radians(l.latitude)) * 
+            cos(radians(l.longitude) - radians($${countParamIndex + 1})) + 
+            sin(radians($${countParamIndex})) * 
+            sin(radians(l.latitude))
+          )
+        ) <= $${countParamIndex + 2}`
+      );
+      countParams.push(params.userLatitude, params.userLongitude, params.maxDistance || 999999);
+      countParamIndex += 3;
+    }
+
+    // Add other filters to count query
     if (params.name) {
       countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.name}%`);
       countParamIndex++;
     }
-  
+
     if (params.location) {
       countQuery += ` AND unaccent(l.city) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.location}%`);
       countParamIndex++;
     }
-  
+
     if (params.minPrice !== undefined) {
       countQuery += ` AND vp.min_price >= $${countParamIndex}`;
       countParams.push(params.minPrice);
@@ -909,7 +1044,7 @@ export class VendorService {
       countParams.push(params.maxPrice);
       countParamIndex++;
     }
-  
+
     if (params.minRating !== undefined) {
       countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
       countParams.push(params.minRating);
@@ -927,13 +1062,13 @@ export class VendorService {
       countParams.push(params.category);
       countParamIndex++;
     }
-  
+
     // Execute queries
     const [vendorData, totalItem] = await Promise.all([
       this.dataSource.query(baseQuery, baseParams),
       this.dataSource.query(countQuery, countParams),
     ]);
-  
+
     if (vendorData.length === 0) {
       return {
         data: [],
@@ -945,7 +1080,7 @@ export class VendorService {
         },
       };
     }
-  
+
     // Fetch service packages and reviews for the filtered vendors
     const vendorIds = vendorData.map(v => v.id);
     const [servicePackages, reviews] = await Promise.all([
@@ -1039,30 +1174,52 @@ export class VendorService {
     });
   
     // Map vendors without filtering duplicates
-    const vendors = vendorData.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      description: row.description || '',
-      logo: row.logo || null,
-      banner: row.banner || null,
-      status: row.status,
-      slug: row.slug,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
-      reviewCount: parseInt(row.review_count) || 0,
-      minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
-      maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
-      subscriptionCount: parseInt(row.subscription_count) || 0,
-      isRemarkable: row.subscription_rank <= 3, // Vendor is remarkable if they are in top 3 by subscription count
-      locations: locationsByVendor.get(row.id) || [],
-      servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
-      category: row.category_id ? {
-        id: row.category_id,
-        name: row.category_name
-      } : null,
-      reviews: reviewsByVendor.get(row.id) || []
-    }));
+    const vendorMap = new Map();
+
+    vendorData.forEach((row: any) => {
+      if (!vendorMap.has(row.id)) {
+        vendorMap.set(row.id, {
+          id: row.id,
+          name: row.name,
+          description: row.description || '',
+          logo: row.logo || null,
+          banner: row.banner || null,
+          status: row.status,
+          slug: row.slug,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
+          reviewCount: parseInt(row.review_count) || 0,
+          minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
+          maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          subscriptionCount: parseInt(row.subscription_count) || 0,
+          isRemarkable: row.subscription_rank <= 3,
+          distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
+          locations: [],
+          servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
+          category: row.category_id ? {
+            id: row.category_id,
+            name: row.category_name
+          } : null,
+          reviews: reviewsByVendor.get(row.id) || []
+        });
+      }
+      // Push location if exists
+      if (row.location_id) {
+        vendorMap.get(row.id).locations.push({
+          id: row.location_id,
+          address: row.address || '',
+          district: row.district || '',
+          ward: row.ward || '',
+          city: row.city || '',
+          province: row.province || '',
+          latitude: row.latitude ? Number(parseFloat(row.latitude).toFixed(6)) : null,
+          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null
+        });
+      }
+    });
+
+    const vendors = Array.from(vendorMap.values());
   
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
   
@@ -1077,4 +1234,9 @@ export class VendorService {
     };
   }
   //#endregion filterVendors
+
+  // Helper function to convert degrees to radians
+  private deg2rad(deg: number): number {
+    return deg * (Math.PI / 180);
+  }
 }

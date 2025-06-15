@@ -15,6 +15,7 @@ import { DataSource } from 'typeorm';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { GeminiService } from 'src/3rdService/gemini/gemini.service';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class ServicePackageService {
@@ -72,8 +73,8 @@ export class ServicePackageService {
     return savedServicePackage;
   }
 
-  async findAll(query?: { current?: number; pageSize?: number }): Promise<{
-    data: ServicePackage[];
+  async findAll(query?: PaginationDto): Promise<{
+    data: (ServicePackage & { countPackageUsed: number })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -95,8 +96,33 @@ export class ServicePackageService {
       .take(pageSize)
       .getManyAndCount();
 
+    // Get counts for each package
+    const packageIds = data.map(pkg => pkg.id);
+    const counts = await this.dataSource.query(`
+      WITH package_concepts AS (
+        SELECT sp.id as package_id, sc.id as concept_id
+        FROM service_package sp
+        JOIN service_concept sc ON sc.service_package_id = sp.id
+        WHERE sp.id = ANY($1)
+      )
+      SELECT pc.package_id, COUNT(DISTINCT b.id)::integer as count
+      FROM package_concepts pc
+      JOIN booking b ON b.service_concept_id = pc.concept_id
+      WHERE b.status = 'đã hoàn thành'
+      GROUP BY pc.package_id
+    `, [packageIds]);
+
+    // Create a map of package ID to count
+    const countMap = new Map(counts.map(c => [c.package_id, Number(c.count)]));
+
+    // Add counts to each package
+    const packagesWithCounts = data.map(pkg => ({
+      ...pkg,
+      countPackageUsed: countMap.get(pkg.id) || 0
+    })) as (ServicePackage & { countPackageUsed: number })[];
+
     return {
-      data,
+      data: packagesWithCounts,
       pagination: {
         current: currentPage,
         pageSize,
@@ -106,7 +132,7 @@ export class ServicePackageService {
     };
   }
 
-  async findOne(id: string): Promise<ServicePackage> {
+  async findOne(id: string): Promise<ServicePackage & { countPackageUsed: number }> {
     const servicePackage = await this.servicePackageRepository.findOne({
       where: { id },
       relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images'],
@@ -114,7 +140,25 @@ export class ServicePackageService {
     if (!servicePackage) {
       throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
     }
-    return servicePackage;
+
+    // Get count of successful bookings for all concepts in this package
+    const countResult = await this.dataSource.query(`
+      WITH package_concepts AS (
+        SELECT sc.id as concept_id
+        FROM service_package sp
+        JOIN service_concept sc ON sc.service_package_id = sp.id
+        WHERE sp.id = $1
+      )
+      SELECT COUNT(DISTINCT b.id)::integer as count
+      FROM package_concepts pc
+      JOIN booking b ON b.service_concept_id = pc.concept_id
+      WHERE b.status = 'đã hoàn thành'
+    `, [id]);
+
+    return {
+      ...servicePackage,
+      countPackageUsed: Number(countResult[0].count) || 0
+    } as ServicePackage & { countPackageUsed: number };
   }
 
   async update(
@@ -160,7 +204,7 @@ export class ServicePackageService {
     return this.servicePackageMetadataRepository.save(metadata);
   }
 
-  async findAllMetadata(query?: { current?: number; pageSize?: number }): Promise<{
+  async findAllMetadata(query?: PaginationDto): Promise<{
     data: ServicePackageMetadata[];
     pagination: {
       current: number;
@@ -221,7 +265,7 @@ export class ServicePackageService {
     return this.serviceConceptServiceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceConceptServiceType(query?: { current?: number; pageSize?: number }): Promise<{
+  async findAllServiceConceptServiceType(query?: PaginationDto): Promise<{
     data: ServiceConceptServiceType[];
     pagination: {
       current: number;
@@ -282,7 +326,7 @@ export class ServicePackageService {
     return this.serviceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceTypes(query?: { current?: number; pageSize?: number }): Promise<{
+  async findAllServiceTypes(query?: PaginationDto): Promise<{
     data: ServiceType[];
     pagination: {
       current: number;
@@ -461,8 +505,8 @@ export class ServicePackageService {
     });
   }
 
-  async findAllServiceConcepts(query?: { current?: number; pageSize?: number }): Promise<{
-    data: ServiceConcept[];
+  async findAllServiceConcepts(query?: PaginationDto): Promise<{
+    data: (ServiceConcept & { countConceptUsed: number })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -484,8 +528,27 @@ export class ServicePackageService {
       .take(pageSize)
       .getManyAndCount();
 
+    // Get counts for each concept
+    const conceptIds = data.map(concept => concept.id);
+    const counts = await this.dataSource.query(`
+      SELECT service_concept_id, COUNT(*)::integer as count
+      FROM booking
+      WHERE service_concept_id = ANY($1)
+      AND status = 'đã hoàn thành'
+      GROUP BY service_concept_id
+    `, [conceptIds]);
+
+    // Create a map of concept ID to count
+    const countMap = new Map(counts.map(c => [c.service_concept_id, Number(c.count)]));
+
+    // Add counts to each concept
+    const conceptsWithCounts = data.map(concept => ({
+      ...concept,
+      countConceptUsed: countMap.get(concept.id) || 0
+    })) as (ServiceConcept & { countConceptUsed: number })[];
+
     return {
-      data,
+      data: conceptsWithCounts,
       pagination: {
         current: currentPage,
         pageSize,
@@ -495,7 +558,7 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceConcept(id: string): Promise<ServiceConcept> {
+  async findServiceConcept(id: string): Promise<ServiceConcept & { countConceptUsed: number }> {
     const serviceConcept = await this.serviceConceptRepository.findOne({
       where: { id },
       relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType', 'images'],
@@ -503,7 +566,19 @@ export class ServicePackageService {
     if (!serviceConcept) {
       throw new NotFoundException(`Khái niệm dịch vụ với ID ${id} không tồn tại`);
     }
-    return serviceConcept;
+
+    // Get count of successful bookings
+    const countResult = await this.dataSource.query(`
+      SELECT COUNT(*)::integer as count
+      FROM booking
+      WHERE service_concept_id = $1
+      AND status = 'đã hoàn thành'
+    `, [id]);
+
+    return {
+      ...serviceConcept,
+      countConceptUsed: Number(countResult[0].count) || 0
+    } as ServiceConcept & { countConceptUsed: number };
   }
 
   async updateServiceConcept(
@@ -673,7 +748,7 @@ export class ServicePackageService {
   }): Promise<PaginatedFilteredServicePackageResponseDto> {
     const currentPage = params.current || 1;
     const pageSize = params.pageSize || 10;
-    const actualPageSize = pageSize * 2; // Process double the requested size
+    const actualPageSize = pageSize * pageSize; // Process double the requested size
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
 

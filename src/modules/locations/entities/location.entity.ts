@@ -1,6 +1,8 @@
 import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 import { Vendor } from '../../vendors/entities/vendor.entity';
 import { TeamMember } from '../../team-members/entities/team-member.entity';
+import { LocationAvailability } from './location-availability.entity';
+
 @Entity('locations')
 export class Location {
   @PrimaryGeneratedColumn('uuid')
@@ -31,11 +33,14 @@ export class Location {
   @Column({ type: 'decimal', precision: 9, scale: 6, nullable: true })
   longitude: number;
 
-  @CreateDateColumn({ type: 'timestamptz', default: () => 'NOW()' })
-  created_at: Date;
+  @OneToOne(() => LocationAvailability, (availability) => availability.location, { cascade: true })
+  availability: LocationAvailability;
 
-  @UpdateDateColumn({ type: 'timestamptz', default: () => 'NOW()', onUpdate: 'NOW()' })
-  updated_at: Date;
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+  updatedAt: Date;
 
   @OneToOne(() => TeamMember, (teamMember) => teamMember.location, { cascade: true })
   teamMember: TeamMember;

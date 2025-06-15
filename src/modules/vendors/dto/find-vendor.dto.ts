@@ -80,32 +80,3 @@ export class VendorLikeFilterDto {
   })
   likedByUserId?: string;
 }
-
-export class VendorAvailabilityFilterDto {
-  @IsDate()
-  @IsOptional()
-  @ApiProperty({
-    example: '2025-04-17',
-    description: 'Lọc nhà cung cấp có sẵn trong ngày cụ thể',
-    required: false,
-  })
-  availableDate?: Date;
-
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    example: '09:00',
-    description: 'Lọc nhà cung cấp có sẵn bắt đầu từ thời gian cụ thể',
-    required: false,
-  })
-  availableStartTime?: string;
-
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    example: '18:00',
-    description: 'Lọc nhà cung cấp có sẵn cho đến thời gian cụ thể',
-    required: false,
-  })
-  availableEndTime?: string;
-}

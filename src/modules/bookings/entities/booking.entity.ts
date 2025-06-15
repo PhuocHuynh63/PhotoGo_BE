@@ -57,6 +57,15 @@ export class Booking {
   @Column({ type: 'text', nullable: true, name: 'user_note' })
   userNote: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'fullName' })
+  fullName: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true, name: 'phone' })
+  phone: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'email' })
+  email: string;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 

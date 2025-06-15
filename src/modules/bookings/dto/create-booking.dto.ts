@@ -1,19 +1,25 @@
-import { IsEnum, IsDateString, IsString, IsUUID, IsOptional, IsNumber } from 'class-validator';
+import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches } from 'class-validator';
 import { BookingSourceType, BookingDepositType, BookingStatus } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBookingDto {
-  @IsDateString()
+  @IsString()
+  @Matches(/^([0-2][0-9]|3[0-1])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+    message: 'Ngày phải có định dạng DD/MM/YYYY'
+  })
   @ApiProperty({
-    description: 'Ngày booking',
-    example: '2023-10-01'
+    description: 'Ngày booking (định dạng DD/MM/YYYY)',
+    example: '04/06/2025'
   })
   date: string;
 
   @IsString()
+  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: 'Giờ phải có định dạng HH:mm'
+  })
   @ApiProperty({
-    description: 'Giờ booking',
-    example: '14:00'
+    description: 'Giờ booking (định dạng HH:mm)',
+    example: '13:00'
   })
   time: string;
 
@@ -26,20 +32,20 @@ export class CreateBookingDto {
   })
   sourceType: BookingSourceType;
 
-  @IsUUID()
-  @IsOptional()
-  @ApiProperty({
-    description: 'ID chiến dịch nếu booking từ chiến dịch',
-    example: '123e4567-e89b-12d3-a456-426614174003',
-    required: false
-  })
-  sourceId?: string;
+  // @IsUUID()
+  // @IsOptional()
+  // @ApiProperty({
+  //   description: 'ID chiến dịch nếu booking từ chiến dịch',
+  //   example: '123e4567-e89b-12d3-a456-426614174003',
+  //   required: false
+  // })
+  // sourceId?: string;
 
   @IsNumber()
   @IsOptional()
   @ApiProperty({
     description: 'Số tiền đặt cọc cho booking',
-    example: '100.00',
+    example: '30.00',
     required: false
   })
   depositAmount?: number;
@@ -58,20 +64,56 @@ export class CreateBookingDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Số tiền đặt cọc cho booking',
-    example: '100.00',
+    description: 'Ghi chú của người dùng',
+    example: 'Không có',
     required: false
   })
   userNote?: string;
 
-  @IsEnum(BookingStatus)
+  // @IsEnum(BookingStatus)
+  // @IsOptional()
+  // @ApiProperty({
+  //   description: 'Trạng thái booking (chờ xử lý, đã xác nhận, đã hủy, đã hoàn thành)',
+  //   enum: BookingStatus,
+  //   enumName: 'BookingStatus',
+  //   example: BookingStatus.PENDING,
+  //   required: false
+  // })
+  // status?: BookingStatus;
+
+  @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'Trạng thái booking (chờ xử lý, đã xác nhận, đã hủy, đã hoàn thành)',
-    enum: BookingStatus,
-    enumName: 'BookingStatus',
-    example: BookingStatus.PENDING,
+    description: 'Tên người đặt hàng',
+    example: 'John Doe',
     required: false
   })
-  status?: BookingStatus;
+  fullName?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số điện thoại người đặt hàng',
+    example: '0909090909',
+    required: false
+  })
+  phone?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Email người đặt hàng',
+    example: 'john.doe@example.com',
+    required: false
+  })
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'ID voucher',
+    example: '123e4567-e89b-12d3-a456-426614174003',
+    required: false
+  })
+  voucherId?: string;
 }

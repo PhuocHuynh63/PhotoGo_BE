@@ -33,6 +33,14 @@ export class User {
   @Column({ default: UserRank.UNRANK })
   rank: string;
 
+  @Column({
+    name: 'multiplier',type: 'numeric',
+    precision: 5,
+    scale: 2,
+    default: 1.0,
+  })
+  multiplier: number; // Hệ số nhân cho điểm thưởng
+
   @Column()
   note: string;
 
@@ -57,4 +65,6 @@ export class User {
 
   @OneToMany(() => VoucherUser, (voucherUser) => voucherUser.user)
   voucherUsers: VoucherUser[];
+
+
 }
