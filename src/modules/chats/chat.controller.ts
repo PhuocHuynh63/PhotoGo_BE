@@ -17,7 +17,7 @@ export class ChatController {
    * Endpoint để tìm hoặc tạo một cuộc hội thoại mới.
    * Cách tiếp cận này hiệu quả hơn việc có 2 endpoint riêng biệt.
    */
-  @Post() 
+  @Post()
   @ApiOperation({ summary: 'Tìm hoặc tạo một cuộc hội thoại mới với một đối tác' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Đã tìm thấy cuộc hội thoại.', type: Chat })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Đã tạo cuộc hội thoại thành công.', type: Chat })
@@ -37,6 +37,19 @@ export class ChatController {
   @ApiResponse({ status: HttpStatus.OK, description: 'Lấy danh sách thành công.', type: [Chat] })
   async getMyChats(@Req() req: any, @Query('page') page?: number, @Query('pageSize') pageSize?: number): Promise<Chat[]> {
     const userId: string = req.user.userId || req.user.sub;
+    return this.chatService.getChatsForUser(userId, page, pageSize);
+  }
+
+  @Get(':userId')
+  @ApiOperation({ summary: 'Lấy danh sách cuộc hội thoại với một người dùng cụ thể' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số lượng trên mỗi trang' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Lấy danh sách thành công.', type: [Chat] })
+  async getChatsForUser(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ): Promise<Chat[]> {
     return this.chatService.getChatsForUser(userId, page, pageSize);
   }
 
