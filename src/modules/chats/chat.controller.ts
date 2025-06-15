@@ -30,7 +30,7 @@ export class ChatController {
     const findChatDto: FindChatDto = { partnerId };
     return this.chatService.findChat(findChatDto, userId);
   }
-//sort
+  //sort
   @Get('member/:memberId')
   @ApiOperation({ summary: 'Get all chats for a member' })
   @ApiResponse({ status: 200, description: 'Chats retrieved successfully', type: [Chat] })
@@ -39,7 +39,7 @@ export class ChatController {
   }
 
   @Get('member-sorted/:memberId')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get sorted chats for a member with pagination',
     description: 'Returns chats for the member sorted by last_updated timestamp in descending order. Paging is supported with default page 1 and 10 chats per page.'
   })
@@ -50,5 +50,46 @@ export class ChatController {
     @Query('pageSize') pageSize?: number,
   ): Promise<Chat[]> {
     return this.chatService.getChatsByMemberSorted(memberId, page || 1, pageSize || 10);
+  }
+
+  @Get('partners-list/:memberId')
+  @ApiOperation({
+    summary: 'Get chat partners list for a member with pagination',
+    description: 'Returns each chat with its partner id and the latest message for display in the partners list.'
+  })
+  @ApiResponse({ status: 200, description: 'Partners list retrieved successfully' })
+  async getPartnersList(
+    @Param('memberId') memberId: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ) {
+    return this.chatService.getPartnersList(memberId, page || 1, pageSize || 10);
+  }
+
+  @Get(':partnerId/messages')
+  @ApiOperation({
+    summary: 'Get paged messages for a chat with a partner',
+    description: 'Returns chat messages sorted by latest first. Defaults to 20 messages per page. Loading more messages when scrolled upward is handled by paging.'
+  })
+  @ApiResponse({ status: 200, description: 'Messages retrieved successfully' })
+  async getMessagesByPartner(
+    @Req() req: any,
+    @Param('partnerId') partnerId: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ) {
+    const userId: string = req.user.userId || req.user.sub;
+    return this.chatService.getPagedMessagesByPartner(userId, partnerId, page || 1, pageSize || 20);
+  }
+
+  @Get(':chatId/read')
+  @ApiOperation({
+    summary: 'Mark messages as read for a chat',
+    description: 'Marks all messages not sent by the current user as read.'
+  })
+  @ApiResponse({ status: 200, description: 'Messages marked read successfully', type: Chat })
+  async markAsRead(@Req() req: any, @Param('chatId') chatId: string) {
+    const userId: string = req.user.userId || req.user.sub;
+    return this.chatService.markMessagesAsRead(chatId, userId);
   }
 }
