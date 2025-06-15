@@ -6,10 +6,11 @@ import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { UserModule } from 'src/modules/users/user.module';
 import { AuthModule } from 'src/modules/auth/auth.module';
+import { Message } from '../message/entities/message.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Chat]),
+    TypeOrmModule.forFeature([Chat, Message]),
     UserModule,
     AuthModule,//bruh
   ],
@@ -17,4 +18,4 @@ import { AuthModule } from 'src/modules/auth/auth.module';
   controllers: [ChatController],
   exports: [ChatService],
 })
-export class ChatModule {}
+export class ChatModule { }
