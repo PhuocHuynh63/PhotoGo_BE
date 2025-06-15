@@ -93,7 +93,7 @@ if (!fs.existsSync(templateDir)) {
       database: process.env.DB_NAME,
       entities: [User, Role], // Đăng ký cả User và Role entity
       autoLoadEntities: true,
-      synchronize: false, // Bật true chỉ khi đang dev local
+      synchronize: true, // Bật true chỉ khi đang dev local
       namingStrategy: new SnakeNamingStrategy(),
     }),
 
