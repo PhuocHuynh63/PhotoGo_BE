@@ -36,7 +36,6 @@ import * as Handlebars from 'handlebars';
 import moment from 'moment';
 import { join } from 'path';
 import * as fs from 'fs';
-import { UploadModule } from './3rdService/upload/upload.module';
 import { InvoiceModule } from './modules/invoices/invoice.module';
 import { WishlistModule } from './modules/wishlists/wishlist.module';
 import { ScheduleModule } from '@nestjs/schedule';

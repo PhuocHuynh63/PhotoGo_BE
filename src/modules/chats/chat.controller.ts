@@ -1,95 +1,74 @@
-import { Controller, Post, Get, Body, Param, Req, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Req, Query, UseGuards, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { Chat } from './entities/chat.entity';
 import { CreateChatDto } from './dto/create-chat.dto';
-import { FindChatDto } from './dto/find-chat.dto';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { AuthGuard } from '@nestjs/passport'; // Giả sử bạn dùng passport-jwt
+import { Message } from '../message/entities/message.entity';
 
 @ApiTags('Chats')
 @ApiBearerAuth('access-token')
+@UseGuards(AuthGuard('jwt')) // Bảo vệ tất cả các endpoint trong controller này
 @Controller('chats')
 export class ChatController {
   constructor(private readonly chatService: ChatService) { }
 
-  @Post()
-  @ApiOperation({ summary: 'Create a new chat' })
-  @ApiResponse({ status: 201, description: 'Chat created successfully', type: Chat })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
-  async createChat(@Req() req: any, @Body() createChatDto: CreateChatDto): Promise<Chat> {
-    // Use the token's user ID as the caller. The service method createChatFromDto calls the established createChat.
+  /**
+   * Endpoint để tìm hoặc tạo một cuộc hội thoại mới.
+   * Cách tiếp cận này hiệu quả hơn việc có 2 endpoint riêng biệt.
+   */
+  @Post() 
+  @ApiOperation({ summary: 'Tìm hoặc tạo một cuộc hội thoại mới với một đối tác' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Đã tìm thấy cuộc hội thoại.', type: Chat })
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Đã tạo cuộc hội thoại thành công.', type: Chat })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Dữ liệu đầu vào không hợp lệ.' })
+  async findOrCreateChat(@Req() req: any, @Body() createChatDto: CreateChatDto): Promise<Chat> {
     const userId: string = req.user.userId || req.user.sub;
-    return this.chatService.createChat(createChatDto, userId);
+    return this.chatService.findOrCreateChat(createChatDto, userId);
   }
 
-  @Get(':partnerId')
-  @ApiOperation({ summary: 'Get a chat between the current user and a partner' })
-  @ApiResponse({ status: 200, description: 'Chat found', type: Chat })
-  @ApiResponse({ status: 404, description: 'Chat not found' })
-  async getChat(@Req() req: any, @Param('partnerId') partnerId: string): Promise<Chat> {
+  /**
+   * Endpoint để lấy danh sách các cuộc hội thoại của người dùng đang đăng nhập (cho sidebar).
+   */
+  @Get()
+  @ApiOperation({ summary: 'Lấy danh sách cuộc hội thoại của người dùng hiện tại' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số lượng trên mỗi trang' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Lấy danh sách thành công.', type: [Chat] })
+  async getMyChats(@Req() req: any, @Query('page') page?: number, @Query('pageSize') pageSize?: number): Promise<Chat[]> {
     const userId: string = req.user.userId || req.user.sub;
-    const findChatDto: FindChatDto = { partnerId };
-    return this.chatService.findChat(findChatDto, userId);
-  }
-  //sort
-  @Get('member/:memberId')
-  @ApiOperation({ summary: 'Get all chats for a member' })
-  @ApiResponse({ status: 200, description: 'Chats retrieved successfully', type: [Chat] })
-  async getChatsByMember(@Param('memberId') memberId: string): Promise<Chat[]> {
-    return this.chatService.getChatsByMember(memberId);
+    return this.chatService.getChatsForUser(userId, page, pageSize);
   }
 
-  @Get('member-sorted/:memberId')
-  @ApiOperation({
-    summary: 'Get sorted chats for a member with pagination',
-    description: 'Returns chats for the member sorted by last_updated timestamp in descending order. Paging is supported with default page 1 and 10 chats per page.'
-  })
-  @ApiResponse({ status: 200, description: 'Chats retrieved successfully', type: [Chat] })
-  async getChatsByMemberSorted(
-    @Param('memberId') memberId: string,
+  /**
+   * Endpoint để lấy lịch sử tin nhắn của một cuộc hội thoại cụ thể.
+   * Endpoint này an toàn và chính xác hơn vì dùng `chatId`.
+   */
+  @Get(':chatId/messages')
+  @ApiOperation({ summary: 'Lấy tin nhắn của một cuộc hội thoại theo ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số lượng tin nhắn trên mỗi trang' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Lấy tin nhắn thành công.', type: [Message] })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Không tìm thấy cuộc hội thoại.' })
+  async getMessagesForChat(
+    @Param('chatId', ParseUUIDPipe) chatId: string,
     @Query('page') page?: number,
     @Query('pageSize') pageSize?: number,
-  ): Promise<Chat[]> {
-    return this.chatService.getChatsByMemberSorted(memberId, page || 1, pageSize || 10);
+  ): Promise<Message[]> {
+    // TODO: Thêm một bước kiểm tra để đảm bảo người dùng hiện tại là thành viên của `chatId` này.
+    return this.chatService.getMessagesForChat(chatId, page, pageSize);
   }
 
-  @Get('partners-list/:memberId')
-  @ApiOperation({
-    summary: 'Get chat partners list for a member with pagination',
-    description: 'Returns each chat with its partner id and the latest message for display in the partners list.'
-  })
-  @ApiResponse({ status: 200, description: 'Partners list retrieved successfully' })
-  async getPartnersList(
-    @Param('memberId') memberId: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.chatService.getPartnersList(memberId, page || 1, pageSize || 10);
-  }
-
-  @Get(':partnerId/messages')
-  @ApiOperation({
-    summary: 'Get paged messages for a chat with a partner',
-    description: 'Returns chat messages sorted by latest first. Defaults to 20 messages per page. Loading more messages when scrolled upward is handled by paging.'
-  })
-  @ApiResponse({ status: 200, description: 'Messages retrieved successfully' })
-  async getMessagesByPartner(
-    @Req() req: any,
-    @Param('partnerId') partnerId: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
+  /**
+   * Endpoint để đánh dấu các tin nhắn trong một cuộc hội thoại là đã đọc.
+   */
+  @Post(':chatId/read')
+  @ApiOperation({ summary: 'Đánh dấu các tin nhắn trong cuộc hội thoại là đã đọc' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Đánh dấu đã đọc thành công.' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Không tìm thấy cuộc hội thoại.' })
+  async markMessagesAsRead(@Req() req: any, @Param('chatId', ParseUUIDPipe) chatId: string): Promise<{ message: string }> {
     const userId: string = req.user.userId || req.user.sub;
-    return this.chatService.getPagedMessagesByPartner(userId, partnerId, page || 1, pageSize || 20);
-  }
-
-  @Get(':chatId/read')
-  @ApiOperation({
-    summary: 'Mark messages as read for a chat',
-    description: 'Marks all messages not sent by the current user as read.'
-  })
-  @ApiResponse({ status: 200, description: 'Messages marked read successfully', type: Chat })
-  async markAsRead(@Req() req: any, @Param('chatId') chatId: string) {
-    const userId: string = req.user.userId || req.user.sub;
-    return this.chatService.markMessagesAsRead(chatId, userId);
+    await this.chatService.markMessagesAsRead(chatId, userId);
+    return { message: 'Các tin nhắn đã được đánh dấu là đã đọc.' };
   }
 }
