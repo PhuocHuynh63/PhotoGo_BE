@@ -103,8 +103,8 @@ export class ChatService {
       .addSelect(
         `(SELECT COUNT(msg.id)
           FROM message msg
-          WHERE msg."chatId" = chat.id
-          AND msg."senderId" != :userId
+          WHERE msg."chat_id" = chat.id
+          AND msg."sender_id" != :userId
           AND msg."isRead" = false)`,
         'chat_unreadCount',
       )
