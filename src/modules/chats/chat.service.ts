@@ -93,16 +93,39 @@ export class ChatService {
    * @param pageSize Số lượng cuộc hội thoại trên mỗi trang
    * @returns Mảng các cuộc hội thoại
    */
-  async getChatsForUser(userId: string, page: number = 1, pageSize: number = 20): Promise<Chat[]> {
-    return this.chatRepository
+  async getChatsForUser(
+    userId: string,
+    page: number = 1,
+    pageSize: number = 20,
+  ): Promise<(Chat & { unreadCount: number })[]> {
+    const { entities, raw } = await this.chatRepository
       .createQueryBuilder('chat')
-      .where(':memberId = ANY(chat.members)', { memberId: userId })
+      .addSelect(
+        `(SELECT COUNT(msg.id)
+          FROM message msg
+          WHERE msg."chatId" = chat.id
+          AND msg."senderId" != :userId
+          AND msg."isRead" = false)`,
+        'chat_unreadCount',
+      )
+      .where(':userId = ANY(chat.members)')
       .orderBy('chat.lastUpdatedAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize)
-      .getMany();
-  }
+      .setParameter('userId', userId)
+      .getRawAndEntities();
 
+    const chatsWithUnreadCount = entities.map((chat) => {
+      const meta = raw.find((r) => r.chat_id === chat.id);
+      const unreadCount = meta ? parseInt(meta.chat_unreadCount, 10) : 0;
+      return {
+        ...chat,
+        unreadCount,
+      };
+    });
+
+    return chatsWithUnreadCount;
+  }
   /**
    * Lấy lịch sử tin nhắn của một cuộc hội thoại với phân trang hiệu quả.
    * Chỉ lấy đúng số lượng tin nhắn cần thiết từ database.
