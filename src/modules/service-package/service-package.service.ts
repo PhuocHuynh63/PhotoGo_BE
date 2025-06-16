@@ -618,14 +618,24 @@ export class ServicePackageService {
     }
 
     // Update basic fields
-    if (updateServiceConceptDto.name) serviceConcept.name = updateServiceConceptDto.name;
-    if (updateServiceConceptDto.description !== undefined) serviceConcept.description = updateServiceConceptDto.description;
-    if (updateServiceConceptDto.price !== undefined) serviceConcept.price = updateServiceConceptDto.price;
-    if (updateServiceConceptDto.duration !== undefined) serviceConcept.duration = updateServiceConceptDto.duration;
-    if (updateServiceConceptDto.status !== undefined) serviceConcept.status = updateServiceConceptDto.status;
+    if (updateServiceConceptDto.name && updateServiceConceptDto.name.trim() !== '') {
+      serviceConcept.name = updateServiceConceptDto.name;
+    }
+    if (updateServiceConceptDto.description !== undefined && updateServiceConceptDto.description?.trim() !== '') {
+      serviceConcept.description = updateServiceConceptDto.description;
+    }
+    if (updateServiceConceptDto.price !== undefined && updateServiceConceptDto.price > 0) {
+      serviceConcept.price = updateServiceConceptDto.price;
+    }
+    if (updateServiceConceptDto.duration !== undefined && updateServiceConceptDto.duration > 0) {
+      serviceConcept.duration = updateServiceConceptDto.duration;
+    }
+    if (updateServiceConceptDto.status !== undefined && updateServiceConceptDto.status.trim() !== '') {
+      serviceConcept.status = updateServiceConceptDto.status;
+    }
 
-    // Update service package if provided
-    if (updateServiceConceptDto.servicePackageId) {
+    // Update service package if provided and not empty
+    if (updateServiceConceptDto.servicePackageId && updateServiceConceptDto.servicePackageId.trim() !== '') {
       const servicePackage = await this.servicePackageRepository.findOne({
         where: { id: updateServiceConceptDto.servicePackageId }
       });
@@ -635,8 +645,8 @@ export class ServicePackageService {
       serviceConcept.servicePackage = servicePackage;
     }
 
-    // Update service types if provided
-    if (updateServiceConceptDto.serviceTypeIds) {
+    // Update service types if provided and not empty
+    if (updateServiceConceptDto.serviceTypeIds && updateServiceConceptDto.serviceTypeIds.length > 0) {
       this.logger.log('Đang cập nhật liên kết loại dịch vụ');
       try {
         // Verify all service types exist first
@@ -667,12 +677,12 @@ export class ServicePackageService {
         }
 
         // Add new relationships
-        const toAdd = serviceTypes
-          .filter(type => !existingMap.has(type.id))
-          .map(type => 
+        const toAdd = updateServiceConceptDto.serviceTypeIds
+          .filter(typeId => !existingMap.has(typeId))
+          .map(typeId => 
             this.serviceConceptServiceTypeRepository.create({
               serviceConceptId: id,
-              serviceTypeId: type.id
+              serviceTypeId: typeId
             })
           );
 
