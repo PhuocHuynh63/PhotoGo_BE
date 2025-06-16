@@ -16,6 +16,8 @@ import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-worki
 import { In } from 'typeorm';
 import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-saturday.dto';
 import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
+import { DataSource } from 'typeorm';
+import { BookingStatus } from 'src/constants/booking.enum';
 
 @Injectable()
 export class LocationAvailabilityService {
@@ -49,16 +51,48 @@ export class LocationAvailabilityService {
       }
 
   // Helper function to format slot times
-  private formatSlotTimes(slotTime: LocationSlotTime & { maxParallelBookings?: number }): any {
+  private async formatSlotTimes(slotTime: LocationSlotTime & { maxParallelBookings?: number }): Promise<any> {
     if (!slotTime) return slotTime;
+
+    // Get all bookings for this slot time
+    const bookings = await this.dataSource
+      .createQueryBuilder()
+      .select('booking.id')
+      .from('booking', 'booking')
+      .innerJoin('booking.vendor', 'vendor')
+      .innerJoin('vendor.locations', 'locations')
+      .innerJoin('locations.availability', 'availability')
+      .innerJoin('availability.slotTimes', 'slotTimes')
+      .where('slotTimes.id = :slotTimeId', { slotTimeId: slotTime.id })
+      .andWhere('booking.status IN (:...statuses)', { 
+        statuses: [BookingStatus.COMPLETED] 
+      })
+      .andWhere('booking.time BETWEEN :startTime AND :endTime', {
+        startTime: slotTime.startSlotTime,
+        endTime: slotTime.endSlotTime
+      })
+      .getCount();
+
+    const maxParallelBookings = slotTime.maxParallelBookings || 1;
+    const alreadyBooked = bookings;
+    const isAvailable = alreadyBooked < maxParallelBookings;
+
     return {
       id: slotTime.id,
       slot: slotTime.slot,
       startSlotTime: slotTime.startSlotTime,
       endSlotTime: slotTime.endSlotTime,
       isStrictTimeBlocking: slotTime.isStrictTimeBlocking,
-      maxParallelBookings: slotTime.maxParallelBookings || 1
+      maxParallelBookings,
+      alreadyBooked,
+      isAvailable
     };
+  }
+
+  // Helper function to format multiple slot times
+  private async formatSlotTimesArray(slotTimes: LocationSlotTime[]): Promise<any[]> {
+    if (!slotTimes) return [];
+    return Promise.all(slotTimes.map(slotTime => this.formatSlotTimes(slotTime)));
   }
 
   constructor(
@@ -72,6 +106,7 @@ export class LocationAvailabilityService {
     private locationSlotTimeRepository: Repository<LocationSlotTime>,
     @InjectRepository(LocationSlotTimeWorkingDate)
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
+    private dataSource: DataSource,
   ) {}
 
   // Helper function to generate dates for the current week
@@ -200,7 +235,7 @@ export class LocationAvailabilityService {
     return {
       ...savedAvailability,
       workingDates: savedWorkingDates.map(date => this.formatLocationWorkingDates(date)),
-      slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
+      slotTimes: await this.formatSlotTimesArray(slotTimes)
     };
   }
 
@@ -252,14 +287,7 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes)
       };
     }));
 
@@ -308,14 +336,7 @@ export class LocationAvailabilityService {
       workingDates: availability.workingDates?.map(workingDate => 
         this.formatLocationWorkingDates(workingDate)
       ),
-      slotTimes: availability.slotTimes?.map(slotTime => {
-        const workingDateId = availability.workingDates[0]?.id;
-        const key = `${slotTime.id}-${workingDateId}`;
-        return {
-          ...this.formatSlotTimes(slotTime),
-          maxParallelBookings: maxParallelMap.get(key) || 1
-        };
-      })
+      slotTimes: await this.formatSlotTimesArray(availability.slotTimes)
     };
   }
 
@@ -412,14 +433,7 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes)
       };
     }));
 
@@ -511,14 +525,7 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes)
       };
     }));
 
@@ -589,14 +596,7 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes)
       };
     }));
 
@@ -891,7 +891,7 @@ export class LocationAvailabilityService {
     return {
       ...savedAvailability,
       workingDates: workingDatesToUpdate.map(date => this.formatLocationWorkingDates(date)),
-      slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
+      slotTimes: await this.formatSlotTimesArray(slotTimes)
     };
   }
 
