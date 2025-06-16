@@ -109,6 +109,7 @@ export class ChatService {
         'chat_unreadCount',
       )
       .where(':userId = ANY(chat.members)')
+      .orderBy('chat.lastUpdatedAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize)
       .setParameter('userId', userId)
@@ -136,7 +137,7 @@ export class ChatService {
   async getMessagesForChat(chatId: string, page: number = 1, pageSize: number = 50): Promise<Message[]> {
     return this.messageRepository.find({
       where: { chatId },
-      order: { timestamp: 'DESC' }, // Sắp xếp để lấy tin nhắn mới nhất trước
+      order: { timestamp: 'ASC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
