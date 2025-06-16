@@ -135,7 +135,7 @@ export class ServicePackageService {
   async findOne(id: string): Promise<ServicePackage & { countPackageUsed: number }> {
     const servicePackage = await this.servicePackageRepository.findOne({
       where: { id },
-      relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images'],
+      relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images', 'serviceConcepts.serviceConceptServiceTypes', 'serviceConcepts.serviceConceptServiceTypes.serviceType'],
     });
     if (!servicePackage) {
       throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
