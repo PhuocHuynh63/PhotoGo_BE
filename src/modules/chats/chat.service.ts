@@ -109,7 +109,6 @@ export class ChatService {
         'chat_unreadCount',
       )
       .where(':userId = ANY(chat.members)')
-      .orderBy('chat.lastUpdatedAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize)
       .setParameter('userId', userId)
