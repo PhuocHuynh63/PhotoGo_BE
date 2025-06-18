@@ -313,4 +313,8 @@ export class CartService {
 
     await this.cartItemRepository.remove(cartItem);
   }
+
+  async findCartByUserId(userId: string): Promise<Cart | null> {
+    return await this.cartRepository.findOne({ where: { userId } });
+  }
 }
