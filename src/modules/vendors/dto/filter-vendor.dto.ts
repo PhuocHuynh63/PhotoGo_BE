@@ -75,7 +75,7 @@ export class FilterVendorDto {
   @IsOptional()
   @ApiProperty({
     description: 'Loại dịch vụ',
-    example: 'Nhà hàng',
+    example: 'C001',
     required: false,
   })
   category?: string;

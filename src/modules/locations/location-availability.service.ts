@@ -180,10 +180,7 @@ export class LocationAvailabilityService {
     
     let currentDate = new Date(startDate);
     while (currentDate <= endDate) {
-      // Skip Sundays (day 0)
-      if (currentDate.getDay() !== 0) {
-        workingDates.push(new Date(currentDate));
-      }
+      workingDates.push(new Date(currentDate));
       currentDate.setDate(currentDate.getDate() + 1);
     }
     

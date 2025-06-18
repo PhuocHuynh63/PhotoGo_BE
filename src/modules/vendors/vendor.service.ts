@@ -815,26 +815,33 @@ export class VendorService {
         FROM vendors v
         LEFT JOIN locations l ON l.vendor_id = v.id
         LEFT JOIN category c ON c.id = v.category_id
+        LEFT JOIN vendor_stats vs ON vs.id = v.id
+        LEFT JOIN vendor_prices vp ON vp.id = v.id
         WHERE v.status = 'hoạt động'
+        ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
         ${params.location ? `AND EXISTS (
           SELECT 1 FROM locations l2 
           WHERE l2.vendor_id = v.id 
-          AND unaccent(l2.city) ILIKE unaccent($${paramIndex})
+          AND unaccent(l2.city) ILIKE unaccent($${paramIndex + (params.name ? 1 : 0)})
         )` : ''}
-        ${params.category ? `AND c.id = $${paramIndex}` : ''}
+        ${params.category ? `AND v.category_id = $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0)}` : ''}
+        ${params.minPrice !== undefined ? `AND vp.min_price >= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0)}` : ''}
+        ${params.maxPrice !== undefined ? `AND vp.max_price <= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0)}` : ''}
+        ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0)}` : ''}
+        ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0)}` : ''}
         ${params.maxDistance !== undefined && params.userLatitude && params.userLongitude ? `
         AND EXISTS (
           SELECT 1 FROM locations l3
           WHERE l3.vendor_id = v.id
           AND (
             6371 * acos(
-              cos(radians($${paramIndex})) * 
+              cos(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0)})) * 
               cos(radians(l3.latitude)) * 
-              cos(radians(l3.longitude) - radians($${paramIndex + 1})) + 
-              sin(radians($${paramIndex})) * 
+              cos(radians(l3.longitude) - radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + 1})) + 
+              sin(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0)})) * 
               sin(radians(l3.latitude))
             )
-          ) <= $${paramIndex + 2}
+          ) <= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + 2}
         )` : ''}
       )
       SELECT DISTINCT 
@@ -866,10 +873,10 @@ export class VendorService {
         ${params.userLatitude && params.userLongitude ? `
         (
           6371 * acos(
-            cos(radians($${paramIndex})) * 
+            cos(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0)})) * 
             cos(radians(l.latitude)) * 
-            cos(radians(l.longitude) - radians($${paramIndex + 1})) + 
-            sin(radians($${paramIndex})) * 
+            cos(radians(l.longitude) - radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + 1})) + 
+            sin(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0)})) * 
             sin(radians(l.latitude))
           )
         ) as distance
@@ -884,6 +891,42 @@ export class VendorService {
     `;
     
 
+    // Add parameters in the correct order
+    if (params.name) {
+      baseParams.push(`%${params.name}%`);
+      paramIndex++;
+    }
+
+    if (params.location) {
+      baseParams.push(`%${params.location}%`);
+      paramIndex++;
+    }
+
+    if (params.category) {
+      baseParams.push(params.category);
+      paramIndex++;
+    }
+
+    if (params.minPrice !== undefined) {
+      baseParams.push(params.minPrice);
+      paramIndex++;
+    }
+
+    if (params.maxPrice !== undefined) {
+      baseParams.push(params.maxPrice);
+      paramIndex++;
+    }
+
+    if (params.minRating !== undefined) {
+      baseParams.push(params.minRating);
+      paramIndex++;
+    }
+
+    if (params.maxRating !== undefined) {
+      baseParams.push(params.maxRating);
+      paramIndex++;
+    }
+
     // Add user location parameters if provided
     if (params.userLatitude && params.userLongitude) {
       baseParams.push(params.userLatitude);
@@ -894,49 +937,6 @@ export class VendorService {
     // Add maxDistance parameter if provided
     if (params.maxDistance !== undefined && params.userLatitude && params.userLongitude) {
       baseParams.push(params.maxDistance);
-      paramIndex++;
-    }
-
-    // Add filters to base query
-    if (params.name) {
-      baseQuery += ` AND unaccent(v.name) ILIKE unaccent($${paramIndex})`;
-      baseParams.push(`%${params.name}%`);
-      paramIndex++;
-    }
-
-    if (params.location) {
-      baseQuery += ` AND unaccent(l.city) ILIKE unaccent($${paramIndex})`;
-      baseParams.push(`%${params.location}%`);
-      paramIndex++;
-    }
-
-    if (params.minPrice !== undefined) {
-      baseQuery += ` AND vp.min_price >= $${paramIndex}`;
-      baseParams.push(params.minPrice);
-      paramIndex++;
-    }
-    
-    if (params.maxPrice !== undefined) {
-      baseQuery += ` AND vp.max_price <= $${paramIndex}`;
-      baseParams.push(params.maxPrice);
-      paramIndex++;
-    }
-
-    if (params.minRating !== undefined) {
-      baseQuery += ` AND vs.avg_rating >= $${paramIndex}`;
-      baseParams.push(params.minRating);
-      paramIndex++;
-    }
-    
-    if (params.maxRating !== undefined) {
-      baseQuery += ` AND vs.avg_rating <= $${paramIndex}`;
-      baseParams.push(params.maxRating);
-      paramIndex++;
-    }
-
-    if (params.category) {
-      baseQuery += ` AND c.id = $${paramIndex}`;
-      baseParams.push(params.category);
       paramIndex++;
     }
 
@@ -962,10 +962,10 @@ export class VendorService {
         }
         break;
       default:
-        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
+        baseQuery += ` ORDER BY v.created_at ${sortDirection}`;
     }
 
-    // Add pagination to base query
+    // Add pagination
     baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     baseParams.push(pageSize, skip);
 
@@ -1001,26 +1001,7 @@ export class VendorService {
     const countParams: any[] = [];
     let countParamIndex = 1;
 
-    // Add distance calculation to count query if location is provided
-    if (params.userLatitude && params.userLongitude) {
-      countQuery = countQuery.replace(
-        'WHERE v.status = \'hoạt động\'',
-        `WHERE v.status = 'hoạt động'
-        AND (
-          6371 * acos(
-            cos(radians($${countParamIndex})) * 
-            cos(radians(l.latitude)) * 
-            cos(radians(l.longitude) - radians($${countParamIndex + 1})) + 
-            sin(radians($${countParamIndex})) * 
-            sin(radians(l.latitude))
-          )
-        ) <= $${countParamIndex + 2}`
-      );
-      countParams.push(params.userLatitude, params.userLongitude, params.maxDistance || 999999);
-      countParamIndex += 3;
-    }
-
-    // Add other filters to count query
+    // Add filters to count query
     if (params.name) {
       countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
       countParams.push(`%${params.name}%`);
@@ -1028,11 +1009,41 @@ export class VendorService {
     }
 
     if (params.location) {
-      countQuery += ` AND unaccent(l.city) ILIKE unaccent($${countParamIndex})`;
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM locations l2 
+        WHERE l2.vendor_id = v.id 
+        AND unaccent(l2.city) ILIKE unaccent($${countParamIndex})
+      )`;
       countParams.push(`%${params.location}%`);
       countParamIndex++;
     }
 
+    if (params.category) {
+      countQuery += ` AND v.category_id = $${countParamIndex}`;
+      countParams.push(params.category);
+      countParamIndex++;
+    }
+
+    // Add distance calculation to count query if location is provided
+    if (params.userLatitude && params.userLongitude) {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM locations l3
+        WHERE l3.vendor_id = v.id
+        AND (
+          6371 * acos(
+            cos(radians($${countParamIndex})) * 
+            cos(radians(l3.latitude)) * 
+            cos(radians(l3.longitude) - radians($${countParamIndex + 1})) + 
+            sin(radians($${countParamIndex})) * 
+            sin(radians(l3.latitude))
+          )
+        ) <= $${countParamIndex + 2}
+      )`;
+      countParams.push(params.userLatitude, params.userLongitude, params.maxDistance || 999999);
+      countParamIndex += 3;
+    }
+
+    // Add price filters to count query
     if (params.minPrice !== undefined) {
       countQuery += ` AND vp.min_price >= $${countParamIndex}`;
       countParams.push(params.minPrice);
@@ -1045,6 +1056,7 @@ export class VendorService {
       countParamIndex++;
     }
 
+    // Add rating filters to count query
     if (params.minRating !== undefined) {
       countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
       countParams.push(params.minRating);
@@ -1054,12 +1066,6 @@ export class VendorService {
     if (params.maxRating !== undefined) {
       countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
       countParams.push(params.maxRating);
-      countParamIndex++;
-    }
-
-    if (params.category) {
-      countQuery += ` AND c.id = $${countParamIndex}`;
-      countParams.push(params.category);
       countParamIndex++;
     }
 
