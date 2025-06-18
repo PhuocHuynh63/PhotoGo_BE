@@ -43,6 +43,8 @@ export class AuthService {
   async login(user: any) {
     const payload = { email: user.email, sub: user.id, fullname: user.fullname, role: user.role, image: user.image };
 
+    // Lấy cart của user
+    const cart = await this.cartService.findCartByUserId(user.id);
     return {
       user: {
         id: user.id,
@@ -50,6 +52,7 @@ export class AuthService {
         fullname: user.fullname,
         image: user.image,
         role: user.role,
+        cartId: cart?.id || null, // Thêm cartId vào đây
       },
       access_token: this.jwtService.sign(payload, {
         expiresIn: '365d', // 1 year
@@ -92,7 +95,7 @@ export class AuthService {
     await this.cartService.createCart(user.id);
     // create wishlist for user
     await this.wishlistService.createWishlist(user.id);
-    
+
     return user;
   }
   //#endregion
