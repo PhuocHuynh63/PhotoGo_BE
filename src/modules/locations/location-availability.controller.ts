@@ -132,7 +132,7 @@ export class LocationAvailabilityController {
   @Public()
   @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID vị trí' })
   @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ID vị trí' })
-  async findByLocationId(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityWithDateDto): Promise<{
+  async findByLocationId(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityDto): Promise<{
     data: LocationAvailability[];
     pagination: {
       current: number;
@@ -146,6 +146,27 @@ export class LocationAvailabilityController {
         throw new HttpException('ID vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
       }
       return await this.locationAvailabilityService.findByLocationId(locationId, query);
+    } catch (error) {
+      this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi tìm kiếm thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('location/:locationId/date')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID vị trí và ngày' })
+  @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ID vị trí và ngày' })
+  async findByLocationIdAndDate(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityWithDateDto): Promise<{
+    data: LocationAvailability[];
+  }> {
+    try {
+      if (!isUUID(locationId)) {
+        throw new HttpException('ID vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+      }
+      return await this.locationAvailabilityService.findByLocationIdAndDate(locationId, query);
     } catch (error) {
       this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
       if (error instanceof HttpException) {

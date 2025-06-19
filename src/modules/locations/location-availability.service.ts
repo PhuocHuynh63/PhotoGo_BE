@@ -454,8 +454,9 @@ export class LocationAvailabilityService {
     await this.locationAvailabilityRepository.remove(availability);
   }
 
-  async findByLocationId(locationId: string, query: FindLocationAvailabilityWithDateDto): Promise<{
-    data: (LocationAvailability & { slotTimeWorkingDates: any[] })[];
+  async findByLocationIdAndDate(locationId: string, query: FindLocationAvailabilityWithDateDto): Promise<{
+
+    data: LocationAvailability[];
     pagination: {
       current: number;
       pageSize: number;
@@ -470,14 +471,74 @@ export class LocationAvailabilityService {
       .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
       .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
       .andWhere('location_availability.location_id = :locationId', { locationId })
+      .andWhere('workingDates.date = :date', { date: this.convertDateFormat(date) })
       .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
 
     if (isAvailable !== undefined) {
       queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
     }
-
     if (date) {
       queryBuilder.andWhere('workingDates.date = :date', { date: this.convertDateFormat(date) });
+    }
+
+    if (sortBy) {
+      queryBuilder.orderBy(`location_availability.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
+    }
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
+
+    const formattedData = await Promise.all(data.map(async availability => {
+      const slotTimeWorkingDates = await this.locationSlotTimeWorkingDateRepository.find({
+        where: {
+          slotTimeId: In(availability.slotTimes.map(st => st.id)),
+          workingDateId: In(availability.workingDates.map(wd => wd.id))
+        },
+        relations: ['slotTime', 'workingDate']
+      });
+
+      return {
+        ...availability,
+        workingDates: availability.workingDates?.map(workingDate => 
+          this.formatLocationWorkingDates(workingDate)
+        ),
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
+      };
+    }));
+
+    return {
+      data: formattedData,
+      pagination: {
+        current: Number(current),
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
+        totalItem: total,
+      }
+    };
+  }
+
+  async findByLocationId(locationId: string, query: FindLocationAvailabilityDto): Promise<{
+    data: (LocationAvailability & { slotTimeWorkingDates: any[] })[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
+    const { isAvailable, current, pageSize, sortBy, sortDirection } = query;
+    const actualPageSize = Number(pageSize);
+    const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
+      .leftJoinAndSelect('location_availability.location', 'location')
+      .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
+      .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
+      .andWhere('location_availability.location_id = :locationId', { locationId })
+      .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
+
+    if (isAvailable !== undefined) {
+      queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
     }
 
     if (sortBy) {
@@ -506,9 +567,7 @@ export class LocationAvailabilityService {
           this.formatLocationWorkingDates(workingDate)
         ),
         slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
-        slotTimeWorkingDates: date 
-          ? await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
-          : []
+        slotTimeWorkingDates: []
       };
     }));
 
