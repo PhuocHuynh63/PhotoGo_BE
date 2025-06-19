@@ -506,7 +506,9 @@ export class LocationAvailabilityService {
           this.formatLocationWorkingDates(workingDate)
         ),
         slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
-        slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
+        slotTimeWorkingDates: date 
+          ? await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
+          : []
       };
     }));
 
