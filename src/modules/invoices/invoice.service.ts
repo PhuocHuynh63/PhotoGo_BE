@@ -14,6 +14,7 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { Commission } from '../commission/entities/commission.entity';
 
 @Injectable()
 export class InvoiceService {
@@ -26,6 +27,8 @@ export class InvoiceService {
     private voucherService: VoucherService,
     @InjectRepository(VoucherUser)
     private readonly voucherUserRepository: Repository<VoucherUser>,
+    @InjectRepository(Commission)
+    private readonly commissionRepository: Repository<Commission>,
   ) {}
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
@@ -94,10 +97,13 @@ export class InvoiceService {
       }
     }
 
-    const discountedPrice = originalPrice - discountAmount;
-    const taxAmount = Math.round(discountedPrice * 0.1);
+    let discountedPrice = originalPrice - discountAmount;
+    const commission = await this.commissionRepository.findOne({
+      where: { serviceConceptId: serviceConcept.id }
+    });
+    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.1;
     const feeAmount = 0;
-    const payablePrice = discountedPrice + taxAmount + feeAmount;
+    const payablePrice = discountedPrice + feeAmount;
 
     let depositAmount = 0;
     let remainingAmount = 0;

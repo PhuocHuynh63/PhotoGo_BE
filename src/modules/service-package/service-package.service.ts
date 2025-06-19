@@ -16,6 +16,8 @@ import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filte
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { GeminiService } from 'src/3rdService/gemini/gemini.service';
 import { PaginationDto } from './dto/pagination.dto';
+import { Commission } from '../commission/entities/commission.entity';
+import { CommissionType } from 'src/constants/commision.enum';
 
 @Injectable()
 export class ServicePackageService {
@@ -34,6 +36,8 @@ export class ServicePackageService {
     private readonly serviceConceptRepository: Repository<ServiceConcept>,
     @InjectRepository(ServiceConceptImage)
     private readonly serviceConceptImageRepository: Repository<ServiceConceptImage>,
+    @InjectRepository(Commission)
+    private readonly commissionRepository: Repository<Commission>,
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
     private readonly geminiService: GeminiService,
@@ -420,6 +424,16 @@ export class ServicePackageService {
       status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
       servicePackage: servicePackage,
     };
+    // save commission
+    const commissionData = this.commissionRepository.create({
+      serviceConceptId: serviceConceptData.id,
+      commissionRate: 30,
+      commissionType: CommissionType.PERCENTAGE,
+      commissionAmount: serviceConceptData.price * 0.3,
+    });
+    await this.commissionRepository.save(commissionData);
+    // Modify price to include commission and tax (10% tax)
+    serviceConceptData.price = serviceConceptData.price * (1 + commissionData.commissionRate / 100) + serviceConceptData.price * 0.1;
 
     // Create the service concept
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);

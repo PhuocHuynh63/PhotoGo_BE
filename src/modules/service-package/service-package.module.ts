@@ -11,6 +11,7 @@ import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { UploadModule } from 'src/3rdService/upload/upload.module';
 import { AuthModule } from '../auth/auth.module';
 import { GeminiModule } from 'src/3rdService/gemini/gemini.module';
+import { Commission } from '../commission/entities/commission.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -20,6 +21,7 @@ import { GeminiModule } from 'src/3rdService/gemini/gemini.module';
       ServiceType,
       ServiceConcept,
       ServiceConceptImage,
+      Commission,
     ]),
     UploadModule,
     AuthModule,

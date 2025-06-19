@@ -132,7 +132,7 @@ export class FindLocationAvailabilityWithDateDto {
   @ApiProperty({
     description: 'Ngày',
     example: '08/06/2025',
-    required: true,
+    required: false,
   })
   date?: string;
 

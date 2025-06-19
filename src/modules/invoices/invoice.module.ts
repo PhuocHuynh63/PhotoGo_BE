@@ -9,10 +9,11 @@ import { VoucherModule } from '../vouchers/voucher.module';
 import { AuthModule } from '../auth/auth.module';
 import { Booking } from '../bookings/entities/booking.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { Commission } from '../commission/entities/commission.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invoice, Booking, VoucherUser]),
+    TypeOrmModule.forFeature([Invoice, Booking, VoucherUser, Commission]),
     forwardRef(() => BookingModule),
     ServicePackageModule,
     VoucherModule,
