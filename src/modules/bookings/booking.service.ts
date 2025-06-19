@@ -74,6 +74,38 @@ export class BookingService {
     return hours * 60 + minutes;
   }
 
+  // Helper function to check for overlapping bookings
+  private async countOverlappingBookings(
+    date: Date,
+    startTime: string,
+    duration: number,
+  ): Promise<number> {
+    const startTimeMinutes = this.timeToMinutes(startTime);
+    const endTimeMinutes = startTimeMinutes + duration;
+
+    // Get all bookings for the date
+    const bookings = await this.bookingRepository.find({
+      where: {
+        date: date,
+        status: BookingStatus.PENDING,
+      },
+      relations: ['serviceConcept'],
+    });
+
+    // Count overlapping bookings
+    let count = 0;
+    for (const booking of bookings) {
+      const bookingStartMinutes = this.timeToMinutes(booking.time);
+      const bookingEndMinutes = bookingStartMinutes + booking.serviceConcept.duration;
+
+      // Only check if the start time of the new booking overlaps with existing bookings
+      if (bookingStartMinutes >= startTimeMinutes && bookingStartMinutes < endTimeMinutes) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   //#region Create Booking
   async create(
     createBookingDto: CreateBookingDto,
@@ -154,17 +186,14 @@ export class BookingService {
       throw new BadRequestException('Không tìm thấy thông tin slot time cho ngày này');
     }
 
-    // Check max parallel bookings
-    const existingBookings = await this.bookingRepository.count({
-      where: {
-        date: new Date(convertedDate),
-        time: createBookingDto.time,
-        status: BookingStatus.PENDING,
-      }
-    });
-
-    if (existingBookings >= slotTimeWorkingDate.maxParallelBookings) {
-      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này`);
+    // Check for overlapping bookings with maxParallelBookings
+    const overlappingCount = await this.countOverlappingBookings(
+      new Date(convertedDate),
+      createBookingDto.time,
+      serviceConcept.duration
+    );
+    if (overlappingCount >= slotTimeWorkingDate.maxParallelBookings) {
+      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này hoặc bị chồng lấn thời gian.`);
     }
 
     if (!createBookingDto.fullName) {

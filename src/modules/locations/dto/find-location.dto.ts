@@ -125,3 +125,61 @@ export class FindLocationDateRangeDto extends FindLocationAvailabilityDto {
   })
   endDate: string;
 } 
+
+export class FindLocationAvailabilityWithDateDto {
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Ngày',
+    example: '08/06/2025',
+    required: true,
+  })
+  date?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trạng thái sẵn sàng',
+    example: true,
+    required: false,
+  })
+  isAvailable?: boolean;
+
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số thứ tự của trang hiện tại',
+    example: '1',
+    required: false,
+  })
+  current?: string;
+
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Số lượng bản ghi trên mỗi trang',
+    example: '10',
+    required: false,
+  })
+  pageSize?: string;
+
+  @IsEnum(LocationSortField)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trường để sắp xếp',
+    enum: LocationSortField,
+    example: LocationSortField.CREATED_AT,
+    required: false,
+  })
+  sortBy?: LocationSortField;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Hướng sắp xếp',
+    enum: ['asc', 'desc'],
+    example: 'asc',
+    required: false,
+  })
+  sortDirection?: 'asc' | 'desc';
+}

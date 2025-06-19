@@ -10,6 +10,7 @@ import {
   Logger,
   HttpException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { LocationAvailabilityService } from './location-availability.service';
 import { CreateLocationTimeScheduleDto } from './dto/create-location-time-schedule.dto';
@@ -20,7 +21,7 @@ import { LocationAvailability } from './entities/location-availability.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { isUUID } from 'class-validator';
 import { Public } from 'src/decorator/custom';
-import { FindLocationAvailabilityDto } from './dto/find-location.dto';
+import { FindLocationAvailabilityDto, FindLocationAvailabilityWithDateDto } from './dto/find-location.dto';
 import { LocationSlotTime } from './entities/location-slot-time.entity';
 import { UpdateLocationSlotTimeDto } from './dto/update-location-slot-time.dto';
 import { LocationWorkingDate } from './entities/location-workingdate.entity';
@@ -84,7 +85,7 @@ export class LocationAvailabilityController {
     }
   }
 
-  @Get('date')
+  @Get('date/:date')
   @Public()
   @ApiOperation({ summary: 'Lấy thời gian làm việc theo ngày' })
   @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ngày' })
@@ -98,8 +99,30 @@ export class LocationAvailabilityController {
     }
   }> {
     try {
+      if (!date) {
+        throw new BadRequestException('Ngày không được để trống');
+      }
+
+      // Validate date format
+      const dateRegex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+      if (!dateRegex.test(date)) {
+        throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+      }
+
+      // Validate date values
+      const [day, month, year] = date.split('/');
+      const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      if (dateObj.getFullYear() !== parseInt(year) || 
+          dateObj.getMonth() !== parseInt(month) - 1 || 
+          dateObj.getDate() !== parseInt(day)) {
+        throw new BadRequestException('Ngày không hợp lệ');
+      }
+
       return await this.locationAvailabilityService.findByDate(date, query);
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
       throw new HttpException('Lỗi tìm kiếm thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -109,7 +132,7 @@ export class LocationAvailabilityController {
   @Public()
   @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID vị trí' })
   @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc theo ID vị trí' })
-  async findByLocationId(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityDto): Promise<{
+  async findByLocationId(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityWithDateDto): Promise<{
     data: LocationAvailability[];
     pagination: {
       current: number;
