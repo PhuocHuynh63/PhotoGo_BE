@@ -1,4 +1,4 @@
-export enum GeminiModel {
+export enum     GeminiModel {
     GEMINI_1_5_PRO_001 = 'models/gemini-1.5-pro-001',
     GEMINI_1_5_PRO_002 = 'models/gemini-1.5-pro-002',
     GEMINI_2_0_FLASH_001 = 'models/gemini-2.0-flash-001',

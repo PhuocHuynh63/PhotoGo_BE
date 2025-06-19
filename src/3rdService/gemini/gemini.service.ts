@@ -5,6 +5,7 @@ import { IGeminiResponse, ImageAnalysisResponse, TextAnalysisResponse } from './
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConceptVector } from '../../modules/service-package/entities/concept-vector.entity';
+import { GeminiModel } from './dto/gemini.enums';
 
 @Injectable()
 export class GeminiService {
@@ -99,7 +100,7 @@ export class GeminiService {
         }
     }
 
-    async processImage(file: Express.Multer.File,prompt?: string,modelName?: string): Promise<IGeminiResponse<ImageAnalysisResponse['data']>> {
+    async processImage(file: Express.Multer.File, prompt?: string, modelName?: string): Promise<IGeminiResponse<ImageAnalysisResponse['data']>> {
         const startTime = Date.now();
         try {
             const model = await this.initializeModel(modelName);
@@ -222,19 +223,19 @@ export class GeminiService {
     async generateConceptVector(image: Express.Multer.File, conceptId: string): Promise<ConceptVector> {
         try {
             // Generate keywords from image
-            const keywords = await this.generateKeywordsFromImage(image);
+            const keywords = await this.generateKeywordsFromImage(image, GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
             this.logger.log(`Generated keywords: ${keywords.join(', ')}`);
-    
+
             // Generate embedding from keywords
             const embedding = await this.generateEmbedding(keywords.join(' '));
             this.logger.log(`Generated embedding length: ${embedding.length}`);
             this.logger.log(`Generated embedding sample: ${embedding.slice(0, 10).join(', ')}...`);
-    
+
             // Kiểm tra embedding trước khi lưu
             if (!Array.isArray(embedding) || embedding.length !== 768 || !embedding.every(val => typeof val === 'number' && !isNaN(val))) {
                 throw new Error(`Invalid embedding: must be an array of 768 numbers`);
             }
-    
+
             // Create or update concept vector
             let conceptVector = await this.conceptVectorRepository.findOne({ where: { conceptId } });
             if (!conceptVector) {
@@ -247,7 +248,7 @@ export class GeminiService {
                 conceptVector.keywords = keywords;
                 conceptVector.embedding = embedding;
             }
-    
+
             return await this.conceptVectorRepository.save(conceptVector);
         } catch (error) {
             this.logger.error(`Error generating concept vector: ${error.message}`);
@@ -258,21 +259,21 @@ export class GeminiService {
     async searchConcepts(image: Express.Multer.File): Promise<ConceptVector[]> {
         try {
             // Generate keywords and embedding from the image
-            const keywords = await this.generateKeywordsFromImage(image);
+            const keywords = await this.generateKeywordsFromImage(image, GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
             this.logger.log(`Generated keywords for search: ${keywords.join(', ')}`);
-    
+
             const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
             this.logger.log(`Generated query embedding length: ${queryEmbedding.length}`);
             this.logger.log(`Query embedding sample: ${queryEmbedding.slice(0, 10).join(', ')}...`);
-    
+
             // Kiểm tra tính hợp lệ của queryEmbedding
             if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768 || !queryEmbedding.every(val => typeof val === 'number' && !isNaN(val))) {
                 throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
             }
-    
+
             // Create a query builder for combined search
             const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
-    
+
             // Build the combined search query using pgvector functions
             queryBuilder
                 .select('conceptVector')
@@ -296,16 +297,16 @@ export class GeminiService {
                 .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`) // Chuyển thành chuỗi vector
                 .orderBy('relevance_score', 'DESC')
                 .limit(10);
-    
+
             const results = await queryBuilder.getRawAndEntities();
-            
+
             // Map the results to include both relevance score and distance
             const mappedResults = results.entities.map((entity, index) => ({
                 ...entity,
                 relevanceScore: parseFloat(results.raw[index].relevance_score),
                 distance: parseFloat(results.raw[index].distance)
             }));
-    
+
             this.logger.log(`Found ${mappedResults.length} matching concepts`);
             return mappedResults;
         } catch (error) {
@@ -314,10 +315,10 @@ export class GeminiService {
         }
     }
 
-    private async generateKeywordsFromImage(image: Express.Multer.File): Promise<string[]> {
+    private async generateKeywordsFromImage(image: Express.Multer.File, modelName?: string): Promise<string[]> {
         try {
-            const model = await this.initializeModel();
-            
+            const model = await this.initializeModel(modelName);
+
             // Convert image to base64
             const imageData = {
                 inlineData: {
@@ -333,7 +334,7 @@ export class GeminiService {
             const result = await model.generateContent([prompt, imageData]);
             const response = await result.response;
             const text = response.text();
-            
+
             if (!text) {
                 throw new Error('No text response from Gemini API');
             }
@@ -360,27 +361,27 @@ export class GeminiService {
         try {
             const model = await this.initializeModel();
             const prompt = `Generate a 768-dimensional embedding vector for this text: ${text}. Return only the array of numbers in JSON format, e.g., [0.1, 0.2, 0.3, ...].`;
-    
+
             const result = await model.generateContent([prompt]);
             const response = await result.response;
             const responseText = response.text();
-    
+
             this.logger.log(`Gemini API embedding response: ${responseText}`); // Log để debug
-    
+
             try {
                 // Phân tích cú pháp phản hồi
                 let embedding = JSON.parse(responseText);
-                
+
                 // Nếu embedding là mảng chuỗi, chuyển thành mảng số
                 if (embedding.every((val: any) => typeof val === 'string')) {
                     embedding = embedding.map((val: string) => parseFloat(val));
                 }
-    
+
                 // Kiểm tra định dạng và độ dài
                 if (!Array.isArray(embedding) || embedding.length !== 768 || !embedding.every((val: any) => typeof val === 'number' && !isNaN(val))) {
                     throw new Error(`Invalid embedding format or length. Expected 768 numbers, got ${embedding.length}`);
                 }
-    
+
                 return embedding;
             } catch (parseError) {
                 this.logger.warn(`Failed to parse embedding response: ${parseError.message}, using fallback embedding`);
