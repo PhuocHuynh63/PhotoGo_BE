@@ -3,21 +3,21 @@ import { IsOptional, IsNumber, IsString, IsEnum, Min, Max, IsUUID } from 'class-
 import { Type } from 'class-transformer';
 
 export class FilterReviewDto {
-  @ApiProperty({ required: false, description: 'Số trang hiện tại' })
+  @ApiProperty({ required: false, description: 'Số trang hiện tại', example: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
   current?: number;
 
-  @ApiProperty({ required: false, description: 'Số lượng item trên mỗi trang' })
+  @ApiProperty({ required: false, description: 'Số lượng item trên mỗi trang', example: 10 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
   pageSize?: number;
 
-  @ApiProperty({ required: false, description: 'Lọc theo điểm đánh giá (1-5)' })
+  @ApiProperty({ required: false, description: 'Lọc theo điểm đánh giá (1-5)', example: 5 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -25,12 +25,12 @@ export class FilterReviewDto {
   @Max(5)
   rating?: number;
 
-  @ApiProperty({ required: false, enum: ['rating', 'created_at'], description: 'Sắp xếp theo' })
+  @ApiProperty({ required: false, enum: ['rating', 'created_at'], description: 'Sắp xếp theo', example: 'created_at' })
   @IsOptional()
   @IsEnum(['rating', 'created_at'])
   sortBy?: 'rating' | 'created_at';
 
-  @ApiProperty({ required: false, enum: ['asc', 'desc'], description: 'Hướng sắp xếp' })
+  @ApiProperty({ required: false, enum: ['asc', 'desc'], description: 'Hướng sắp xếp', example: 'desc' })
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortDirection?: 'asc' | 'desc';

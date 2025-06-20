@@ -244,7 +244,7 @@ export class ReviewService {
         FROM review r
         LEFT JOIN "users" u ON u.id = r.user_id
         LEFT JOIN "booking" b ON b.id = r.booking_id
-        LEFT JOIN "vendors" v ON v.id = b.vendor_id
+        LEFT JOIN "vendors" v ON v.id = r.vendor_id
         LEFT JOIN "review_image" ri ON ri.review_id = r.id
         WHERE 1=1
     `;
@@ -283,7 +283,7 @@ export class ReviewService {
       JOIN review r ON r.id = fr.id
       LEFT JOIN "users" u ON u.id = r.user_id
       LEFT JOIN "booking" b ON b.id = r.booking_id
-      LEFT JOIN "vendors" v ON v.id = b.vendor_id
+      LEFT JOIN "vendors" v ON v.id = r.vendor_id
       LEFT JOIN "review_image" ri ON ri.review_id = r.id
       GROUP BY 
         r.id,
@@ -316,7 +316,7 @@ export class ReviewService {
         FROM review r
         LEFT JOIN "users" u ON u.id = r.user_id
         LEFT JOIN "booking" b ON b.id = r.booking_id
-        LEFT JOIN "vendors" v ON v.id = b.vendor_id
+        LEFT JOIN "vendors" v ON v.id = r.vendor_id
         LEFT JOIN "review_image" ri ON ri.review_id = r.id
         WHERE 1=1
     `;
@@ -413,9 +413,7 @@ export class ReviewService {
       // Tính averageRating cho tất cả review của vendor
       const avgResult = await this.reviewRepository
         .createQueryBuilder('review')
-        .leftJoin('review.booking', 'booking')
-        .leftJoin('booking.vendor', 'vendor')
-        .where('vendor.id = :vendorId', { vendorId })
+        .andWhere('review.vendorId = :vendorId', { vendorId })
         .select('AVG(review.rating)', 'avg')
         .getRawOne();
       const averageRating = avgResult?.avg ? Number(avgResult.avg) : 0;
@@ -424,10 +422,10 @@ export class ReviewService {
       const queryBuilder = this.reviewRepository
         .createQueryBuilder('review')
         .leftJoinAndSelect('review.booking', 'booking')
-        .leftJoinAndSelect('booking.vendor', 'vendor')
+        .leftJoinAndSelect('review.vendor', 'vendor')
         .leftJoinAndSelect('review.user', 'user')
         .leftJoinAndSelect('review.images', 'images')
-        .where('vendor.id = :vendorId', { vendorId });
+        .andWhere('review.vendorId = :vendorId', { vendorId });
 
       // Add rating filter if provided
       if (filterDto.rating) {
