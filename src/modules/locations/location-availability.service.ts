@@ -108,9 +108,8 @@ export class LocationAvailabilityService {
         .select('booking.id, booking.time, service_concept.duration, booking.date')
         .from('booking', 'booking')
         .innerJoin('booking.serviceConcept', 'service_concept')
-        .innerJoin('booking.vendor', 'vendor')
-        .innerJoin('vendor.locations', 'locations')
-        .innerJoin('locations.availability', 'availability')
+        .innerJoin('booking.location', 'location')
+        .innerJoin('location.availability', 'availability')
         .innerJoin('availability.slotTimes', 'slotTimes')
         .innerJoin('slotTimes.locationSlotTimeWorkingDates', 'slotTimeWorkingDates')
         .where('slotTimeWorkingDates.id = :slotTimeWorkingDateId', { slotTimeWorkingDateId: slotTimeWorkingDate.id })
@@ -150,8 +149,8 @@ export class LocationAvailabilityService {
         startSlotTime: slotTimeWorkingDate.slotTime?.startSlotTime || null,
         endSlotTime: slotTimeWorkingDate.slotTime?.endSlotTime || null,
         maxParallelBookings: slotTimeWorkingDate.maxParallelBookings || 1,
-        alreadyBooked,
-        isAvailable,
+        alreadyBooked: alreadyBooked || 0,
+        isAvailable: isAvailable || false,
       };
     } catch (error) {
       this.logger.error(`Error formatting slot time working date: ${error.message}`);
@@ -246,7 +245,7 @@ export class LocationAvailabilityService {
       },
     });
     if (existingAvailability) {
-      throw new BadRequestException('Thời gian và ngày của vendor này đã tồn tại');
+      throw new BadRequestException('Thời gian và ngày của chỗ này đã tồn tại');
     }
 
     // Validate time range
