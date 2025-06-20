@@ -38,7 +38,7 @@ export class InvoiceService {
 
     const booking = await this.bookingRepository.findOne({
       where: { id: bookingId },
-      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage'],
+      relations: ['user', 'location', 'serviceConcept', 'serviceConcept.servicePackage'],
     });
     if (!booking) {
       throw new NotFoundException(`Đơn hàng với ID ${bookingId} không tồn tại`);

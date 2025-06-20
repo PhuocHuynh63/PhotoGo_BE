@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { BookingDepositType, BookingStatus, BookingSourceType } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
@@ -15,6 +15,8 @@ import { PaginationDto } from './dto/pagination.dto';
 import { LocationAvailabilityService } from '../locations/location-availability.service';
 import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot-time-working-date.entity';
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
+import { Location } from '../locations/entities/location.entity';
+import { Invoice } from '../invoices/entities/invoice.entity';
 
 @Injectable()
 export class BookingService {
@@ -34,6 +36,10 @@ export class BookingService {
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
     @InjectRepository(LocationWorkingDate)
     private locationWorkingDateRepository: Repository<LocationWorkingDate>,
+    @InjectRepository(Location)
+    private locationRepository: Repository<Location>,
+    @InjectRepository(Invoice)
+    private invoiceRepository: Repository<Invoice>,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -267,13 +273,17 @@ export class BookingService {
       throw new BadRequestException('Loại nguồn booking không hợp lệ');
     }
 
-    const vendorId = serviceConcept.servicePackage.vendorId;
+    // Lấy locationId từ DTO
+    if (!createBookingDto.locationId) {
+      throw new BadRequestException('locationId là bắt buộc');
+    }
+    const locationId = createBookingDto.locationId;
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate, // Use the converted date
       userId,
       serviceConceptId,
-      vendorId,
+      locationId,
       status: BookingStatus.PENDING,
       depositAmount: createBookingDto.depositAmount,
       depositType: BookingDepositType.PERCENTAGE,
@@ -327,14 +337,27 @@ export class BookingService {
     const skip = (current - 1) * pageSize;
 
     const [bookings, total] = await this.bookingRepository.findAndCount({
-      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
       skip,
       take: pageSize,
       order: {
         created_at: 'DESC'
       }
     });
-    const formattedBookings = bookings.map(booking => this.formatBookingDates(booking));
+    
+    const formattedBookings = bookings.map(booking => {
+      const formatted = this.formatBookingDates(booking);
+      // Lấy payablePrice từ invoice cuối cùng (nếu có)
+      const latestInvoice = booking.invoices && booking.invoices.length > 0 
+        ? booking.invoices[booking.invoices.length - 1] 
+        : null;
+      
+      return {
+        ...formatted,
+        payablePrice: latestInvoice ? latestInvoice.payablePrice : null
+      };
+    });
+    
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -362,14 +385,27 @@ export class BookingService {
 
     const [bookings, total] = await this.bookingRepository.findAndCount({
       where: { userId },
-      relations: ['user','histories'],
+      relations: ['user', 'histories', 'invoices'],
       skip,
       take: pageSize,
       order: {
         created_at: 'DESC'
       }
     });
-    const formattedBookings = bookings.map(booking => this.formatBookingDates(booking));
+    
+    const formattedBookings = bookings.map(booking => {
+      const formatted = this.formatBookingDates(booking);
+      // Lấy payablePrice từ invoice cuối cùng (nếu có)
+      const latestInvoice = booking.invoices && booking.invoices.length > 0 
+        ? booking.invoices[booking.invoices.length - 1] 
+        : null;
+      
+      return {
+        ...formatted,
+        payablePrice: latestInvoice ? latestInvoice.payablePrice : null
+      };
+    });
+    
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -386,12 +422,22 @@ export class BookingService {
   async findOne(id: string): Promise<Booking> {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
     });
     if (!booking) {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
-    return this.formatBookingDates(booking);
+    
+    const formatted = this.formatBookingDates(booking);
+    // Lấy payablePrice từ invoice cuối cùng (nếu có)
+    const latestInvoice = booking.invoices && booking.invoices.length > 0 
+      ? booking.invoices[booking.invoices.length - 1] 
+      : null;
+    
+    return {
+      ...formatted,
+      payablePrice: latestInvoice ? latestInvoice.payablePrice : null
+    };
   }
 
   async update(id: string, updateBookingDto: UpdateBookingDto): Promise<Booking> {

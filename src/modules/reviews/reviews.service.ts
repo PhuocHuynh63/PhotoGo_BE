@@ -81,16 +81,12 @@ export class ReviewService {
       throw new BadRequestException('Định dạng bookingId không hợp lệ');
     }
 
-    if (!isUUID(createReviewDto.vendorId)) {
-      throw new BadRequestException('Định dạng vendorId không hợp lệ');
-    }
-
-    // check vendorId và bookingId có trùng khớp dữ liệu trong bảng booking
+    // check bookingId có tồn tại
     const booking = await this.bookingRepository.findOne({
-      where: { id: createReviewDto.bookingId, vendorId: createReviewDto.vendorId }
+      where: { id: createReviewDto.bookingId }
     });
     if (!booking) {
-      throw new BadRequestException('vendorId và bookingId không trùng khớp');
+      throw new BadRequestException('bookingId không tồn tại');
     }
 
     // check the status of booking is completed
@@ -152,7 +148,13 @@ export class ReviewService {
     const [reviews, total] = await Promise.all([
       this.reviewRepository.find({
         where: { userId },
-        relations: ['user', 'booking', 'images', 'booking.vendor'],
+        relations: [
+          'user',
+          'booking',
+          'images',
+          'booking.location',
+          'booking.location.vendor',
+        ],
         skip,
         take: pageSize,
         order: { createdAt: 'DESC' }
@@ -191,14 +193,6 @@ export class ReviewService {
           note: review.user.note,
           auth: review.user.auth
         },
-        vendor: {
-          id: review.booking.vendor.id,
-          name: review.booking.vendor.name,
-          logoUrl: review.booking.vendor.logo,
-          bannerUrl: review.booking.vendor.banner,
-          description: review.booking.vendor.description,
-          status: review.booking.vendor.status
-        },
         booking: {
           id: review.booking.id,
           date: review.booking.date,
@@ -211,7 +205,15 @@ export class ReviewService {
           email: review.booking.email,
           status: review.booking.status,
         },
-        images: review.images.map(img => img.imageUrl)
+        images: review.images.map(img => img.imageUrl),
+        vendor: {
+          id: review.booking.location.vendor.id,
+          name: review.booking.location.vendor.name,
+          logoUrl: review.booking.location.vendor.logo,
+          bannerUrl: review.booking.location.vendor.banner,
+          description: review.booking.location.vendor.description,
+          status: review.booking.location.vendor.status,
+        },
       })),
       pagination: {
         current: currentPage,
@@ -370,14 +372,13 @@ export class ReviewService {
         id: row.booking_id,
       },
       images: row.review_image_urls?.filter(url => url !== null) || [],
-      vendor: {
+      vendor: row.vendor_id ? {
         id: row.vendor_id,
         name: row.vendor_name,
         logoUrl: row.vendor_logo_url,
         bannerUrl: row.vendor_banner_url,
         description: row.vendor_description,
-        status: row.vendor_status,
-      },
+      } : null,
     }));
 
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
@@ -472,13 +473,13 @@ export class ReviewService {
           fullName: review.user.fullName,
           avatarUrl: review.user.avatarUrl,
         } : null,
-        vendor: review.booking?.vendor ? {
-          id: review.booking.vendor.id,
-          name: review.booking.vendor.name,
-          logoUrl: review.booking.vendor.logo,
-          bannerUrl: review.booking.vendor.banner,
-          description: review.booking.vendor.description,
-          status: review.booking.vendor.status,
+        vendor: review.vendor ? {
+          id: review.vendor.id,
+          name: review.vendor.name,
+          logoUrl: review.vendor.logo,
+          bannerUrl: review.vendor.banner,
+          description: review.vendor.description,
+          status: review.vendor.status,
         } : null,
         images: review.images?.map(img => img.imageUrl) || [],
       }));
@@ -573,9 +574,7 @@ export class ReviewService {
   async getAverageRatingByVendorId(vendorId: string): Promise<number> {
     const avgResult = await this.reviewRepository
       .createQueryBuilder('review')
-      .leftJoin('review.booking', 'booking')
-      .leftJoin('booking.vendor', 'vendor')
-      .where('vendor.id = :vendorId', { vendorId })
+      .where('review.vendorId = :vendorId', { vendorId })
       .select('AVG(review.rating)', 'avg')
       .getRawOne();
 
