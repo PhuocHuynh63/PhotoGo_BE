@@ -67,7 +67,7 @@ export class ChatService {
       where: { id: chatId },
     });
   }
-  
+
 
   /**
    * Tạo và lưu một tin nhắn mới vào cơ sở dữ liệu.
@@ -148,12 +148,14 @@ export class ChatService {
    * @returns Mảng các tin nhắn
    */
   async getMessagesForChat(chatId: string, page: number = 1, pageSize: number = 50): Promise<Message[]> {
-    return this.messageRepository.find({
+    const messages = await this.messageRepository.find({
       where: { chatId },
-      order: { timestamp: 'ASC' },
+      order: { timestamp: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
+
+    return messages.reverse();
   }
 
   /**
