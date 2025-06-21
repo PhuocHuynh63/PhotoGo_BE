@@ -139,7 +139,6 @@ export class CreateCheckoutSessionDto {
         description: 'Chi tiết khái niệm',
         example: { id: 'concept-789', name: 'Wedding Photography' },
     })
-    @ValidateNested()
     @IsUUID()
     @IsNotEmpty()
     conceptId: string;
