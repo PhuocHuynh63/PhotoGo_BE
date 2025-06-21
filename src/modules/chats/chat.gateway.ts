@@ -105,13 +105,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       this.server.to(data.chatId).emit('newMessage', newMessage);
 
-      const chat = await this.chatService.findOrCreateChat({ partnerId: '' }, sender_id); // Lấy tạm thông tin chat để có members
-      const partner = chat.members.find(id => id !== sender_id);
-      if (partner) {
-        this.server.to(partner).emit('chatNotification', {
-          chatId: data.chatId,
-          newMessage,
-        });
+      const chat = await this.chatService.getChatById(data.chatId);
+      if (chat) {
+        const partner = chat.members.find(id => id !== sender_id);
+        if (partner) {
+          this.server.to(partner).emit('chatNotification', {
+            chatId: data.chatId,
+            newMessage,
+          });
+        }
+      } else {
+        console.warn(`BACKEND WARN: Chat with ID ${data.chatId} not found for notification.`);
       }
     } catch (error) {
       client.emit('sendMessageError', { message: error.message });

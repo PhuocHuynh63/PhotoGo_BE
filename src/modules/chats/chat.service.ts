@@ -57,6 +57,19 @@ export class ChatService {
   }
 
   /**
+   * Lấy thông tin cuộc hội thoại theo ID.
+   * Nếu không tìm thấy, trả về null.
+   * @param chatId ID của cuộc hội thoại cần lấy thông tin
+   * @returns 
+   */
+  async getChatById(chatId: string): Promise<Chat | null> {
+    return this.chatRepository.findOne({
+      where: { id: chatId },
+    });
+  }
+  
+
+  /**
    * Tạo và lưu một tin nhắn mới vào cơ sở dữ liệu.
    * Đồng thời cập nhật thông tin cho cuộc hội thoại cha.
    * @param chatId ID của cuộc hội thoại
