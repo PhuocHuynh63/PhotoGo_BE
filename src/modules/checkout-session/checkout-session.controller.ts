@@ -3,7 +3,11 @@ import { CheckoutSessionService } from './checkout-session.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { CheckoutSessionDto } from './dto/checkout-sesion';
+import {
+  CheckoutSessionDto,
+  CreateCheckoutSessionDto,
+  UpdateCheckoutSessionDto,
+} from './dto/checkout-sesion';
 
 @ApiTags('checkout-session')
 @Controller('checkout-session')
@@ -15,38 +19,22 @@ export class CheckoutSessionController {
   @UseGuards(JwtAuthGuard)
   @ResponseMessage('Phiên đặt chỗ đã được tạo thành công')
   @ApiOperation({ summary: 'Tạo phiên đặt chỗ mới' })
-  @ApiResponse({ status: 201, description: 'Phiên đặt chỗ đã được tạo thành công' })
-  @ApiResponse({ status: 400, description: 'Không có ID người dùng hoặc ID thiết bị' })
+  @ApiResponse({
+    status: 201,
+    description: 'Phiên đặt chỗ đã được tạo thành công',
+    type: CheckoutSessionDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Không có ID người dùng hoặc ID thiết bị',
+  })
   @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'ID của phiên đặt chỗ',
-          example: '12345'
-        },
-        userId: {
-          type: 'string',
-          description: 'ID của người dùng',
-          example: '67890'
-        },
-        sessionData: {
-          type: 'object',
-          description: 'Dữ liệu phiên đặt chỗ',
-          properties: {
-            conceptId: { type: 'string', example: 'concept123' },
-            date: { type: 'string', format: 'date', example: '2024-03-20' },
-            time: { type: 'string', format: 'time', example: '14:00' },
-          }
-        }
-      }
-    }
+    type: CreateCheckoutSessionDto,
   })
   async createSession(
     @Query('id') id: string,
     @Query('userId') userId: string,
-    @Body() sessionData: CheckoutSessionDto,
+    @Body() sessionData: CreateCheckoutSessionDto,
   ) {
     return this.checkoutSessionService.createSession(id, userId, sessionData);
   }
@@ -56,7 +44,11 @@ export class CheckoutSessionController {
   @UseGuards(JwtAuthGuard)
   @ResponseMessage('Lấy thông tin phiên đặt chỗ thành công')
   @ApiOperation({ summary: 'Lấy thông tin phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Lấy thông tin phiên đặt chỗ thành công' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy thông tin phiên đặt chỗ thành công',
+    type: CheckoutSessionDto,
+  })
   async getSession(
     @Query('id') id: string,
     @Query('userId') userId: string,
@@ -80,21 +72,16 @@ export class CheckoutSessionController {
   @UseGuards(JwtAuthGuard)
   @ResponseMessage('Cập nhật thông tin phiên đặt chỗ thành công')
   @ApiOperation({ summary: 'Cập nhật thông tin phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Cập nhật thông tin phiên đặt chỗ thành công' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cập nhật thông tin phiên đặt chỗ thành công',
+    type: CheckoutSessionDto,
+  })
   @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        sessionData: {
-          type: 'string',
-          description: 'Dữ liệu phiên đặt chỗ mới',
-          example: '{"vendorId": "123", "servicePackageId": "456", "selectedTime": "2024-03-20T14:00:00Z"}'
-        }
-      }
-    }
+    type: UpdateCheckoutSessionDto,
   })
   async updateSessionData(
-    @Body('sessionData') sessionData: string,
+    @Body() sessionData: UpdateCheckoutSessionDto,
     @Query('id') id: string,
     @Query('userId') userId: string,
   ) {
@@ -108,8 +95,13 @@ export class CheckoutSessionController {
   @Get('ttl')
   @UseGuards(JwtAuthGuard)
   @ResponseMessage('Lấy thời gian sống thành công')
-  @ApiOperation({ summary: 'Lấy thời gian sống còn lại của phiên đặt chỗ' })
-  @ApiResponse({ status: 200, description: 'Lấy thời gian sống thành công' })
+  @ApiOperation({
+    summary: 'Lấy thời gian sống còn lại của phiên đặt chỗ',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy thời gian sống thành công',
+  })
   async getSessionTTL(
     @Query('id') id: string,
     @Query('userId') userId: string,
