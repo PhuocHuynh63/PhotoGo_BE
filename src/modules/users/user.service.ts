@@ -296,6 +296,7 @@ export class UserService {
         'user.status',
         'user.rank',
         'user.auth',
+        'user.lastLoginAt',
         'user.createdAt',
         'user.updatedAt',
         'user.avatarUrl',
