@@ -1,6 +1,6 @@
-import { IsNotEmpty, IsOptional, IsString, IsEmail, Length } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsEmail, Length, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserStatus } from 'src/constants/user.enum';
+import { UserRoles, UserRolesId, UserStatus } from 'src/constants/user.enum';
 
 export class CreateAuthDto {
   @IsNotEmpty({ message: 'Full name is required' })
@@ -8,11 +8,16 @@ export class CreateAuthDto {
   @ApiProperty({
     example: 'John Doe',
     description: 'Full name of the user',
+    required: true,
   })
   fullName: string;
 
   @IsOptional()
   @IsString()
+  @ApiProperty({
+    format: 'binary',
+    description: 'Avatar URL of the user',
+  })
   avatarUrl?: string;
 
   @IsNotEmpty({ message: 'Email is required' })
@@ -20,6 +25,7 @@ export class CreateAuthDto {
   @ApiProperty({
     example: 'user@example.com',
     description: 'Email address of the user',
+    required: true,
   })
   email: string;
 
@@ -31,6 +37,7 @@ export class CreateAuthDto {
     description: 'Password for the user',
     minLength: 6,
     maxLength: 50,
+    required: true,
   })
   passwordHash: string;
 
@@ -43,14 +50,31 @@ export class CreateAuthDto {
   phoneNumber?: string;
 
   @IsOptional()
-  @IsString()
-  roleId?: string;
+  @IsEnum(UserRolesId)
+  @ApiProperty({
+    example: "R001",
+    description: 'Role ID of the user',
+    enum: UserRolesId,
+    required: false,
+  })
+  roleId?: UserRolesId;
+
+  @IsOptional()
+  @IsEnum(UserStatus)
+  @ApiProperty({
+    enum: UserStatus,
+    example: UserStatus.ACTIVE,
+    description: 'Status of the user',
+    required: false,
+  })
+  status?: UserStatus;
 
   @IsOptional()
   @IsString()
-  status?: string;
-
-  @IsOptional()
-  @IsString()
+  @ApiProperty({
+    example: 'local',
+    description: 'Authentication method used by the user',
+    required: false,
+  })
   auth?: string;
 }

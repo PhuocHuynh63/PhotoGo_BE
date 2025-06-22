@@ -10,12 +10,14 @@ import { MailModule } from 'src/3rdService/mail/mail.module';
 import { BullQueueModule } from 'src/3rdService/bull/bull-queue.module';
 import { UserProcessor } from './bull/user.processor';
 import { CartModule } from 'src/modules/carts/cart.module';
-import { WishlistModule } from 'src/modules/wishlists/wishlist.module'; 
+import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
 import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { Campaign } from '../campaign/entities/campaign.entity';
+import { RolesGuard } from '../auth/passport/roles.guard';
+import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, UserCampaign, CampaignVoucher, VoucherUser, Voucher, Campaign]),
@@ -27,7 +29,7 @@ import { Campaign } from '../campaign/entities/campaign.entity';
     BullQueueModule.registerQueue('user-deletion'),
     BullQueueModule.forRoot(),
   ],
-  providers: [UserService, UserProcessor],
+  providers: [UserService, UserProcessor, RolesGuard, JwtAuthGuard],
   controllers: [UserController],
   exports: [UserService, TypeOrmModule],
 })

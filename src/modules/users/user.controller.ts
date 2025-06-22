@@ -3,19 +3,35 @@ import { UserService } from './user.service';
 
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { FindUserDto } from './dto/admin/find-user.dto';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindAllUserDto } from './dto/admin/find-all-user.dto';
+import { CreateAuthDto } from '../auth/dto/create-auth.dto';
+import { RolesGuard } from '../auth/passport/roles.guard';
+import { UseGuards } from '@nestjs/common';
+import { Roles } from 'src/decorator/role.decorator';
+import { UserRoles, UserRolesId } from 'src/constants/user.enum';
+import { Role } from '../roles/entities/role.entity';
 @Controller('users')
+@UseGuards(RolesGuard)
 @ApiBearerAuth('access-token')
 export class UserController {
   constructor(private readonly userService: UserService) { }
+  @Post('/create/user')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ApiConsumes('multipart/form-data')
+  @ResponseMessage('Tạo người dùng thành công')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'avatarUrl', maxCount: 1 },
+  ]))
+  async createUser(@Body() createUser: CreateAuthDto): Promise<User> {
+    return this.userService.createUser(createUser);
+  }
 
   @Public()
   @Get('export')
