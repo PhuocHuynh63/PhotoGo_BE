@@ -65,7 +65,6 @@ export class RoleService {
   async findOne(id: string): Promise<Role> {
     const role = await this.roleRepository.findOne({
       where: { id },
-      relations: ['users'] // Load users with this role
     });
 
     if (!role) {
