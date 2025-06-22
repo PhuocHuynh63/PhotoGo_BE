@@ -1,4 +1,4 @@
-import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches } from 'class-validator';
+import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches, IsNotEmpty } from 'class-validator';
 import { BookingSourceType, BookingDepositType, BookingStatus } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -31,6 +31,15 @@ export class CreateBookingDto {
     example: BookingSourceType.CAMPAIGN
   })
   sourceType: BookingSourceType;
+
+  @IsUUID()
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'ID chi nhánh (location)',
+    example: '123e4567-e89b-12d3-a456-426614174003',
+    required: true
+  })
+  locationId: string;
 
   // @IsUUID()
   // @IsOptional()

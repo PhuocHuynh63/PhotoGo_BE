@@ -6,8 +6,10 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { LocationAvailability } from './location-availability.entity';
+import { LocationSlotTimeWorkingDate } from './location-slot-time-working-date.entity';
 
 @Entity('location_slot_time')
 export class LocationSlotTime {
@@ -40,4 +42,7 @@ export class LocationSlotTime {
   })
   @JoinColumn({ name: 'location_availability_id' })
   locationAvailability: LocationAvailability;
+
+  @OneToMany(() => LocationSlotTimeWorkingDate, (slotTimeWorkingDate) => slotTimeWorkingDate.slotTime)
+  locationSlotTimeWorkingDates: LocationSlotTimeWorkingDate[];
 } 

@@ -9,6 +9,8 @@ import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
+import { User } from '../users/entities/user.entity';
+import { UserCampaign } from '../campaign/entities/user-campaign.entity';
 
 @Injectable()
 export class VoucherService {
@@ -17,6 +19,10 @@ export class VoucherService {
     private readonly voucherRepository: Repository<Voucher>,
     @InjectRepository(VoucherUser)
     private readonly voucherUserRepository: Repository<VoucherUser>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(UserCampaign)
+    private readonly userCampaignRepository: Repository<UserCampaign>,
   ) { }
 
   //#region Voucher Operations
@@ -179,38 +185,50 @@ export class VoucherService {
     };
   }
 
-  async findOneVoucherUser(voucherId: string, userId: string): Promise<VoucherUser> {
-    const voucherUser = await this.voucherUserRepository.findOne({
-      where: { voucher_id: voucherId, user_id: userId },
+  async findAllVoucherUser(userId: string): Promise<any[]> {
+    const voucherUsers = await this.voucherUserRepository.find({
+      where: { user_id: userId },
       relations: ['user', 'voucher'],
     });
-    if (!voucherUser) {
-      throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
+
+    if (!voucherUsers.length) {
+      throw new NotFoundException(`Bản ghi voucher-user với user_id ${userId} không tồn tại`);
     }
 
     const currentDate = new Date();
-    const voucher = voucherUser.voucher;
-    if (
-      currentDate >= new Date(voucher.start_date) &&
-      currentDate <= new Date(voucher.end_date) &&
-      voucherUser.status === VoucherUserStatusEnum.AVAILABLE
-    ) {
-      voucherUser['is_valid'] = true;
-    } else {
-      voucherUser['is_valid'] = false;
-    }
 
-    return voucherUser;
+    // Trả về danh sách voucher kèm trạng thái is_valid cho từng voucher
+    return voucherUsers.map(vu => ({
+      ...vu,
+      is_valid:
+        currentDate >= new Date(vu.voucher.start_date) &&
+        currentDate <= new Date(vu.voucher.end_date) &&
+        vu.status === VoucherUserStatusEnum.AVAILABLE
+    }));
   }
 
   async useVoucher(voucherId: string, userId: string): Promise<VoucherUser> {
-    const voucherUser = await this.findOneVoucherUser(voucherId, userId);
+    // Tìm đúng bản ghi voucher_user theo userId và voucherId
+    const voucherUser = await this.voucherUserRepository.findOne({
+      where: { user_id: userId, voucher_id: voucherId },
+      relations: ['voucher'],
+    });
+
+    if (!voucherUser) {
+      throw new NotFoundException('Không tìm thấy mã giảm giá cho user này');
+    }
 
     if (voucherUser.status === VoucherUserStatusEnum.USED) {
       throw new BadRequestException('Mã giảm giá đã được sử dụng');
     }
 
-    if (!voucherUser['is_valid']) {
+    const currentDate = new Date();
+    const isValid =
+      currentDate >= new Date(voucherUser.voucher.start_date) &&
+      currentDate <= new Date(voucherUser.voucher.end_date) &&
+      voucherUser.status === VoucherUserStatusEnum.AVAILABLE;
+
+    if (!isValid) {
       throw new BadRequestException('Mã giảm giá không hợp lệ hoặc đã hết hạn');
     }
 
@@ -244,4 +262,28 @@ export class VoucherService {
     await this.voucherRepository.save(voucher);
   }
   //#endregion VoucherUser Operations
+
+  //#region VoucherUser Campaign Operations
+  async findVoucherByCampaign(userId: string): Promise<Voucher[]> {
+    // 1. Kiểm tra user tồn tại
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`Người dùng với ID ${userId} không tồn tại`);
+    }
+
+    // 2. Kiểm tra userCampaign tồn tại
+    const userCampaign = await this.userCampaignRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['campaign', 'campaign.campaignVouchers', 'campaign.campaignVouchers.voucher'],
+    });
+    if (!userCampaign) {
+      throw new NotFoundException(`Chiến dịch của người dùng với ID ${userId} không tồn tại`);
+    }
+
+    // 3. Lấy danh sách voucher từ campaign
+    const vouchers = userCampaign.campaign.campaignVouchers.map(cv => cv.voucher);
+
+    return vouchers;
+  }
+  //#endregion VoucherUser Campaign Operations
 }

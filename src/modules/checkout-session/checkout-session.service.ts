@@ -1,6 +1,10 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { CheckoutSessionDto } from './dto/checkout-sesion';
+import {
+  CheckoutSessionDto,
+  CreateCheckoutSessionDto,
+  UpdateCheckoutSessionDto,
+} from './dto/checkout-sesion';
 
 @Injectable()
 export class CheckoutSessionService {
@@ -22,25 +26,28 @@ export class CheckoutSessionService {
   async createSession(
     id: string,
     userId: string,
-    sessionData: CheckoutSessionDto,
-  ): Promise<{ checkoutSessionId: string; data: CheckoutSessionDto }> {
+    sessionData: CreateCheckoutSessionDto,
+  ): Promise<CheckoutSessionDto> {
     const sessionKey = this.getSessionKey(userId, id);
 
-    // If session exists, update it with new data
+    const newSession: CheckoutSessionDto = {
+      checkoutSessionId: sessionKey,
+      userId: userId,
+      ...sessionData,
+    };
+
+    // Store the session data in Redis
     await this.redisClient.set(
       sessionKey,
-      JSON.stringify(sessionData),
+      JSON.stringify(newSession),
       'EX',
       this.SESSION_TTL
     );
 
-    return {
-      checkoutSessionId: sessionKey,
-      data: sessionData,
-    };
+    return newSession;
   }
 
-  async getSession(userId?: string, id?: string): Promise<{ checkoutSesionId: string; data: CheckoutSessionDto }> {
+  async getSession(userId?: string, id?: string): Promise<CheckoutSessionDto> {
     const sessionKey = this.getSessionKey(userId, id);
     const sessionData = await this.redisClient.get(sessionKey);
 
@@ -51,10 +58,7 @@ export class CheckoutSessionService {
     // Reset TTL on access
     await this.updateSessionTTL(userId, id);
 
-    return {
-      checkoutSesionId: sessionKey,
-      data: JSON.parse(sessionData) as CheckoutSessionDto
-    };
+    return JSON.parse(sessionData) as CheckoutSessionDto;
   }
 
   async deleteSession(userId?: string, id?: string): Promise<void> {
@@ -76,26 +80,28 @@ export class CheckoutSessionService {
   }
 
   async updateSessionData(
-    sessionData: string,
+    sessionData: UpdateCheckoutSessionDto,
     userId?: string,
     id?: string,
-  ): Promise<string> {
+  ): Promise<CheckoutSessionDto> {
     try {
       const sessionKey = this.getSessionKey(userId, id);
       const existingData = await this.getSession(userId, id);
 
-      if (typeof existingData === 'object' && 'message' in existingData) {
-        throw new NotFoundException('Không tìm thấy phiên đặt chỗ');
-      }
+      // Update the session data with new information
+      const updatedData: CheckoutSessionDto = {
+        ...existingData,
+        ...sessionData,
+      };
 
       await this.redisClient.set(
         sessionKey,
-        sessionData,
+        JSON.stringify(updatedData),
         'EX',
         this.SESSION_TTL
       );
 
-      return sessionData;
+      return updatedData;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;

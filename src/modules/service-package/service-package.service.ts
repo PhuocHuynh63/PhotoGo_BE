@@ -16,6 +16,8 @@ import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filte
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { GeminiService } from 'src/3rdService/gemini/gemini.service';
 import { PaginationDto } from './dto/pagination.dto';
+import { Commission } from '../commission/entities/commission.entity';
+import { CommissionType } from 'src/constants/commision.enum';
 
 @Injectable()
 export class ServicePackageService {
@@ -34,6 +36,8 @@ export class ServicePackageService {
     private readonly serviceConceptRepository: Repository<ServiceConcept>,
     @InjectRepository(ServiceConceptImage)
     private readonly serviceConceptImageRepository: Repository<ServiceConceptImage>,
+    @InjectRepository(Commission)
+    private readonly commissionRepository: Repository<Commission>,
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
     private readonly geminiService: GeminiService,
@@ -135,7 +139,7 @@ export class ServicePackageService {
   async findOne(id: string): Promise<ServicePackage & { countPackageUsed: number }> {
     const servicePackage = await this.servicePackageRepository.findOne({
       where: { id },
-      relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images'],
+      relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images', 'serviceConcepts.serviceConceptServiceTypes', 'serviceConcepts.serviceConceptServiceTypes.serviceType'],
     });
     if (!servicePackage) {
       throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
@@ -420,6 +424,16 @@ export class ServicePackageService {
       status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
       servicePackage: servicePackage,
     };
+    // save commission
+    const commissionData = this.commissionRepository.create({
+      serviceConceptId: serviceConceptData.id,
+      commissionRate: 30,
+      commissionType: CommissionType.PERCENTAGE,
+      commissionAmount: serviceConceptData.price * 0.3,
+    });
+    await this.commissionRepository.save(commissionData);
+    // Modify price to include commission and tax (10% tax)
+    serviceConceptData.price = serviceConceptData.price * (1 + commissionData.commissionRate / 100) + serviceConceptData.price * 0.1;
 
     // Create the service concept
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
@@ -618,14 +632,24 @@ export class ServicePackageService {
     }
 
     // Update basic fields
-    if (updateServiceConceptDto.name) serviceConcept.name = updateServiceConceptDto.name;
-    if (updateServiceConceptDto.description !== undefined) serviceConcept.description = updateServiceConceptDto.description;
-    if (updateServiceConceptDto.price !== undefined) serviceConcept.price = updateServiceConceptDto.price;
-    if (updateServiceConceptDto.duration !== undefined) serviceConcept.duration = updateServiceConceptDto.duration;
-    if (updateServiceConceptDto.status !== undefined) serviceConcept.status = updateServiceConceptDto.status;
+    if (updateServiceConceptDto.name && updateServiceConceptDto.name.trim() !== '') {
+      serviceConcept.name = updateServiceConceptDto.name;
+    }
+    if (updateServiceConceptDto.description !== undefined && updateServiceConceptDto.description?.trim() !== '') {
+      serviceConcept.description = updateServiceConceptDto.description;
+    }
+    if (updateServiceConceptDto.price !== undefined && updateServiceConceptDto.price > 0) {
+      serviceConcept.price = updateServiceConceptDto.price;
+    }
+    if (updateServiceConceptDto.duration !== undefined && updateServiceConceptDto.duration > 0) {
+      serviceConcept.duration = updateServiceConceptDto.duration;
+    }
+    if (updateServiceConceptDto.status !== undefined && updateServiceConceptDto.status.trim() !== '') {
+      serviceConcept.status = updateServiceConceptDto.status;
+    }
 
-    // Update service package if provided
-    if (updateServiceConceptDto.servicePackageId) {
+    // Update service package if provided and not empty
+    if (updateServiceConceptDto.servicePackageId && updateServiceConceptDto.servicePackageId.trim() !== '') {
       const servicePackage = await this.servicePackageRepository.findOne({
         where: { id: updateServiceConceptDto.servicePackageId }
       });
@@ -635,8 +659,8 @@ export class ServicePackageService {
       serviceConcept.servicePackage = servicePackage;
     }
 
-    // Update service types if provided
-    if (updateServiceConceptDto.serviceTypeIds) {
+    // Update service types if provided and not empty
+    if (updateServiceConceptDto.serviceTypeIds && updateServiceConceptDto.serviceTypeIds.length > 0) {
       this.logger.log('Đang cập nhật liên kết loại dịch vụ');
       try {
         // Verify all service types exist first
@@ -667,12 +691,12 @@ export class ServicePackageService {
         }
 
         // Add new relationships
-        const toAdd = serviceTypes
-          .filter(type => !existingMap.has(type.id))
-          .map(type => 
+        const toAdd = updateServiceConceptDto.serviceTypeIds
+          .filter(typeId => !existingMap.has(typeId))
+          .map(typeId => 
             this.serviceConceptServiceTypeRepository.create({
               serviceConceptId: id,
-              serviceTypeId: type.id
+              serviceTypeId: typeId
             })
           );
 

@@ -1,11 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
-
-interface ChatMessage {
-  sender_id: string;
-  text: string;
-  timestamp: string;
-  isRead: boolean;  // New property to track read/unread status
-}
+import { Message } from 'src/modules/message/entities/message.entity';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, OneToMany, CreateDateColumn } from 'typeorm';
 
 @Entity('chat')
 export class Chat {
@@ -16,21 +10,15 @@ export class Chat {
   @Column({ type: 'uuid', array: true, nullable: false })
   members: string[];
 
-  // JSONB field storing an array of message objects.
-  // Each message is now defined as follows:
-  // {
-  //   sender_id: "some-uuid",
-  //   text: "Hello",
-  //   timestamp: "2025-04-21T10:00:00Z",
-  //   isRead: false  // Defaults to false (unread)
-  // }
-  @Column({ type: 'jsonb', default: () => "'[]'" })
-  messages: ChatMessage[];
+  @Column({ type: 'text', nullable: true })
+  lastMessageText?: string;
 
-  @UpdateDateColumn({
-    type: 'timestamptz',
-    default: () => 'NOW()',
-    onUpdate: 'NOW()'
-  })
-  last_updated: Date;
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+  lastUpdatedAt: Date;
+
+  @OneToMany(() => Message, message => message.chat)
+  messages: Message[];
 }

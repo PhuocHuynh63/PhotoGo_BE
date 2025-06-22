@@ -3,6 +3,7 @@ import { Role } from 'src/modules/roles/entities/role.entity';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToOne, OneToMany } from 'typeorm';
 import { Vendor } from '../../vendors/entities/vendor.entity';
 import { VoucherUser } from 'src/modules/vouchers/entities/voucher-user.entity';
+import { UserCampaign } from 'src/modules/campaign/entities/user-campaign.entity';
 
 @Entity('users') // Tên bảng là "users"
 export class User {
@@ -66,5 +67,6 @@ export class User {
   @OneToMany(() => VoucherUser, (voucherUser) => voucherUser.user)
   voucherUsers: VoucherUser[];
 
-
+  @OneToMany(() => UserCampaign, (userCampaign) => userCampaign.user)
+  userCampaigns: UserCampaign[];
 }

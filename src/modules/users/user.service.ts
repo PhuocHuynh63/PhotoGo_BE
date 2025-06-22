@@ -4,7 +4,7 @@ import { LessThanOrEqual, Repository } from 'typeorm';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { RoleService } from '../roles/role.service';
-import { hashPasswordHelper } from 'src/utils/utils';
+import { getInitials, hashPasswordHelper } from 'src/utils/utils';
 import { CreateAuthDto } from '../auth/dto/create-auth.dto';
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
@@ -33,31 +33,46 @@ export class UserService {
   ) { }
 
   // #region create 
-  // async create(createAuthDto: CreateAuthDto): Promise<User> {
-  //   const { passwordHash, ...userData } = createAuthDto;
+  async createUser(createAuthDto: CreateAuthDto): Promise<User> {
+    const { passwordHash, status, avatarUrl, ...userData } = createAuthDto;
 
-  //   // Enforce the strong password regex for local registration
-  //   let hashedPassword = '';
-  //   if (createAuthDto.auth === 'local') {
-  //     hashedPassword = await hashPasswordHelper(passwordHash);
-  //   }
+    // Kiểm tra xem email đã tồn tại chưa
+    const existingUser = await this.userRepository.findOne({ where: { email: createAuthDto.email } });
+    if (existingUser) {
+      throw new ConflictException(`Email ${createAuthDto.email} đã được sử dụng`);
+    }
 
-  //   let role = null;
-  //   if (!createAuthDto.roleId) {
-  //     role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
-  //   } else {
-  //     role = await this.roleService.findOne(createAuthDto.roleId);
-  //   } // Tìm role theo roleId
+    // Enforce the strong password regex for local registration
+    let hashedPassword = '';
+    if (createAuthDto.auth === 'local') {
+      hashedPassword = await hashPasswordHelper(passwordHash);
+    }
+
+    let role = null;
+    if (!createAuthDto.roleId) {
+      role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
+    } else {
+      role = await this.roleService.findOne(createAuthDto.roleId);
+    } // Tìm role theo roleId
 
 
-  //   const user = this.userRepository.create({
-  //     passwordHash: hashedPassword,
-  //     ...userData,
-  //     role, // Gán role vào user
-  //   });
+    const newUser = this.userRepository.create({
+      passwordHash: hashedPassword,
+      status: status || UserStatus.ACTIVE,
+      avatarUrl: getInitials(userData.fullName),
+      ...userData,
+      role,
+    });
 
-  //   return this.userRepository.save(user);
-  // }
+    const savedUser = await this.userRepository.save(newUser);
+
+    await Promise.all([
+      this.cartService.createCart(savedUser.id),
+      this.wishlistService.createWishlist(savedUser.id)
+    ]);
+
+    return savedUser;
+  }
   //#endregion create
 
   //#region create

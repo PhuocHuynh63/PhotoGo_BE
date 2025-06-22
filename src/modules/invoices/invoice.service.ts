@@ -13,6 +13,8 @@ import { BookingStatus, BookingDepositType } from '../../constants/booking.enum'
 import { Booking } from '../bookings/entities/booking.entity';
 import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { Commission } from '../commission/entities/commission.entity';
 
 @Injectable()
 export class InvoiceService {
@@ -23,6 +25,10 @@ export class InvoiceService {
     private readonly bookingRepository: Repository<Booking>,
     private servicePackageService: ServicePackageService,
     private voucherService: VoucherService,
+    @InjectRepository(VoucherUser)
+    private readonly voucherUserRepository: Repository<VoucherUser>,
+    @InjectRepository(Commission)
+    private readonly commissionRepository: Repository<Commission>,
   ) {}
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
@@ -32,7 +38,7 @@ export class InvoiceService {
 
     const booking = await this.bookingRepository.findOne({
       where: { id: bookingId },
-      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage'],
+      relations: ['user', 'location', 'serviceConcept', 'serviceConcept.servicePackage'],
     });
     if (!booking) {
       throw new NotFoundException(`Đơn hàng với ID ${bookingId} không tồn tại`);
@@ -70,7 +76,9 @@ export class InvoiceService {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
       }
 
-      const voucherUser = await this.voucherService.findOneVoucherUser(voucherId, booking.userId);
+      const voucherUser = await this.voucherUserRepository.findOne({
+        where: { user_id: booking.userId, voucher_id: voucherId },
+      });
       if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
         throw new BadRequestException(`Bạn đã sử dụng voucher này hoặc voucher không khả dụng`);
       }
@@ -89,10 +97,13 @@ export class InvoiceService {
       }
     }
 
-    const discountedPrice = originalPrice - discountAmount;
-    const taxAmount = Math.round(discountedPrice * 0.1);
+    let discountedPrice = originalPrice - discountAmount;
+    const commission = await this.commissionRepository.findOne({
+      where: { serviceConceptId: serviceConcept.id }
+    });
+    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.1;
     const feeAmount = 0;
-    const payablePrice = discountedPrice + taxAmount + feeAmount;
+    const payablePrice = discountedPrice + feeAmount;
 
     let depositAmount = 0;
     let remainingAmount = 0;

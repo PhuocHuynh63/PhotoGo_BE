@@ -46,12 +46,21 @@ export class VoucherController {
   }
 
   @Public()
-  @Get('user/:voucherId/:userId')
-  @ApiOperation({ summary: 'Lấy bản ghi voucher-user bằng voucherId và userId (Public)' })
+  @Get('user/:userId')
+  @ApiOperation({ summary: 'Voucher của user từ đổi điểm' })
   @ApiResponse({ status: 200, description: 'VoucherUser đã được tìm thấy', type: VoucherUser })
   @ApiResponse({ status: 404, description: 'VoucherUser không tồn tại' })
-  async findOneVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<VoucherUser> {
-    return this.voucherService.findOneVoucherUser(voucherId, userId);
+  async findAllVoucherUser(@Param('userId') userId: string): Promise<VoucherUser[]> {
+    return this.voucherService.findAllVoucherUser(userId);
+  }
+
+  @Public()
+  @Get('user/:userId/campaign')
+  @ApiOperation({ summary: 'Voucher của user từ campaign' })
+  @ApiResponse({ status: 200, description: 'Mã giảm giá lấy từ chiến dịch', type: VoucherUser })
+  @ApiResponse({ status: 404, description: 'Mã giảm giá không tồn tại' })
+  async findVoucherByCampaign(@Param('userId') userId: string): Promise<Voucher[]> {
+    return this.voucherService.findVoucherByCampaign(userId);
   }
 
   @Public()

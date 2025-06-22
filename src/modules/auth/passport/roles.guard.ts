@@ -30,6 +30,6 @@ export class RolesGuard implements CanActivate {
             return true;
         }
 
-        throw new ForbiddenException('You do not have permission to perform this action');
+        throw new ForbiddenException('Bạn không có quyền truy cập vào tài nguyên này');
     }
 }

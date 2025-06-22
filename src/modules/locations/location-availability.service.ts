@@ -6,7 +6,7 @@ import { Location } from './entities/location.entity';
 import { CreateLocationTimeScheduleDto } from './dto/create-location-time-schedule.dto';
 import { UpdateLocationAvailabilityDto } from './dto/update-location-availability.dto';
 import { Between } from 'typeorm';
-import { FindLocationAvailabilityDto } from './dto/find-location.dto';
+import { FindLocationAvailabilityDto, FindLocationAvailabilityWithDateDto } from './dto/find-location.dto';
 import { LocationWorkingDate } from './entities/location-workingdate.entity';
 import { LocationSlotTime } from './entities/location-slot-time.entity';
 import { CreateLocationSlotTimeDto } from './dto/create-location-slot-time.dto';
@@ -14,45 +14,160 @@ import { UpdateLocationSlotTimeDto } from './dto/update-location-slot-time.dto';
 import { CreateLocationWorkingDateDto } from './dto/create-location-working-date.dto';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
 import { In } from 'typeorm';
+import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-saturday.dto';
+import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
+import { DataSource } from 'typeorm';
+import { BookingStatus } from 'src/constants/booking.enum';
 
 @Injectable()
 export class LocationAvailabilityService {
   private readonly logger = new Logger(LocationAvailabilityService.name);
 
-    // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
-    private convertDateFormat(dateStr: string): string {
-        if (!dateStr) return null;
+      // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
+      private convertDateFormat(dateStr: string): string {
+        if (!dateStr) {
+          throw new BadRequestException('Ngày không được để trống');
+        }
+    
+        // Validate date format
+        const dateRegex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        if (!dateRegex.test(dateStr)) {
+          throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+        }
+    
         const [day, month, year] = dateStr.split('/');
+        
+        // Validate date values
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        if (date.getFullYear() !== parseInt(year) || 
+            date.getMonth() !== parseInt(month) - 1 || 
+            date.getDate() !== parseInt(day)) {
+          throw new BadRequestException('Ngày không hợp lệ');
+        }
+    
         return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
       }
     
       // Helper function to format date to DD/MM/YYYY
       private formatDate(date: Date): string {
-        if (!date) return null;
-        const d = new Date(date);
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
+        if (!date) {
+          return null;
+        }
+        
+        try {
+          const d = new Date(date);
+          if (isNaN(d.getTime())) {
+            return null;
+          }
+          
+          const day = String(d.getDate()).padStart(2, '0');
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const year = d.getFullYear();
+          return `${day}/${month}/${year}`;
+        } catch (error) {
+          this.logger.error(`Error formatting date: ${error.message}`);
+          return null;
+        }
       }
     
       // Helper function to format location availability dates
       private formatLocationWorkingDates(locationWorkingDate: LocationWorkingDate): any {
         if (!locationWorkingDate) return locationWorkingDate;
-        return this.formatDate(locationWorkingDate.date);
+        return {
+          id: locationWorkingDate.id,
+          date: this.formatDate(locationWorkingDate.date),
+          isAvailable: locationWorkingDate.isAvailable,
+        };
       }
 
   // Helper function to format slot times
-  private formatSlotTimes(slotTime: LocationSlotTime & { maxParallelBookings?: number }): any {
+  private timeToMinutes(timeStr: string): number {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
+  private async formatSlotTimes(slotTime: LocationSlotTime): Promise<any> {
     if (!slotTime) return slotTime;
+
     return {
       id: slotTime.id,
       slot: slotTime.slot,
       startSlotTime: slotTime.startSlotTime,
       endSlotTime: slotTime.endSlotTime,
       isStrictTimeBlocking: slotTime.isStrictTimeBlocking,
-      maxParallelBookings: slotTime.maxParallelBookings || 1
     };
+  }
+
+  private async formatSlotTimeWorkingDates(slotTimeWorkingDate: LocationSlotTimeWorkingDate): Promise<any> {
+    if (!slotTimeWorkingDate) return null;
+
+    try {
+      // Get all bookings for this slot time working date
+      const bookings = await this.dataSource
+        .createQueryBuilder()
+        .select('booking.id, booking.time, service_concept.duration, booking.date')
+        .from('booking', 'booking')
+        .innerJoin('booking.serviceConcept', 'service_concept')
+        .innerJoin('booking.location', 'location')
+        .innerJoin('location.availability', 'availability')
+        .innerJoin('availability.slotTimes', 'slotTimes')
+        .innerJoin('slotTimes.locationSlotTimeWorkingDates', 'slotTimeWorkingDates')
+        .where('slotTimeWorkingDates.id = :slotTimeWorkingDateId', { slotTimeWorkingDateId: slotTimeWorkingDate.id })
+        .andWhere('booking.status IN (:...statuses)', { 
+          statuses: [BookingStatus.COMPLETED] 
+        })
+        .andWhere('booking.date = :bookingDate', { bookingDate: slotTimeWorkingDate.workingDate.date })
+        .getRawMany();
+
+      let alreadyBooked = 0;
+
+      // Check for overlapping bookings
+      if (slotTimeWorkingDate.slotTime) {
+        const slotStartMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.startSlotTime);
+        const slotEndMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.endSlotTime);
+
+        for (const booking of bookings) {
+          const bookingStartMinutes = this.timeToMinutes(booking.time);
+          const bookingEndMinutes = bookingStartMinutes + booking.duration;
+
+          // Check if booking overlaps with slot
+          if (
+            (bookingStartMinutes >= slotStartMinutes && bookingStartMinutes < slotEndMinutes) || // Booking starts during slot
+            (bookingEndMinutes > slotStartMinutes && bookingEndMinutes <= slotEndMinutes) || // Booking ends during slot
+            (bookingStartMinutes <= slotStartMinutes && bookingEndMinutes >= slotEndMinutes) // Booking spans entire slot
+          ) {
+            alreadyBooked++;
+          }
+        }
+      }
+
+      const isAvailable = alreadyBooked < (slotTimeWorkingDate.maxParallelBookings || 1);
+
+      return {
+        id: slotTimeWorkingDate.id,
+        date: slotTimeWorkingDate.workingDate?.date ? this.formatDate(slotTimeWorkingDate.workingDate.date) : null,
+        startSlotTime: slotTimeWorkingDate.slotTime?.startSlotTime || null,
+        endSlotTime: slotTimeWorkingDate.slotTime?.endSlotTime || null,
+        maxParallelBookings: slotTimeWorkingDate.maxParallelBookings || 1,
+        alreadyBooked: alreadyBooked || 0,
+        isAvailable: isAvailable || false,
+      };
+    } catch (error) {
+      this.logger.error(`Error formatting slot time working date: ${error.message}`);
+      return null;
+    }
+  }
+
+  // Helper function to format multiple slot times
+  private async formatSlotTimesArray(slotTimes: LocationSlotTime[]): Promise<any[]> {
+    if (!slotTimes) return [];
+    return Promise.all(slotTimes.map(slotTime => this.formatSlotTimes(slotTime)));
+  }
+
+  // Helper function to format multiple slot time working dates
+  private async formatSlotTimeWorkingDatesArray(slotTimeWorkingDates: LocationSlotTimeWorkingDate[]): Promise<any[]> {
+    if (!slotTimeWorkingDates) return [];
+    return Promise.all(slotTimeWorkingDates.map(slotTimeWorkingDate => this.formatSlotTimeWorkingDates(slotTimeWorkingDate)));
   }
 
   constructor(
@@ -66,14 +181,32 @@ export class LocationAvailabilityService {
     private locationSlotTimeRepository: Repository<LocationSlotTime>,
     @InjectRepository(LocationSlotTimeWorkingDate)
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
+    private dataSource: DataSource,
   ) {}
 
   // Helper function to generate dates for the current week
   private generateWeekDates(dateStr: string): Date[] {
+    if (!dateStr) {
+      throw new BadRequestException('Ngày không được để trống');
+    }
+
+    // Validate date format
+    const dateRegex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    if (!dateRegex.test(dateStr)) {
+      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+    }
+
     const dates: Date[] = [];
     // Convert DD/MM/YYYY to Date object
     const [day, month, year] = dateStr.split('/');
     const currentDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    
+    // Validate date values
+    if (currentDate.getFullYear() !== parseInt(year) || 
+        currentDate.getMonth() !== parseInt(month) - 1 || 
+        currentDate.getDate() !== parseInt(day)) {
+      throw new BadRequestException('Ngày không hợp lệ');
+    }
     
     // Set to start of week (Monday)
     const dayOfWeek = currentDate.getDay();
@@ -105,14 +238,14 @@ export class LocationAvailabilityService {
           id: locationId
         },
         workingDates: {
-          date: new Date(this.convertDateFormat(createLocationTimeScheduleDto.date)),
+          date: new Date(this.convertDateFormat(createLocationTimeScheduleDto.startDate)),
         },
         startTime: createLocationTimeScheduleDto.startTime,
         endTime: createLocationTimeScheduleDto.endTime,
       },
     });
     if (existingAvailability) {
-      throw new BadRequestException('Thời gian và ngày của vendor này đã tồn tại');
+      throw new BadRequestException('Thời gian và ngày của chỗ này đã tồn tại');
     }
 
     // Validate time range
@@ -132,11 +265,19 @@ export class LocationAvailabilityService {
 
     const savedAvailability = await this.locationAvailabilityRepository.save(availability);
 
-    // Generate dates for the week using DD/MM/YYYY format
-    const weekDates = this.generateWeekDates(createLocationTimeScheduleDto.date);
+    // Generate dates between startDate and endDate, excluding Sundays
+    const startDate = new Date(this.convertDateFormat(createLocationTimeScheduleDto.startDate));
+    const endDate = new Date(this.convertDateFormat(createLocationTimeScheduleDto.endDate));
+    const workingDates: Date[] = [];
     
-    // Create working dates for each day in the week
-    const workingDates = await Promise.all(weekDates.map(async (date) => {
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      workingDates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Create working dates for each day
+    const savedWorkingDates = await Promise.all(workingDates.map(async (date) => {
       const workingDate = this.locationWorkingDateRepository.create({
         date,
         locationAvailability: savedAvailability,
@@ -167,7 +308,7 @@ export class LocationAvailabilityService {
       const savedSlotTime = await this.locationSlotTimeRepository.save(slotTime);
 
       // Create slot time working date relationships for each working date
-      for (const workingDate of workingDates) {
+      for (const workingDate of savedWorkingDates) {
         await this.locationSlotTimeWorkingDateRepository.save({
           slotTimeId: savedSlotTime.id,
           workingDateId: workingDate.id,
@@ -182,13 +323,13 @@ export class LocationAvailabilityService {
 
     return {
       ...savedAvailability,
-      workingDates: workingDates.map(date => this.formatLocationWorkingDates(date)),
-      slotTimes: slotTimes.map(slotTime => this.formatSlotTimes(slotTime))
+      workingDates: savedWorkingDates.map(date => this.formatLocationWorkingDates(date)),
+      slotTimes: await this.formatSlotTimesArray(slotTimes)
     };
   }
 
   async findAll(query: FindLocationAvailabilityDto): Promise<{
-    data: LocationAvailability[];
+    data: (LocationAvailability & { slotTimeWorkingDates: any[] })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -197,7 +338,7 @@ export class LocationAvailabilityService {
     }
   }> {
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
-    const actualPageSize = Number(pageSize) * Number(pageSize);
+    const actualPageSize = Number(pageSize);
     const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
       .leftJoinAndSelect('location_availability.location', 'location')
       .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
@@ -209,8 +350,8 @@ export class LocationAvailabilityService {
     }
 
     const [data, total] = await queryBuilder
-      .skip((Number(current) - 1) * Number(pageSize))
-      .take(Number(actualPageSize))
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
       .getManyAndCount();
 
     // Format dates and slot times in response
@@ -220,14 +361,8 @@ export class LocationAvailabilityService {
         where: {
           slotTimeId: In(availability.slotTimes.map(st => st.id)),
           workingDateId: In(availability.workingDates.map(wd => wd.id))
-        }
-      });
-
-      // Create a map of slot time id to maxParallel for each working date
-      const maxParallelMap = new Map();
-      slotTimeWorkingDates.forEach(stwd => {
-        const key = `${stwd.slotTimeId}-${stwd.workingDateId}`;
-        maxParallelMap.set(key, stwd.maxParallelBookings);
+        },
+        relations: ['slotTime', 'workingDate']
       });
 
       return {
@@ -235,14 +370,8 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
       };
     }));
 
@@ -250,14 +379,14 @@ export class LocationAvailabilityService {
       data: formattedData,
       pagination: {
         current: Number(current),
-        pageSize: Number(pageSize),
-        totalPage: Math.ceil(total / Number(pageSize)),
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
         totalItem: total,
       }
     };
   }
 
-  async findOne(id: string): Promise<LocationAvailability> {
+  async findOne(id: string): Promise<LocationAvailability & { slotTimeWorkingDates: any[] }> {
     const availability = await this.locationAvailabilityRepository
       .createQueryBuilder('location_availability')
       .leftJoinAndSelect('location_availability.location', 'location')
@@ -275,30 +404,17 @@ export class LocationAvailabilityService {
       where: {
         slotTimeId: In(availability.slotTimes.map(st => st.id)),
         workingDateId: In(availability.workingDates.map(wd => wd.id))
-      }
+      },
+      relations: ['slotTime', 'workingDate']
     });
 
-    // Create a map of slot time id to maxParallel for each working date
-    const maxParallelMap = new Map();
-    slotTimeWorkingDates.forEach(stwd => {
-      const key = `${stwd.slotTimeId}-${stwd.workingDateId}`;
-      maxParallelMap.set(key, stwd.maxParallelBookings);
-    });
-
-    // Format dates and slot times in response
     return {
       ...availability,
       workingDates: availability.workingDates?.map(workingDate => 
         this.formatLocationWorkingDates(workingDate)
       ),
-      slotTimes: availability.slotTimes?.map(slotTime => {
-        const workingDateId = availability.workingDates[0]?.id;
-        const key = `${slotTime.id}-${workingDateId}`;
-        return {
-          ...this.formatSlotTimes(slotTime),
-          maxParallelBookings: maxParallelMap.get(key) || 1
-        };
-      })
+      slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+      slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
     };
   }
 
@@ -337,7 +453,8 @@ export class LocationAvailabilityService {
     await this.locationAvailabilityRepository.remove(availability);
   }
 
-  async findByLocationId(locationId: string, query: FindLocationAvailabilityDto): Promise<{
+  async findByLocationIdAndDate(locationId: string, query: FindLocationAvailabilityWithDateDto): Promise<{
+
     data: LocationAvailability[];
     pagination: {
       current: number;
@@ -346,21 +463,77 @@ export class LocationAvailabilityService {
       totalItem: number;
     }
   }> {
-    // Check if location exists
-    const locationAvailability = await this.locationAvailabilityRepository.findOne({
-      where: { location: { id: locationId } },
-    });
-    if (!locationAvailability) {
-      throw new NotFoundException('Vị trí không tồn tại');
-    }
-
-    const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
-    const actualPageSize = Number(pageSize) * Number(pageSize);
+    const { isAvailable, date, current, pageSize, sortBy, sortDirection } = query;
+    const actualPageSize = Number(pageSize);
     const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
       .leftJoinAndSelect('location_availability.location', 'location')
       .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
       .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
-      .where('location_availability.location_id = :locationId', { locationId })
+      .andWhere('location_availability.location_id = :locationId', { locationId })
+      .andWhere('workingDates.date = :date', { date: this.convertDateFormat(date) })
+      .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
+
+    if (isAvailable !== undefined) {
+      queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
+    }
+    if (date) {
+      queryBuilder.andWhere('workingDates.date = :date', { date: this.convertDateFormat(date) });
+    }
+
+    if (sortBy) {
+      queryBuilder.orderBy(`location_availability.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
+    }
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
+
+    const formattedData = await Promise.all(data.map(async availability => {
+      const slotTimeWorkingDates = await this.locationSlotTimeWorkingDateRepository.find({
+        where: {
+          slotTimeId: In(availability.slotTimes.map(st => st.id)),
+          workingDateId: In(availability.workingDates.map(wd => wd.id))
+        },
+        relations: ['slotTime', 'workingDate']
+      });
+
+      return {
+        ...availability,
+        workingDates: availability.workingDates?.map(workingDate => 
+          this.formatLocationWorkingDates(workingDate)
+        ),
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
+      };
+    }));
+
+    return {
+      data: formattedData,
+      pagination: {
+        current: Number(current),
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
+        totalItem: total,
+      }
+    };
+  }
+
+  async findByLocationId(locationId: string, query: FindLocationAvailabilityDto): Promise<{
+    data: (LocationAvailability & { slotTimeWorkingDates: any[] })[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
+    const { isAvailable, current, pageSize, sortBy, sortDirection } = query;
+    const actualPageSize = Number(pageSize);
+    const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
+      .leftJoinAndSelect('location_availability.location', 'location')
+      .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
+      .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
+      .andWhere('location_availability.location_id = :locationId', { locationId })
       .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
 
     if (isAvailable !== undefined) {
@@ -370,10 +543,11 @@ export class LocationAvailabilityService {
     if (sortBy) {
       queryBuilder.orderBy(`location_availability.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
     }
-    const skip = (Number(current) - 1) * Number(pageSize);
-    const take = Number(actualPageSize);
-    const [data, total] = await queryBuilder.skip(skip).take(take).getManyAndCount();
-    const totalPage = Math.ceil(total / Number(pageSize));
+
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
 
     // Format dates and slot times in response
     const formattedData = await Promise.all(data.map(async availability => {
@@ -382,14 +556,8 @@ export class LocationAvailabilityService {
         where: {
           slotTimeId: In(availability.slotTimes.map(st => st.id)),
           workingDateId: In(availability.workingDates.map(wd => wd.id))
-        }
-      });
-
-      // Create a map of slot time id to maxParallel for each working date
-      const maxParallelMap = new Map();
-      slotTimeWorkingDates.forEach(stwd => {
-        const key = `${stwd.slotTimeId}-${stwd.workingDateId}`;
-        maxParallelMap.set(key, stwd.maxParallelBookings);
+        },
+        relations: ['slotTime', 'workingDate']
       });
 
       return {
@@ -397,14 +565,8 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        slotTimeWorkingDates: []
       };
     }));
 
@@ -412,15 +574,15 @@ export class LocationAvailabilityService {
       data: formattedData,
       pagination: {
         current: Number(current),
-        pageSize: Number(pageSize),
-        totalPage,
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
         totalItem: total,
       }
     };
   }
 
   async findByDateRange(startDate: string, endDate: string, query: FindLocationAvailabilityDto): Promise<{
-    data: LocationAvailability[];
+    data: (LocationAvailability & { slotTimeWorkingDates: any[] })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -429,18 +591,23 @@ export class LocationAvailabilityService {
     }
   }> {
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
-    const actualPageSize = Number(pageSize) * Number(pageSize);
+    const actualPageSize = Number(pageSize);
 
     // Convert dates from DD/MM/YYYY to YYYY-MM-DD
     const convertedStartDate = this.convertDateFormat(startDate);
     const convertedEndDate = this.convertDateFormat(endDate);
 
-    console.log('Date range:', {
-      startDate,
-      endDate,
-      convertedStartDate,
-      convertedEndDate
-    });
+    // Validate dates
+    if (!convertedStartDate || !convertedEndDate) {
+      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+    }
+
+    // Validate date range
+    const start = new Date(convertedStartDate);
+    const end = new Date(convertedEndDate);
+    if (start > end) {
+      throw new BadRequestException('Ngày bắt đầu phải trước ngày kết thúc');
+    }
 
     const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
       .leftJoinAndSelect('location_availability.location', 'location')
@@ -451,7 +618,7 @@ export class LocationAvailabilityService {
         endDate: convertedEndDate
       });
 
-    if (isAvailable) {
+    if (isAvailable !== undefined) {
       queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
     }
 
@@ -461,18 +628,10 @@ export class LocationAvailabilityService {
       queryBuilder.orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
     }
 
-    const skip = (Number(current) - 1) * Number(pageSize);
-    const take = Number(actualPageSize);
-
-    // Log the final query
-    const [querySql, queryParams] = queryBuilder.getQueryAndParameters();
-    console.log('Query:', querySql);
-    console.log('Parameters:', queryParams);
-
-    const [data, total] = await queryBuilder.skip(skip).take(take).getManyAndCount();
-    console.log('Result:', { data, total });
-
-    const totalPage = Math.ceil(total / Number(pageSize));
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
 
     // Format dates and slot times in response
     const formattedData = await Promise.all(data.map(async availability => {
@@ -481,14 +640,8 @@ export class LocationAvailabilityService {
         where: {
           slotTimeId: In(availability.slotTimes.map(st => st.id)),
           workingDateId: In(availability.workingDates.map(wd => wd.id))
-        }
-      });
-
-      // Create a map of slot time id to maxParallel for each working date
-      const maxParallelMap = new Map();
-      slotTimeWorkingDates.forEach(stwd => {
-        const key = `${stwd.slotTimeId}-${stwd.workingDateId}`;
-        maxParallelMap.set(key, stwd.maxParallelBookings);
+        },
+        relations: ['slotTime', 'workingDate']
       });
 
       return {
@@ -496,14 +649,8 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
       };
     }));
 
@@ -511,15 +658,15 @@ export class LocationAvailabilityService {
       data: formattedData,
       pagination: {
         current: Number(current),
-        pageSize: Number(pageSize),
-        totalPage,
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
         totalItem: total,
       }
     };
   }
 
   async findByDate(date: string, query: FindLocationAvailabilityDto): Promise<{
-    data: LocationAvailability[];
+    data: (LocationAvailability & { slotTimeWorkingDates: any[] })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -527,30 +674,39 @@ export class LocationAvailabilityService {
       totalItem: number;
     }
   }> {
+    if (!date) {
+      throw new BadRequestException('Ngày không được để trống');
+    }
+
     const { current, pageSize, sortBy, sortDirection, isAvailable } = query;
-    const actualPageSize = Number(pageSize) * Number(pageSize);
+    const actualPageSize = Number(pageSize);
 
     // Convert date from DD/MM/YYYY to YYYY-MM-DD
     const convertedDate = this.convertDateFormat(date);
+    if (!convertedDate) {
+      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+    }
 
     const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
       .leftJoinAndSelect('location_availability.location', 'location')
       .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
       .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
-      .where('workingDates.date = :date', { date: convertedDate })
-      .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
+      .where('workingDates.date = :date', { date: convertedDate });
 
-    if (isAvailable) {
-      queryBuilder.where('location_availability.isAvailable = :isAvailable', { isAvailable });
+    if (isAvailable !== undefined) {
+      queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
     }
 
     if (sortBy) {
       queryBuilder.orderBy(`location_availability.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
+    } else {
+      queryBuilder.orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
     }
-    const skip = (Number(current) - 1) * Number(pageSize);
-    const take = Number(actualPageSize);
-    const [data, total] = await queryBuilder.skip(skip).take(take).getManyAndCount();
-    const totalPage = Math.ceil(total / Number(pageSize));
+
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
 
     // Format dates and slot times in response
     const formattedData = await Promise.all(data.map(async availability => {
@@ -559,14 +715,8 @@ export class LocationAvailabilityService {
         where: {
           slotTimeId: In(availability.slotTimes.map(st => st.id)),
           workingDateId: In(availability.workingDates.map(wd => wd.id))
-        }
-      });
-
-      // Create a map of slot time id to maxParallel for each working date
-      const maxParallelMap = new Map();
-      slotTimeWorkingDates.forEach(stwd => {
-        const key = `${stwd.slotTimeId}-${stwd.workingDateId}`;
-        maxParallelMap.set(key, stwd.maxParallelBookings);
+        },
+        relations: ['slotTime', 'workingDate']
       });
 
       return {
@@ -574,14 +724,8 @@ export class LocationAvailabilityService {
         workingDates: availability.workingDates?.map(workingDate => 
           this.formatLocationWorkingDates(workingDate)
         ),
-        slotTimes: availability.slotTimes?.map(slotTime => {
-          const workingDateId = availability.workingDates[0]?.id;
-          const key = `${slotTime.id}-${workingDateId}`;
-          return {
-            ...this.formatSlotTimes(slotTime),
-            maxParallelBookings: maxParallelMap.get(key) || 1
-          };
-        })
+        slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        slotTimeWorkingDates: await this.formatSlotTimeWorkingDatesArray(slotTimeWorkingDates)
       };
     }));
 
@@ -589,8 +733,8 @@ export class LocationAvailabilityService {
       data: formattedData,
       pagination: {
         current: Number(current),
-        pageSize: Number(pageSize),
-        totalPage,
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
         totalItem: total,
       }
     };
@@ -764,5 +908,135 @@ export class LocationAvailabilityService {
       });
     }
     return this.formatLocationWorkingDates(savedWorkingDate);
+  }
+
+  // update time only for saturday
+  async updateTimeOnlyForDay(locationId: string, updateTimeOnlyForDayDto: UpdateTimeOnlyForDayDto): Promise<LocationAvailability> {
+    // 1. Find the location
+    const location = await this.locationRepository.findOne({
+      where: { id: locationId },
+    });
+
+    if (!location) {
+      throw new NotFoundException('Vị trí không tồn tại');
+    }
+
+    // 2. Create new LocationAvailability for the specified day
+    const newAvailability = this.locationAvailabilityRepository.create({
+      startTime: updateTimeOnlyForDayDto.startTime,
+      endTime: updateTimeOnlyForDayDto.endTime,
+      isAvailable: true,
+      location,
+    });
+
+    const savedAvailability = await this.locationAvailabilityRepository.save(newAvailability);
+
+    // 3. Find all working dates that you want to update
+    const workingDates = await this.locationWorkingDateRepository
+      .createQueryBuilder('workingDate')
+      .leftJoinAndSelect('workingDate.locationAvailability', 'locationAvailability')
+      .where('locationAvailability.location_id = :locationId', { locationId })
+      .getMany();
+
+    // Map day names to their corresponding day numbers
+    const dayToNumber = {
+      [DayOfWeek.Monday]: 1,
+      [DayOfWeek.Tuesday]: 2,
+      [DayOfWeek.Wednesday]: 3,
+      [DayOfWeek.Thursday]: 4,
+      [DayOfWeek.Friday]: 5,
+      [DayOfWeek.Saturday]: 6,
+    };
+
+    const workingDatesToUpdate = workingDates.filter(wd => {
+      const date = new Date(wd.date);
+      return date.getDay() === dayToNumber[updateTimeOnlyForDayDto.day];
+    });
+
+    // 4. Update working dates to point to new availability
+    for (const workingDate of workingDatesToUpdate) {
+      workingDate.locationAvailability = savedAvailability;
+      await this.locationWorkingDateRepository.save(workingDate);
+    }
+
+    // 5. Create new slot times for the new availability
+    const slotTimes: LocationSlotTime[] = [];
+    const startTime = new Date(`2000-01-01T${updateTimeOnlyForDayDto.startTime}`);
+    const endTime = new Date(`2000-01-01T${updateTimeOnlyForDayDto.endTime}`);
+    const duration = 60; // 60 minutes per slot
+    let currentTime = startTime;
+    let slotNumber = 1;
+
+    while (currentTime < endTime) {
+      const slotEndTime = new Date(currentTime.getTime() + duration * 60000);
+      if (slotEndTime > endTime) break;
+
+      const slotTime = this.locationSlotTimeRepository.create({
+        locationAvailabilityId: savedAvailability.id,
+        slot: slotNumber,
+        startSlotTime: currentTime.toTimeString().slice(0, 5),
+        endSlotTime: slotEndTime.toTimeString().slice(0, 5),
+        isStrictTimeBlocking: true,
+      });
+
+      const savedSlotTime = await this.locationSlotTimeRepository.save(slotTime);
+      slotTimes.push(savedSlotTime);
+      currentTime = slotEndTime;
+      slotNumber++;
+    }
+
+    // 6. Update existing slot time working date relationships
+    for (const workingDate of workingDatesToUpdate) {
+      // Find existing slot time working date relationships for this working date
+      const existingRelationships = await this.locationSlotTimeWorkingDateRepository.find({
+        where: { workingDateId: workingDate.id }
+      });
+
+      // Update each relationship with new slot time IDs
+      for (let i = 0; i < existingRelationships.length; i++) {
+        if (i < slotTimes.length) {
+          // Update existing relationship with new slot time ID
+          existingRelationships[i].slotTimeId = slotTimes[i].id;
+          await this.locationSlotTimeWorkingDateRepository.save(existingRelationships[i]);
+        } else {
+          // Remove extra relationships if new slot times are fewer
+          await this.locationSlotTimeWorkingDateRepository.remove(existingRelationships[i]);
+        }
+      }
+
+      // Create new relationships if new slot times are more
+      if (slotTimes.length > existingRelationships.length) {
+        for (let i = existingRelationships.length; i < slotTimes.length; i++) {
+          await this.locationSlotTimeWorkingDateRepository.save({
+            slotTimeId: slotTimes[i].id,
+            workingDateId: workingDate.id,
+            maxParallelBookings: 1
+          });
+        }
+      }
+    }
+
+    // 7. Return the updated availability with all related data
+    return {
+      ...savedAvailability,
+      workingDates: workingDatesToUpdate.map(date => this.formatLocationWorkingDates(date)),
+      slotTimes: await this.formatSlotTimesArray(slotTimes)
+    };
+  }
+
+  // update working date status
+  async updateWorkingDateStatus(workingDateId: string, updateLocationWorkingDateStatusDto: UpdateLocationWorkingDateStatusDto): Promise<LocationWorkingDate> {
+    const workingDate = await this.locationWorkingDateRepository.findOne({
+      where: { id: workingDateId },
+    });
+    
+    if (!workingDate) {
+      throw new NotFoundException('Ngày làm việc không tồn tại');
+    }
+
+    workingDate.isAvailable = updateLocationWorkingDateStatusDto.isAvailable;
+    await this.locationWorkingDateRepository.save(workingDate);
+
+    return this.formatLocationWorkingDates(workingDate);
   }
 }

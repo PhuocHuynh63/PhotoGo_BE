@@ -304,7 +304,8 @@ export class ServicePackageController {
   }
 
   @Patch('service-concept/:id')
-  @Roles({ id: 'R008' } as Role)
+  // @Roles({ id: 'R008' } as Role)
+  @Public()
   @ApiOperation({ summary: 'Cập nhật concept dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Concept dịch vụ đã được cập nhật thành công', type: ServiceConcept })
   @ApiResponse({ status: 404, description: 'Không tìm thấy concept dịch vụ' })

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { BookingDepositType, BookingStatus, BookingSourceType } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
@@ -14,6 +14,9 @@ import { PaymentType } from '../../constants/payment.enum';
 import { PaginationDto } from './dto/pagination.dto';
 import { LocationAvailabilityService } from '../locations/location-availability.service';
 import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot-time-working-date.entity';
+import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
+import { Location } from '../locations/entities/location.entity';
+import { Invoice } from '../invoices/entities/invoice.entity';
 
 @Injectable()
 export class BookingService {
@@ -31,6 +34,12 @@ export class BookingService {
     private locationAvailabilityService: LocationAvailabilityService,
     @InjectRepository(LocationSlotTimeWorkingDate)
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
+    @InjectRepository(LocationWorkingDate)
+    private locationWorkingDateRepository: Repository<LocationWorkingDate>,
+    @InjectRepository(Location)
+    private locationRepository: Repository<Location>,
+    @InjectRepository(Invoice)
+    private invoiceRepository: Repository<Invoice>,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -71,6 +80,38 @@ export class BookingService {
     return hours * 60 + minutes;
   }
 
+  // Helper function to check for overlapping bookings
+  private async countOverlappingBookings(
+    date: Date,
+    startTime: string,
+    duration: number,
+  ): Promise<number> {
+    const startTimeMinutes = this.timeToMinutes(startTime);
+    const endTimeMinutes = startTimeMinutes + duration;
+
+    // Get all bookings for the date
+    const bookings = await this.bookingRepository.find({
+      where: {
+        date: date,
+        status: BookingStatus.PENDING,
+      },
+      relations: ['serviceConcept'],
+    });
+
+    // Count overlapping bookings
+    let count = 0;
+    for (const booking of bookings) {
+      const bookingStartMinutes = this.timeToMinutes(booking.time);
+      const bookingEndMinutes = bookingStartMinutes + booking.serviceConcept.duration;
+
+      // Only check if the start time of the new booking overlaps with existing bookings
+      if (bookingStartMinutes >= startTimeMinutes && bookingStartMinutes < endTimeMinutes) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   //#region Create Booking
   async create(
     createBookingDto: CreateBookingDto,
@@ -90,6 +131,18 @@ export class BookingService {
     // Validate required fields
     if (!createBookingDto.date) {
       throw new BadRequestException('Ngày booking là bắt buộc');
+    }
+
+    // check the date is available
+    const workingDate = await this.locationWorkingDateRepository.findOne({
+      where: {
+        date: new Date(this.convertDateFormat(createBookingDto.date)),
+        isAvailable: true
+      }
+    });
+
+    if (!workingDate) {
+      throw new BadRequestException('Ngày này không làm việc');
     }
 
     // Convert date format from DD/MM/YYYY to YYYY-MM-DD
@@ -139,17 +192,14 @@ export class BookingService {
       throw new BadRequestException('Không tìm thấy thông tin slot time cho ngày này');
     }
 
-    // Check max parallel bookings
-    const existingBookings = await this.bookingRepository.count({
-      where: {
-        date: new Date(convertedDate),
-        time: createBookingDto.time,
-        status: BookingStatus.PENDING,
-      }
-    });
-
-    if (existingBookings >= slotTimeWorkingDate.maxParallelBookings) {
-      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này`);
+    // Check for overlapping bookings with maxParallelBookings
+    const overlappingCount = await this.countOverlappingBookings(
+      new Date(convertedDate),
+      createBookingDto.time,
+      serviceConcept.duration
+    );
+    if (overlappingCount >= slotTimeWorkingDate.maxParallelBookings) {
+      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này hoặc bị chồng lấn thời gian.`);
     }
 
     if (!createBookingDto.fullName) {
@@ -223,13 +273,17 @@ export class BookingService {
       throw new BadRequestException('Loại nguồn booking không hợp lệ');
     }
 
-    const vendorId = serviceConcept.servicePackage.vendorId;
+    // Lấy locationId từ DTO
+    if (!createBookingDto.locationId) {
+      throw new BadRequestException('locationId là bắt buộc');
+    }
+    const locationId = createBookingDto.locationId;
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate, // Use the converted date
       userId,
       serviceConceptId,
-      vendorId,
+      locationId,
       status: BookingStatus.PENDING,
       depositAmount: createBookingDto.depositAmount,
       depositType: BookingDepositType.PERCENTAGE,
@@ -283,14 +337,27 @@ export class BookingService {
     const skip = (current - 1) * pageSize;
 
     const [bookings, total] = await this.bookingRepository.findAndCount({
-      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
       skip,
       take: pageSize,
       order: {
         created_at: 'DESC'
       }
     });
-    const formattedBookings = bookings.map(booking => this.formatBookingDates(booking));
+    
+    const formattedBookings = bookings.map(booking => {
+      const formatted = this.formatBookingDates(booking);
+      // Lấy payablePrice từ invoice cuối cùng (nếu có)
+      const latestInvoice = booking.invoices && booking.invoices.length > 0 
+        ? booking.invoices[booking.invoices.length - 1] 
+        : null;
+      
+      return {
+        ...formatted,
+        payablePrice: latestInvoice ? latestInvoice.payablePrice : null
+      };
+    });
+    
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -318,14 +385,27 @@ export class BookingService {
 
     const [bookings, total] = await this.bookingRepository.findAndCount({
       where: { userId },
-      relations: ['user','histories'],
+      relations: ['user', 'histories', 'invoices'],
       skip,
       take: pageSize,
       order: {
         created_at: 'DESC'
       }
     });
-    const formattedBookings = bookings.map(booking => this.formatBookingDates(booking));
+    
+    const formattedBookings = bookings.map(booking => {
+      const formatted = this.formatBookingDates(booking);
+      // Lấy payablePrice từ invoice cuối cùng (nếu có)
+      const latestInvoice = booking.invoices && booking.invoices.length > 0 
+        ? booking.invoices[booking.invoices.length - 1] 
+        : null;
+      
+      return {
+        ...formatted,
+        payablePrice: latestInvoice ? latestInvoice.payablePrice : null
+      };
+    });
+    
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -342,12 +422,22 @@ export class BookingService {
   async findOne(id: string): Promise<Booking> {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'vendor', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
     });
     if (!booking) {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
-    return this.formatBookingDates(booking);
+    
+    const formatted = this.formatBookingDates(booking);
+    // Lấy payablePrice từ invoice cuối cùng (nếu có)
+    const latestInvoice = booking.invoices && booking.invoices.length > 0 
+      ? booking.invoices[booking.invoices.length - 1] 
+      : null;
+    
+    return {
+      ...formatted,
+      payablePrice: latestInvoice ? latestInvoice.payablePrice : null
+    };
   }
 
   async update(id: string, updateBookingDto: UpdateBookingDto): Promise<Booking> {

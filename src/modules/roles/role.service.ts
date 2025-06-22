@@ -11,7 +11,7 @@ export class RoleService {
   constructor(
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
-  ) {}
+  ) { }
 
   async create(createRoleDto: CreateRoleDto): Promise<Role> {
     // Validate required fields
@@ -63,28 +63,16 @@ export class RoleService {
   }
 
   async findOne(id: string): Promise<Role> {
-    // Validate UUID format
-    if (!isUUID(id)) {
-      throw new BadRequestException('Định dạng ID quyền không hợp lệ');
+    const role = await this.roleRepository.findOne({
+      where: { id },
+      relations: ['users'] // Load users with this role
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Không tìm thấy quyền với ID: ${id}`);
     }
 
-    try {
-      const role = await this.roleRepository.findOne({ 
-        where: { id },
-        relations: ['users'] // Load users with this role
-      });
-      
-      if (!role) {
-        throw new NotFoundException(`Không tìm thấy quyền với ID: ${id}`);
-      }
-
-      return role;
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Không thể lấy thông tin quyền: ' + error.message);
-    }
+    return role;
   }
 
   async update(id: string, updateRoleDto: UpdateRoleDto): Promise<Role> {
@@ -146,7 +134,7 @@ export class RoleService {
 
   async getDefaultRole(): Promise<Role | undefined> {
     try {
-      return await this.roleRepository.findOne({ 
+      return await this.roleRepository.findOne({
         where: { id: 'R001' },
         relations: ['users']
       });

@@ -4,14 +4,25 @@ import { IsBoolean, IsString, Matches } from 'class-validator';
 export class CreateLocationTimeScheduleDto {
   @ApiProperty({
     example: '11/06/2025',
-    description: 'Ngày làm việc (định dạng DD/MM/YYYY)',
+    description: 'Ngày bắt đầu làm việc (định dạng DD/MM/YYYY)',
     required: true,
   })
   @IsString()
   @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
     message: 'Date must be in DD/MM/YYYY format',
   })
-  date: string;
+  startDate: string;
+
+  @ApiProperty({
+    example: '11/06/2025',
+    description: 'Ngày kết thúc làm việc (định dạng DD/MM/YYYY)',
+    required: true,
+  })
+  @IsString()
+  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+    message: 'Date must be in DD/MM/YYYY format',
+  })
+  endDate: string;
 
   @ApiProperty()
   @IsString()

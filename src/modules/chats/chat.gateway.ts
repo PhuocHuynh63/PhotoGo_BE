@@ -6,6 +6,7 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  WsException,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
@@ -61,29 +62,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const userId = client.data.user?.userId || client.data.user?.sub;
       if (!userId) {
-        client.emit('joinChatError', { message: 'Phiên làm việc đã hết hạn. Vui lòng kết nối lại.' });
-        return;
+        throw new WsException('Phiên làm việc không hợp lệ.');
       }
       if (!data.memberId || data.memberId.toLowerCase() === 'null') {
-        client.emit('joinChatError', { message: 'Tài khoản không tồn tại' });
-        return;
+        throw new WsException('Cần cung cấp ID của đối tác.');
       }
 
       // Create the DTO from the received memberId.
       const createChatDto = { partnerId: data.memberId };
-
-      let chat;
-      try {
-        chat = await this.chatService.createChat(createChatDto, userId);
-      } catch (error) {
-        console.error(`Chat creation failed: ${error.message}`);
-        client.emit('joinChatError', { message: error.message });
-        return;
-      }
-
-      // Let the client join the chat room by chat id.
+      const chat = await this.chatService.findOrCreateChat(createChatDto, userId);
       client.join(chat.id);
-      client.emit('joinedRoom', { chatId: chat.id, messages: chat.messages });
+
+      client.emit('joinedRoom', { chatId: chat.id });
     } catch (error) {
       console.error(`Unexpected error in joinChat: ${error.message}`);
       client.emit('joinChatError', { message: 'Không thể tìm thấy đoạn hội thoại.' });
@@ -93,46 +83,41 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // sendMessage handler remains similar: if an error occurs, it is logged and emitted.
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
-    @MessageBody() data: { chatId: string; text: string; timestamp?: string },
+    @MessageBody() data: { chatId: string; text: string },
     @ConnectedSocket() client: Socket,
   ) {
     try {
       const sender_id = client.data.user?.userId || client.data.user?.sub;
       if (!sender_id) {
-        client.emit('sendMessageError', { message: 'Tài khoản chưa được xác thực, vui lòng đăng nhập lại sau.' });
-        return;
+        throw new WsException('Tài khoản chưa được xác thực.');
       }
 
       // Check if the client has already joined the chat room.
       if (!data.chatId || !client.rooms.has(data.chatId)) {
-        client.emit('sendMessageError', { message: 'Phải tham gia cuộc hội thoại để gửi tin.' });
-        return;
+        throw new WsException('Phải tham gia cuộc hội thoại để gửi tin.');
       }
 
-      const messagePayload = {
-        chatId: data.chatId,
+      const newMessage = await this.chatService.createMessage(
+        data.chatId,
         sender_id,
-        text: data.text,
-        timestamp: data.timestamp || new Date().toISOString(),
-      };
+        data.text,
+      );
 
+      this.server.to(data.chatId).emit('newMessage', newMessage);
 
-      const updatedChat = await this.chatService.createMessage(data.chatId, messagePayload);
-
-      // Broadcast the new message to all clients in the chat room.
-      this.server.in(data.chatId).emit('newMessage', messagePayload);
-
-      // Notify other members (e.g. via personal rooms) in case they are not in the chat room.
-      updatedChat.members.forEach((memberId) => {
-        if (memberId !== sender_id) {
-          client.to(memberId).emit('chatNotification', {
+      const chat = await this.chatService.getChatById(data.chatId);
+      if (chat) {
+        const partner = chat.members.find(id => id !== sender_id);
+        if (partner) {
+          this.server.to(partner).emit('chatNotification', {
             chatId: data.chatId,
-            newMessage: messagePayload,
+            newMessage,
           });
         }
-      });
+      } else {
+        console.warn(`BACKEND WARN: Chat with ID ${data.chatId} not found for notification.`);
+      }
     } catch (error) {
-      console.error(`Error in sendMessage: ${error.message}`);
       client.emit('sendMessageError', { message: error.message });
     }
   }
@@ -145,18 +130,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const userId = client.data.user?.userId || client.data.user?.sub;
       if (!userId) {
-        client.emit('markReadError', { message: 'Phiên làm việc không hợp lệ.' });
-        return;
+        throw new WsException('Phiên làm việc không hợp lệ.');
       }
+
       // Mark the messages as read using your service method.
       await this.chatService.markMessagesAsRead(data.chatId, userId);
-      // Emit readReceipt event to notify all clients in the chat.
-      this.server.in(data.chatId).emit('readReceipt', { chatId: data.chatId, readerId: userId });
+
+      this.server.to(data.chatId).emit('readReceipt', {
+        chatId: data.chatId,
+        readerId: userId,
+      });
     } catch (error) {
-      console.error(`Error in markRead: ${error.message}`);
-      client.emit('markReadError', { message: 'Không thể đánh dấu tin nhắn đã đọc.' });
+      client.emit('markReadError', { message: 'Không thể đánh dấu đã đọc.' });
     }
   }
+
 
   @SubscribeMessage('leaveChat')
   async handleLeaveChat(

@@ -13,6 +13,9 @@ import { InvoiceModule } from '../invoices/invoice.module';
 import { Dispute } from '../disputes/entities/dispute.entity';
 import { LocationAvailabilityModule } from '../locations/location-availability.module';
 import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot-time-working-date.entity';
+import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
+import { Location } from '../locations/entities/location.entity';
+import { Invoice } from '../invoices/entities/invoice.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -21,7 +24,10 @@ import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot
       ServiceConcept,
       Voucher,
       Dispute,
+      Location,
       LocationSlotTimeWorkingDate,
+      LocationWorkingDate,
+      Invoice,
     ]),
     ServicePackageModule,
     VoucherModule,

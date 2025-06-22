@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Vendor } from '../../vendors/entities/vendor.entity';
+import { Location } from '../../locations/entities/location.entity';
 import { ServiceConcept } from '../../service-package/entities/service-concept.entity';
 import { BookingHistory } from './booking-history.entity';
 import { Invoice } from '../../invoices/entities/invoice.entity';
@@ -19,12 +19,12 @@ export class Booking {
   @Column({ type: 'uuid', name: 'user_id' })
   userId: string;
 
-  @ManyToOne(() => Vendor, { nullable: false })
-  @JoinColumn({ name: 'vendor_id' })
-  vendor: Vendor;
+  @Column({ type: 'uuid', name: 'location_id' })
+  locationId: string;
 
-  @Column({ type: 'uuid', name: 'vendor_id' })
-  vendorId: string;
+  @ManyToOne(() => Location, { nullable: false })
+  @JoinColumn({ name: 'location_id' })
+  location: Location;
 
   @ManyToOne(() => ServiceConcept, { nullable: false })
   @JoinColumn({ name: 'service_concept_id' })
