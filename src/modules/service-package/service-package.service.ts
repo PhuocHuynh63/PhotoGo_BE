@@ -136,17 +136,29 @@ export class ServicePackageService {
     };
   }
 
-  async findOne(id: string): Promise<ServicePackage & { countPackageUsed: number }> {
+  async findOne(
+    id: string,
+  ): Promise<ServicePackage & { countPackageUsed: number }> {
     const servicePackage = await this.servicePackageRepository.findOne({
       where: { id },
-      relations: ['vendor', 'serviceConcepts', 'serviceConcepts.images', 'serviceConcepts.serviceConceptServiceTypes', 'serviceConcepts.serviceConceptServiceTypes.serviceType'],
+      relations: [
+        'vendor',
+        'vendor.locations',
+        'serviceConcepts',
+        'serviceConcepts.images',
+        'serviceConcepts.serviceConceptServiceTypes',
+        'serviceConcepts.serviceConceptServiceTypes.serviceType',
+      ],
     });
     if (!servicePackage) {
-      throw new NotFoundException(`Gói dịch vụ với ID ${id} không tồn tại`);
+      throw new NotFoundException(
+        `Gói dịch vụ với ID ${id} không tồn tại`,
+      );
     }
 
     // Get count of successful bookings for all concepts in this package
-    const countResult = await this.dataSource.query(`
+    const countResult = await this.dataSource.query(
+      `
       WITH package_concepts AS (
         SELECT sc.id as concept_id
         FROM service_package sp
@@ -157,11 +169,13 @@ export class ServicePackageService {
       FROM package_concepts pc
       JOIN booking b ON b.service_concept_id = pc.concept_id
       WHERE b.status = 'đã hoàn thành'
-    `, [id]);
+    `,
+      [id],
+    );
 
     return {
       ...servicePackage,
-      countPackageUsed: Number(countResult[0].count) || 0
+      countPackageUsed: Number(countResult[0].count) || 0,
     } as ServicePackage & { countPackageUsed: number };
   }
 
