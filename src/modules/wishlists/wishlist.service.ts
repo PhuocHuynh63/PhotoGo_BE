@@ -203,4 +203,8 @@ export class WishlistService {
       }
     };
   }
+
+  async findWishlistByUserId(userId: string): Promise<Wishlist> {
+    return await this.wishlistRepository.findOne({ where: { user: { id: userId } } });
+  }
 }
