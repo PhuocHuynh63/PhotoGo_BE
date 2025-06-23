@@ -579,4 +579,40 @@ export class BookingService {
     const booking = await this.findOne(id);
     await this.bookingRepository.remove(booking);
   }
+
+  async getPayOSInfoByBookingId(bookingId: string): Promise<{ paymentOSId: string; payosLink: string }> {
+    // Find the booking with invoices
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['invoices', 'invoices.payments'],
+    });
+    if (!booking) {
+      throw new NotFoundException(`Booking với ID ${bookingId} không tìm thấy`);
+    }
+    if (!booking.invoices || booking.invoices.length === 0) {
+      throw new NotFoundException('Không tìm thấy hóa đơn cho booking này');
+    }
+    // Get the latest invoice (by issuedAt)
+    const latestInvoice = booking.invoices.reduce((latest, curr) => {
+      if (!latest) return curr;
+      return new Date(curr.issuedAt) > new Date(latest.issuedAt) ? curr : latest;
+    }, null);
+    if (!latestInvoice || !latestInvoice.payments || latestInvoice.payments.length === 0) {
+      throw new NotFoundException('Không tìm thấy thanh toán cho hóa đơn này');
+    }
+    // Find the DEPOSIT payment
+    const depositPayment = latestInvoice.payments.find(p => p.type === PaymentType.DEPOSIT);
+    if (!depositPayment) {
+      throw new NotFoundException('Không tìm thấy thanh toán đặt cọc cho hóa đơn này');
+    }
+    if (!depositPayment.paymentOSId) {
+      throw new NotFoundException('Không tìm thấy paymentOSId cho thanh toán này');
+    }
+    // The payosLink (checkoutUrl) is not stored, so we reconstruct it if possible, or return null
+    // If you store the checkoutUrl, replace this logic
+    return {
+      paymentOSId: depositPayment.paymentOSId,
+      payosLink: null // You may need to reconstruct or store this in the future
+    };
+  }
 }

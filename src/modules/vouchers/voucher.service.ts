@@ -12,6 +12,9 @@ import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { User } from '../users/entities/user.entity';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
 import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
+import { Point } from '../points/entities/point.entity';
+import { PointTransactionType } from 'src/constants/point.enum';
+import { PointTransaction } from '../points/entities/point-transaction.entity';
 
 @Injectable()
 export class VoucherService {
@@ -26,6 +29,10 @@ export class VoucherService {
     private readonly userCampaignRepository: Repository<UserCampaign>,
     @InjectRepository(CampaignVoucher)
     private readonly campaignVoucherRepository: Repository<CampaignVoucher>,
+    @InjectRepository(Point)
+    private readonly pointRepository: Repository<Point>,
+    @InjectRepository(PointTransaction)
+    private readonly pointTransactionRepository: Repository<PointTransaction>,
   ) { }
 
   //#region Voucher Operations
@@ -273,6 +280,59 @@ export class VoucherService {
 
     await this.voucherRepository.save(voucher);
   }
+
+  /**
+   * Đổi thưởng: user dùng điểm để đổi lấy voucher
+   */
+  async exchangeVoucherByPoint(userId: string, voucherId: string): Promise<VoucherUser> {
+    // 1. Lấy thông tin voucher
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    if (!voucher) throw new NotFoundException('Voucher không tồn tại');
+    if (voucher.status !== VoucherStatusEnum.ACTIVE) throw new BadRequestException('Voucher không còn hiệu lực');
+    if (voucher.quantity <= 0) throw new BadRequestException('Voucher đã hết số lượng');
+    if (!voucher.point || voucher.point <= 0) throw new BadRequestException('Voucher này không hỗ trợ đổi điểm');
+
+    // 2. Lấy thông tin user và điểm
+    const user = await this.userRepository.findOne({ where: { id: userId }, relations: ['points'] });
+    if (!user) throw new NotFoundException('User không tồn tại');
+    const totalPoint = user.points?.reduce((sum, p) => sum + p.balance, 0) || 0;
+    if (totalPoint < voucher.point) throw new BadRequestException('Bạn không đủ điểm để đổi voucher này');
+
+    // 3. Trừ điểm (ưu tiên trừ ở Point đầu tiên, hoặc phân bổ nếu cần)
+    let remaining = voucher.point;
+    for (const point of user.points) {
+      if (remaining <= 0) break;
+      const deduct = Math.min(point.balance, remaining);
+      point.balance -= deduct;
+      remaining -= deduct;
+      await this.pointRepository.save(point);
+      const pointTransaction = this.pointTransactionRepository.create({
+        point: point,
+        amount: deduct,
+        type: PointTransactionType.REDEEM,
+        description: `Đổi voucher`,
+      });
+      await this.pointTransactionRepository.save(pointTransaction);
+    }
+
+    // 4. Gán voucher cho user
+    const existingVoucherUser = await this.voucherUserRepository.findOne({ where: { user_id: userId, voucher_id: voucherId } });
+    if (existingVoucherUser) throw new BadRequestException('Bạn đã sở hữu voucher này');
+    const voucherUser = this.voucherUserRepository.create({
+      user_id: userId,
+      voucher_id: voucherId,
+      status: VoucherUserStatusEnum.AVAILABLE,
+      assigned_at: new Date(),
+      used_at: null,
+    });
+    await this.voucherUserRepository.save(voucherUser);
+
+    // 5. Giảm số lượng voucher
+    voucher.quantity -= 1;
+    await this.voucherRepository.save(voucher);
+
+    return voucherUser;
+  }
   //#endregion VoucherUser Operations
 
   //#region VoucherUser Campaign Operations
@@ -296,6 +356,27 @@ export class VoucherService {
     const vouchers = userCampaign.campaign.campaignVouchers.map(cv => cv.voucher);
 
     return vouchers;
+  }
+
+  /**
+   * Check if a voucher is from a campaign and if the user has joined that campaign
+   * @param voucherId string
+   * @param userId string
+   * @returns {Promise<boolean>} true if voucher is from a campaign and user joined, false otherwise
+   */
+  async isVoucherFromCampaignAndUserJoined(voucherId: string, userId: string): Promise<boolean> {
+    // Check if voucher is in a campaign
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { voucherId, isAvailable: true },
+      relations: ['campaign'],
+    });
+    if (!campaignVoucher) return false;
+
+    // Check if user joined the campaign
+    const userCampaign = await this.userCampaignRepository.findOne({
+      where: { userId, campaignId: campaignVoucher.campaignId, isAvailable: true },
+    });
+    return !!userCampaign;
   }
   //#endregion VoucherUser Campaign Operations
 }

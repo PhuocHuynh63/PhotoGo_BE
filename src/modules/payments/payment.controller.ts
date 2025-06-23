@@ -85,6 +85,28 @@ export class PaymentController {
     }
   }
 
+  @Get('/transaction/:transactionId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin thanh toán theo ID giao dịch' })
+  @ApiResponse({ status: 200, description: 'Thông tin thanh toán', type: Payment })
+  @ApiResponse({ status: 400, description: 'ID giao dịch không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy thanh toán' })
+  @ResponseMessage('Lấy thông tin thanh toán theo ID giao dịch thành công')
+  async getPaymentsByTransactionId(@Param('transactionId') transactionId: string): Promise<string> {
+    if (!transactionId) {
+      throw new HttpException('ID giao dịch không được để trống', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.paymentService.findOneByTransactionId(transactionId);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy thông tin thanh toán theo ID giao dịch', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  } 
+
   @Post('/:invoiceId/payos/link')
   @ApiOperation({ summary: 'Tạo liên kết thanh toán PayOS' })
   @ApiResponse({ status: 201, description: 'Liên kết thanh toán được tạo thành công' })

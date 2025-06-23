@@ -127,6 +127,14 @@ export class VoucherController {
     return this.voucherService.useVoucher(voucherId, userId);
   }
 
+  @Post('user/:userId/exchange/:voucherId')
+  @ApiOperation({ summary: 'User đổi điểm lấy voucher' })
+  @ApiResponse({ status: 201, description: 'Đổi điểm lấy voucher thành công', type: VoucherUser })
+  @ApiResponse({ status: 400, description: 'Không đủ điểm hoặc điều kiện không hợp lệ' })
+  async exchangeVoucherByPoint(@Param('userId') userId: string, @Param('voucherId') voucherId: string): Promise<VoucherUser> {
+    return this.voucherService.exchangeVoucherByPoint(userId, voucherId);
+  }
+
   @Delete('user/:voucherId/:userId')
   @ApiOperation({ summary: 'Xóa bản ghi voucher-user bằng voucherId và userId (Protected)' })
   @ApiResponse({ status: 200, description: 'Bản ghi voucher-user đã được xóa thành công' })
@@ -134,5 +142,6 @@ export class VoucherController {
   async deleteVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<void> {
     return this.voucherService.deleteVoucherUser(voucherId, userId);
   }
+  
   //#endregion VoucherUser Endpoints
 }

@@ -169,4 +169,27 @@ export class BookingController {
       );
     }
   }
+
+  @Get(':id/payos-info')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy PayOS info thành công', schema: { example: { paymentOSId: '...', payosLink: '...' } } })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking hoặc PayOS info' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy PayOS info (paymentOSId và payosLink) theo bookingId' })
+  async getPayOSInfoByBookingId(@Param('id') id: string): Promise<{ paymentOSId: string; payosLink: string }> {
+    try {
+      if (!id) {
+        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.getPayOSInfoByBookingId(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy PayOS info',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }

@@ -9,10 +9,11 @@ import { VoucherModule } from '../vouchers/voucher.module';
 import { AuthModule } from '../auth/auth.module';
 import { Booking } from '../bookings/entities/booking.entity';
 import { BookingHistory } from '../bookings/entities/booking-history.entity';
-
+import { Point } from '../points/entities/point.entity';
+import { PointTransaction } from '../points/entities/point-transaction.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory]),
+    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction]),
     VoucherModule,
     PayosModule,
     AuthModule

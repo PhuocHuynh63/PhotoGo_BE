@@ -7,7 +7,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FindAllPaymentsDto } from './dto/find-all-payments.dto';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { ConfigService } from '@nestjs/config';
-import { BookingStatus } from '../../constants/booking.enum';
+import { BookingDepositType, BookingStatus } from '../../constants/booking.enum';
 import { VoucherService } from '../vouchers/voucher.service';
 import { VoucherUserStatusEnum } from '../../constants/voucher.enum';
 import PayOS from '@payos/node';
@@ -16,6 +16,9 @@ import { BookingHistory } from '../bookings/entities/booking-history.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { PaymentCallbackDto } from './dto/payment-callback.dto';
 import { PaginationDto } from './dto/pagination.dto';
+import { Point } from '../points/entities/point.entity';
+import { PointTransaction } from '../points/entities/point-transaction.entity';
+import { PointTransactionType } from '../../constants/point.enum';
 
 @Injectable()
 export class PaymentService {
@@ -31,6 +34,10 @@ export class PaymentService {
     @Inject('PAYOS_CLIENT') private readonly payos: PayOS,
     private readonly configService: ConfigService,
     private readonly voucherService: VoucherService,
+    @InjectRepository(Point)
+    private readonly pointRepository: Repository<Point>,
+    @InjectRepository(PointTransaction)
+    private readonly pointTransactionRepository: Repository<PointTransaction>,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
@@ -388,6 +395,33 @@ export class PaymentService {
     });
     await this.bookingHistoryRepository.save(history);
 
+    // handle point
+    const points = booking?.user?.points;
+    if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
+      // Tính phần trăm đặt cọc
+      const depositPercent = booking.depositAmount;
+      points.forEach(async (point) => {
+        let earnedPoint = payment.amount / 1000000;
+        // Nếu là đặt cọc dạng phần trăm và từ 30 đến <70% thì trừ 5 điểm
+        if (
+          booking.depositType === BookingDepositType.PERCENTAGE &&
+          depositPercent >= 30 && depositPercent < 70
+        ) {
+          earnedPoint -= 5;
+        }
+        // Nếu >= 70% hoặc không phải dạng phần trăm thì nhận full điểm
+        point.balance += earnedPoint;
+        await this.pointRepository.save(point);
+        const pointTransaction = this.pointTransactionRepository.create({
+          point: point,
+          amount: earnedPoint,
+          type: PointTransactionType.EARN,
+          description: `Thanh toán đặt cọc`,
+        });
+        await this.pointTransactionRepository.save(pointTransaction);
+      });
+    }
+
     // Handle voucher if exists
     const activeVoucherUser = booking?.user?.voucherUsers?.find(
       vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
@@ -442,5 +476,23 @@ export class PaymentService {
       });
       await this.bookingHistoryRepository.save(history);
     }
+  }
+
+  async findOneByTransactionId(transactionId: string): Promise<string> {
+    const payment = await this.paymentRepository.findOne({
+      where: { transactionId },
+      relations: [
+        'invoice', 
+        'invoice.booking',
+      ]
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${transactionId}`);
+    }
+
+    const bookingId = payment.invoice.booking.id;
+
+    return bookingId;
   }
 }

@@ -4,6 +4,7 @@ import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDa
 import { Vendor } from '../../vendors/entities/vendor.entity';
 import { VoucherUser } from 'src/modules/vouchers/entities/voucher-user.entity';
 import { UserCampaign } from 'src/modules/campaign/entities/user-campaign.entity';
+import { Point } from 'src/modules/points/entities/point.entity';
 
 @Entity('users') // Tên bảng là "users"
 export class User {
@@ -69,4 +70,7 @@ export class User {
 
   @OneToMany(() => UserCampaign, (userCampaign) => userCampaign.user)
   userCampaigns: UserCampaign[];
+
+  @OneToMany(() => Point, (point) => point.user)
+  points: Point[];
 }

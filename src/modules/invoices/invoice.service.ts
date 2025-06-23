@@ -65,6 +65,19 @@ export class InvoiceService {
         throw new NotFoundException(`Voucher với ID ${voucherId} không tồn tại`);
       }
 
+      // 1. Check if voucher is from a campaign and user joined
+      const isCampaignVoucher = await this.voucherService.isVoucherFromCampaignAndUserJoined(voucherId, booking.userId);
+      // 2. Check if user has been assigned the voucher (voucher-user)
+      const voucherUser = await this.voucherUserRepository.findOne({
+        where: { user_id: booking.userId, voucher_id: voucherId },
+      });
+      const isAssignedVoucher = voucherUser && voucherUser.status === VoucherUserStatusEnum.AVAILABLE;
+
+      // If neither condition is satisfied, throw error
+      if (!isCampaignVoucher && !isAssignedVoucher) {
+        throw new BadRequestException('Bạn không có quyền sử dụng voucher này (không thuộc campaign đã tham gia hoặc chưa được assign voucher)');
+      }
+
       const now = new Date();
       const startDate = new Date(voucher.startDate);
       const endDate = new Date(voucher.endDate);
@@ -76,10 +89,8 @@ export class InvoiceService {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
       }
 
-      const voucherUser = await this.voucherUserRepository.findOne({
-        where: { user_id: booking.userId, voucher_id: voucherId },
-      });
-      if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
+      // If assigned voucher, must check status
+      if (isAssignedVoucher === false && voucherUser) {
         throw new BadRequestException(`Bạn đã sử dụng voucher này hoặc voucher không khả dụng`);
       }
 
