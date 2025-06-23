@@ -45,6 +45,7 @@ export class AuthService {
 
     // Lấy cart của user
     const cart = await this.cartService.findCartByUserId(user.id);
+    const wishlist = await this.wishlistService.findWishlistByUserId(user.id);
     return {
       user: {
         id: user.id,
@@ -53,6 +54,7 @@ export class AuthService {
         image: user.image,
         role: user.role,
         cartId: cart?.id || null, // Thêm cartId vào đây
+        wishlistId: wishlist?.id || null, // Thêm wishlistId vào đây
       },
       access_token: this.jwtService.sign(payload, {
         expiresIn: '365d', // 1 year
