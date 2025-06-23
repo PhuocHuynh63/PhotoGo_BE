@@ -17,7 +17,7 @@ import { ServiceConceptImage } from './entities/service-concept-image.entity';
 import { GeminiService } from 'src/3rdService/gemini/gemini.service';
 import { PaginationDto } from './dto/pagination.dto';
 import { Commission } from '../commission/entities/commission.entity';
-import { CommissionType } from 'src/constants/commision.enum';
+import { CommissionStatus, CommissionType } from 'src/constants/commision.enum';
 
 @Injectable()
 export class ServicePackageService {
@@ -430,6 +430,7 @@ export class ServicePackageService {
       commissionRate: 30,
       commissionType: CommissionType.PERCENTAGE,
       commissionAmount: serviceConceptData.price * 0.3,
+      status: CommissionStatus.ACTIVE,
     });
     await this.commissionRepository.save(commissionData);
     // Modify price to include commission and tax (10% tax)
@@ -655,6 +656,7 @@ export class ServicePackageService {
           commissionRate: 30,
           commissionType: CommissionType.PERCENTAGE,
           commissionAmount: updateServiceConceptDto.price * 0.3,
+          status: CommissionStatus.ACTIVE,
         });
         await this.commissionRepository.save(commissionData);
       }

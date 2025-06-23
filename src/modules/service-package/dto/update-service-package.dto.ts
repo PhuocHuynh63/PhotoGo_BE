@@ -116,6 +116,7 @@ export class UpdateServiceConceptDto{
     enum: ServiceConceptStatus,
     example: ServiceConceptStatus.ACTIVE,
     required: false,
+    default: ServiceConceptStatus.ACTIVE,
   })
   @IsEnum(ServiceConceptStatus) 
   @IsOptional()
