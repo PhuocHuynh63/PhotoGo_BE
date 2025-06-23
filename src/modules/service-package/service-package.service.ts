@@ -631,14 +631,14 @@ export class ServicePackageService {
       }
     }
 
-    // Update basic fields
-    if (updateServiceConceptDto.name && updateServiceConceptDto.name.trim() !== '') {
+    // Update basic fields - only if provided (not undefined)
+    if (updateServiceConceptDto.name !== undefined) {
       serviceConcept.name = updateServiceConceptDto.name;
     }
-    if (updateServiceConceptDto.description !== undefined && updateServiceConceptDto.description?.trim() !== '') {
+    if (updateServiceConceptDto.description !== undefined) {
       serviceConcept.description = updateServiceConceptDto.description;
     }
-    if (updateServiceConceptDto.price !== undefined && updateServiceConceptDto.price > 0) {
+    if (updateServiceConceptDto.price !== undefined) {
       // Update commission if price changes
       const existingCommission = await this.commissionRepository.findOne({
         where: { serviceConceptId: id }
@@ -662,15 +662,15 @@ export class ServicePackageService {
       // Modify price to include commission and tax (10% tax)
       serviceConcept.price = updateServiceConceptDto.price * (1 + 30 / 100) + updateServiceConceptDto.price * 0.1;
     }
-    if (updateServiceConceptDto.duration !== undefined && updateServiceConceptDto.duration > 0) {
+    if (updateServiceConceptDto.duration !== undefined) {
       serviceConcept.duration = updateServiceConceptDto.duration;
     }
-    if (updateServiceConceptDto.status !== undefined && updateServiceConceptDto.status.trim() !== '') {
+    if (updateServiceConceptDto.status !== undefined) {
       serviceConcept.status = updateServiceConceptDto.status;
     }
 
-    // Update service package if provided and not empty
-    if (updateServiceConceptDto.servicePackageId && updateServiceConceptDto.servicePackageId.trim() !== '') {
+    // Update service package if provided
+    if (updateServiceConceptDto.servicePackageId !== undefined) {
       const servicePackage = await this.servicePackageRepository.findOne({
         where: { id: updateServiceConceptDto.servicePackageId }
       });
@@ -680,8 +680,8 @@ export class ServicePackageService {
       serviceConcept.servicePackage = servicePackage;
     }
 
-    // Update service types if provided and not empty
-    if (updateServiceConceptDto.serviceTypeIds && updateServiceConceptDto.serviceTypeIds.length > 0) {
+    // Update service types if provided
+    if (updateServiceConceptDto.serviceTypeIds !== undefined) {
       this.logger.log('Đang cập nhật liên kết loại dịch vụ');
       try {
         // Verify all service types exist first

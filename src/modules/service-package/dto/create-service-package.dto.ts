@@ -9,8 +9,8 @@ export class CreateServiceConceptDto {
     example: 'Chụp ảnh cưới ngoại cảnh',
   })
   @IsString()
-  @IsNotEmpty({ message: 'Tên khái niệm dịch vụ không được để trống' })
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @ApiProperty({
     description: 'Mô tả chi tiết về khái niệm dịch vụ',
@@ -27,7 +27,8 @@ export class CreateServiceConceptDto {
   })
   @IsNumber({}, { message: 'Giá phải là số' })
   @Min(0, { message: 'Giá phải lớn hơn hoặc bằng 0' })
-  price: number;
+  @IsOptional()
+  price?: number;
 
   @ApiProperty({
     description: 'Thời gian thực hiện (phút)',
@@ -35,7 +36,8 @@ export class CreateServiceConceptDto {
   })
   @IsNumber({}, { message: 'Thời gian phải là số' })
   @Min(0, { message: 'Thời gian phải lớn hơn hoặc bằng 0' })
-  duration: number;
+  @IsOptional()
+  duration?: number;
 
   @ApiProperty({
     description: 'Trạng thái của khái niệm dịch vụ',
