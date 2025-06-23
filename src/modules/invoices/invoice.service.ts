@@ -29,7 +29,7 @@ export class InvoiceService {
     private readonly voucherUserRepository: Repository<VoucherUser>,
     @InjectRepository(Commission)
     private readonly commissionRepository: Repository<Commission>,
-  ) {}
+  ) { }
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
     if (!bookingId) {
@@ -118,7 +118,7 @@ export class InvoiceService {
       remainingAmount = payablePrice - depositAmount;
     }
 
-    if (depositAmount <= 0 || remainingAmount <= 0) {
+    if (depositAmount < 0 || remainingAmount < 0) {
       throw new BadRequestException('Số tiền đặt cọc và số tiền còn lại phải lớn hơn 0');
     }
 

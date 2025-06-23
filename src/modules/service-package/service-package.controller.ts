@@ -320,6 +320,7 @@ export class ServicePackageController {
         name: { 
           type: 'string', 
           example: 'Chụp hình cưới ngoại cảnh',
+          nullable: true,
           description: 'Tên của concept dịch vụ'
         },
         description: { 
@@ -331,16 +332,19 @@ export class ServicePackageController {
         price: { 
           type: 'number', 
           example: 5000000,
+          nullable: true,
           description: 'Giá của concept dịch vụ'
         },
         duration: { 
           type: 'number', 
           example: 120,
+          nullable: true,
           description: 'Thời gian thực hiện (phút)'
         },
         servicePackageId: { 
           type: 'string', 
           example: '123e4567-e89b-12d3-a456-426614174000',
+          nullable: true,
           description: 'ID của gói dịch vụ'
         },
         serviceTypeIds: {
@@ -349,6 +353,7 @@ export class ServicePackageController {
             type: 'string'
           },
           example: ['ST001', 'ST002'],
+          nullable: true,
           description: 'Danh sách ID của các loại dịch vụ'
         },
         status: { 
@@ -364,6 +369,7 @@ export class ServicePackageController {
             type: 'string',
             format: 'binary'
           },
+          nullable: true,
           description: 'Danh sách ảnh của concept dịch vụ (tối đa 10 ảnh)'
         },
       },
