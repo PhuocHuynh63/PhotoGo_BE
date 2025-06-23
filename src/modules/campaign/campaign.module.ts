@@ -8,6 +8,7 @@ import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
 import { User } from '../users/entities/user.entity';
 import { Voucher } from '../vouchers/entities/voucher.entity';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { UserModule } from '../users/user.module';
 import { VoucherModule } from '../vouchers/voucher.module';
 
@@ -20,6 +21,7 @@ import { VoucherModule } from '../vouchers/voucher.module';
       LoyaltyCampaign,
       User,
       Voucher,
+      VoucherUser,
     ]),
     VoucherModule,
     UserModule,

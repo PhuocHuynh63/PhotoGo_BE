@@ -11,6 +11,7 @@ import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { User } from '../users/entities/user.entity';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
+import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 
 @Injectable()
 export class VoucherService {
@@ -23,6 +24,8 @@ export class VoucherService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserCampaign)
     private readonly userCampaignRepository: Repository<UserCampaign>,
+    @InjectRepository(CampaignVoucher)
+    private readonly campaignVoucherRepository: Repository<CampaignVoucher>,
   ) { }
 
   //#region Voucher Operations
@@ -100,6 +103,15 @@ export class VoucherService {
     const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
       throw new NotFoundException(`Mã giảm giá với ID ${voucherId} không tồn tại`);
+    }
+
+    // Check if voucher is already in a campaign
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { voucherId: voucherId, isAvailable: true },
+      relations: ['campaign'],
+    });
+    if (campaignVoucher) {
+      throw new BadRequestException(`Mã giảm giá đã được sử dụng trong chiến dịch "${campaignVoucher.campaign.name}"`);
     }
 
     // Check if voucher has available quantity

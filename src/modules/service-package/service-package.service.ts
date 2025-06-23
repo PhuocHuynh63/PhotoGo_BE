@@ -639,7 +639,28 @@ export class ServicePackageService {
       serviceConcept.description = updateServiceConceptDto.description;
     }
     if (updateServiceConceptDto.price !== undefined && updateServiceConceptDto.price > 0) {
-      serviceConcept.price = updateServiceConceptDto.price;
+      // Update commission if price changes
+      const existingCommission = await this.commissionRepository.findOne({
+        where: { serviceConceptId: id }
+      });
+
+      if (existingCommission) {
+        // Update commission amount based on new price
+        existingCommission.commissionAmount = updateServiceConceptDto.price * 0.3;
+        await this.commissionRepository.save(existingCommission);
+      } else {
+        // Create new commission if doesn't exist
+        const commissionData = this.commissionRepository.create({
+          serviceConceptId: id,
+          commissionRate: 30,
+          commissionType: CommissionType.PERCENTAGE,
+          commissionAmount: updateServiceConceptDto.price * 0.3,
+        });
+        await this.commissionRepository.save(commissionData);
+      }
+
+      // Modify price to include commission and tax (10% tax)
+      serviceConcept.price = updateServiceConceptDto.price * (1 + 30 / 100) + updateServiceConceptDto.price * 0.1;
     }
     if (updateServiceConceptDto.duration !== undefined && updateServiceConceptDto.duration > 0) {
       serviceConcept.duration = updateServiceConceptDto.duration;

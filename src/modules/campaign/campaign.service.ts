@@ -11,6 +11,7 @@ import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreateLoyaltyCampaignDto } from './dto/create-loyalty-campaign.dto';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { User } from '../users/entities/user.entity';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
@@ -44,6 +45,8 @@ export class CampaignService {
     private voucherRepository: Repository<Voucher>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(VoucherUser)
+    private voucherUserRepository: Repository<VoucherUser>,
   ) {}
 
   // Campaign endpoints
@@ -270,6 +273,15 @@ export class CampaignService {
       throw new NotFoundException('Voucher không tồn tại');
     }
 
+    // Check if voucher is already assigned to any user
+    const voucherUser = await this.voucherUserRepository.findOne({
+      where: { voucher_id: voucherId },
+      relations: ['user'],
+    });
+    if (voucherUser) {
+      throw new BadRequestException(`Voucher đã được assign cho user "${voucherUser.user.fullName}" (${voucherUser.user.email})`);
+    }
+
     // Check if the relationship already exists
     const existing = await this.campaignVoucherRepository.findOne({
       where: { campaignId, voucherId },
@@ -303,6 +315,16 @@ export class CampaignService {
         const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
         if (!voucher) {
           errors.push(`Voucher ${voucherId} không tồn tại`);
+          continue;
+        }
+
+        // Check if voucher is already assigned to any user
+        const voucherUser = await this.voucherUserRepository.findOne({
+          where: { voucher_id: voucherId },
+          relations: ['user'],
+        });
+        if (voucherUser) {
+          errors.push(`Voucher ${voucherId} đã được assign cho user "${voucherUser.user.fullName}" (${voucherUser.user.email})`);
           continue;
         }
 
