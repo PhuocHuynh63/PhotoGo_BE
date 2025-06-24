@@ -344,12 +344,12 @@ export class PaymentService {
     }
   }
 
-  async handlePaymentSuccess(callbackData: PaymentCallbackDto) {
-    const { paymentId, status, code, id, orderCode } = callbackData;
+  async handlePaymentSuccess(paymentId: string, callbackData: PaymentCallbackDto) {
+    const { status, code, id, orderCode } = callbackData;
 
     // Find payment based on transactionId (orderCode)
     const payment = await this.paymentRepository.findOne({ 
-      where: { transactionId: orderCode },
+      where: { id: paymentId },
       relations: [
         'invoice', 
         'invoice.booking', 
@@ -361,7 +361,7 @@ export class PaymentService {
     });
 
     if (!payment) {
-      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${orderCode}`);
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${paymentId}`);
     }
 
     const invoice = payment.invoice;
@@ -435,12 +435,12 @@ export class PaymentService {
     }
   }
 
-  async handlePaymentError(callbackData: PaymentCallbackDto) {
-    const { paymentId, status, code, id, orderCode } = callbackData;
+  async handlePaymentError(paymentId: string, callbackData: PaymentCallbackDto) {
+    const { status, code, id, orderCode } = callbackData;
 
     // Find payment based on transactionId (orderCode)
     const payment = await this.paymentRepository.findOne({ 
-      where: { transactionId: orderCode },
+      where: { id: paymentId },
       relations: [
         'invoice', 
         'invoice.booking', 
@@ -449,7 +449,7 @@ export class PaymentService {
     });
 
     if (!payment) {
-      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${orderCode}`);
+        throw new NotFoundException(`Không tìm thấy thanh toán với ID ${paymentId}`);
     }
 
     // Update payment status to failed

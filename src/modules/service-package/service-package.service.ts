@@ -815,6 +815,7 @@ export class ServicePackageService {
 
     const filterConditions: string[] = [];
     const baseParams: any[] = [];
+    let havingClause = '';
 
     // Base query for service package filtering
     let baseQuery = `
@@ -830,7 +831,7 @@ export class ServicePackageService {
         GROUP BY sp.id
       ),
       filtered_packages AS (
-        SELECT DISTINCT sp.id
+        SELECT sp.id
         FROM service_package sp
         LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
@@ -839,15 +840,9 @@ export class ServicePackageService {
         WHERE 1=1
     `;
 
-    // Add filters to base query dynamically
     if (params.name) {
       filterConditions.push(`unaccent(sp.name) ILIKE unaccent($${filterConditions.length + 1})`);
       baseParams.push(`%${params.name}%`);
-    }
-
-    if (params.serviceTypeIds?.length) {
-      filterConditions.push(`st.id = ANY($${filterConditions.length + 1})`);
-      baseParams.push(params.serviceTypeIds);
     }
 
     if (params.status) {
@@ -865,12 +860,20 @@ export class ServicePackageService {
       baseParams.push(params.maxPrice);
     }
 
+    // Special handling for serviceTypeIds: must match ALL ids
+    if (params.serviceTypeIds?.length) {
+      filterConditions.push(`st.id IN (${params.serviceTypeIds.map((_, idx) => `$${baseParams.length + idx + 1}`).join(', ')})`);
+      baseParams.push(...params.serviceTypeIds);
+      havingClause = ` GROUP BY sp.id HAVING COUNT(DISTINCT st.id) = ${params.serviceTypeIds.length}`;
+    } else {
+      havingClause = ' GROUP BY sp.id';
+    }
+
     // Append filters to the base query
     if (filterConditions.length > 0) {
       baseQuery += ` AND ${filterConditions.join(' AND ')}`;
     }
-
-    baseQuery += `
+    baseQuery += `${havingClause}
       )
       SELECT DISTINCT
         sp.id,
@@ -929,6 +932,7 @@ export class ServicePackageService {
     // Get total count query
     const countFilterConditions: string[] = [];
     const countParams: any[] = [];
+    let countHavingClause = '';
 
     let countQuery = `
       WITH service_package_prices AS (
@@ -943,7 +947,7 @@ export class ServicePackageService {
         GROUP BY sp.id
       ),
       filtered_packages AS (
-        SELECT DISTINCT sp.id
+        SELECT sp.id
         FROM service_package sp
         LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
         LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
@@ -952,15 +956,9 @@ export class ServicePackageService {
         WHERE 1=1
     `;
 
-    // Add filters to count query dynamically
     if (params.name) {
       countFilterConditions.push(`unaccent(sp.name) ILIKE unaccent($${countFilterConditions.length + 1})`);
       countParams.push(`%${params.name}%`);
-    }
-
-    if (params.serviceTypeIds?.length) {
-      countFilterConditions.push(`st.id = ANY($${countFilterConditions.length + 1})`);
-      countParams.push(params.serviceTypeIds);
     }
 
     if (params.status) {
@@ -978,12 +976,18 @@ export class ServicePackageService {
       countParams.push(params.maxPrice);
     }
 
-    // Append filters to the count query
+    if (params.serviceTypeIds?.length) {
+      countFilterConditions.push(`st.id IN (${params.serviceTypeIds.map((_, idx) => `$${countParams.length + idx + 1}`).join(', ')})`);
+      countParams.push(...params.serviceTypeIds);
+      countHavingClause = ` GROUP BY sp.id HAVING COUNT(DISTINCT st.id) = ${params.serviceTypeIds.length}`;
+    } else {
+      countHavingClause = ' GROUP BY sp.id';
+    }
+
     if (countFilterConditions.length > 0) {
       countQuery += ` AND ${countFilterConditions.join(' AND ')}`;
     }
-
-    countQuery += `
+    countQuery += `${countHavingClause}
       )
       SELECT COUNT(DISTINCT id) as count
       FROM filtered_packages
