@@ -1,9 +1,17 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Booking } from '../../bookings/entities/booking.entity';
 import { InvoiceStatus } from 'src/constants/payment.enum';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Refund } from '../../refunds/entities/refund.entity';
-import { Voucher } from 'src/modules/vouchers/entities/voucher.entity';
 
 @Entity('invoice')
 export class Invoice {
@@ -17,7 +25,7 @@ export class Invoice {
   @Column({ type: 'uuid', name: 'booking_id' })
   bookingId: string;
 
-  @Column({ type: 'integer', default: 0})
+  @Column({ type: 'integer', default: 0 })
   originalPrice: number;
 
   @Column({ type: 'integer', default: 0 })
@@ -58,4 +66,6 @@ export class Invoice {
 
   @OneToMany(() => Refund, (refund) => refund.invoice)
   refunds: Refund[];
+
+  vendorId?: string;
 }
