@@ -117,8 +117,19 @@ if (!fs.existsSync(templateDir)) {
           adapter: new HandlebarsAdapter(),
           options: {
             strict: true,
-          },
-        },
+            helpers: {
+              formatDate: (date, format = 'DD/MM/YYYY') => {
+                if (!date) return '';
+                return moment(date).format(format);
+              },
+              formatCurrency: (value) => {
+                if (value === undefined || value === null) return '';
+                return Number(value).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+              },
+              eq: (a, b) => a === b,
+            }
+          }
+        }
       }),
       inject: [ConfigService],
     }),

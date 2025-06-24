@@ -163,7 +163,8 @@ export class PaymentService {
           throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${payment.invoiceId}`);
         }
 
-        invoice.paidAmount += payment.amount;
+        const paymentAmount = Math.round(Number(payment.amount));
+        invoice.paidAmount += paymentAmount;
         await this.invoiceRepo.save(invoice);
 
         Object.assign(payment, updatePaymentDto);
@@ -304,7 +305,8 @@ export class PaymentService {
       await this.paymentRepository.save(payment);
 
       // Update invoice status and paid amount
-      invoice.paidAmount += payment.amount;
+      const paymentAmount = Math.round(Number(payment.amount));
+      invoice.paidAmount += paymentAmount;
       if (payment.type === PaymentType.DEPOSIT) {
         invoice.status = InvoiceStatus.PARTIALLY_PAID;
       } else if (payment.type === PaymentType.REMAINING) {
@@ -351,7 +353,7 @@ export class PaymentService {
 
     // Find payment based on transactionId (orderCode)
     const payment = await this.paymentRepository.findOne({ 
-      where: { id: paymentId },
+      where: { transactionId: paymentId },
       relations: [
         'invoice', 
         'invoice.booking', 
@@ -374,7 +376,8 @@ export class PaymentService {
     await this.paymentRepository.save(payment);
 
     // Update invoice status and paid amount
-    invoice.paidAmount += payment.amount;
+    const paymentAmount = Math.round(Number(payment.amount));
+    invoice.paidAmount += paymentAmount;
     if (payment.type === PaymentType.DEPOSIT) {
       invoice.status = InvoiceStatus.PARTIALLY_PAID;
     } else if (payment.type === PaymentType.REMAINING) {
@@ -452,7 +455,7 @@ export class PaymentService {
 
     // Find payment based on transactionId (orderCode)
     const payment = await this.paymentRepository.findOne({ 
-      where: { id: paymentId },
+      where: { transactionId: paymentId },
       relations: [
         'invoice', 
         'invoice.booking', 

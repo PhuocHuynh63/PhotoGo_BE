@@ -8,12 +8,16 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@ne
 import { ResponseMessage } from 'src/decorator/custom';
 import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { Public } from 'src/decorator/custom';
+import { MailService } from 'src/3rdService/mail/mail.service';
 
 @Controller('invoices')
 @ApiTags('Invoice')
 @ApiBearerAuth('access-token')
 export class InvoiceController {
-  constructor(private readonly invoiceService: InvoiceService) {}
+  constructor(
+    private readonly invoiceService: InvoiceService,
+    private readonly mailService: MailService
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Tạo hóa đơn mới' })
@@ -99,6 +103,19 @@ export class InvoiceController {
     }
   }
 
+  @Get('test-invoice-mail')
+  @Public()
+  async testInvoiceMail(@Query('email') email: string, @Query('invoiceId') invoiceId: string) {
+    const invoice = await this.invoiceService.findOne(invoiceId);
+    await this.mailService.sendMail(
+      email,
+      'Hóa đơn thanh toán của bạn',
+      'invoice',
+      { invoice }
+    );
+    return { message: 'Đã gửi email invoice!' };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Lấy hóa đơn theo ID' })
   @ApiResponse({ status: 200, description: 'Hóa đơn được tìm thấy', type: CreateInvoiceDto })
@@ -162,4 +179,6 @@ export class InvoiceController {
       throw new HttpException('Lỗi khi xóa hóa đơn', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
+
+
 }
