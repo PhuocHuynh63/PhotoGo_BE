@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpException, HttpStatus, BadRequestException } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
@@ -8,6 +8,7 @@ import { ApiExtraModels } from '@nestjs/swagger/dist/decorators/api-extra-models
 import { BookingDepositType, BookingSourceType, BookingStatus } from 'src/constants/booking.enum';
 import { Public } from 'src/decorator/custom';
 import { PaginationDto } from './dto/pagination.dto';
+import { GetDiscountAmountDto } from './dto/get-booking.dto';
 
 @Controller('bookings')
 @ApiExtraModels(CreateBookingDto)
@@ -95,6 +96,25 @@ export class BookingController {
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy danh sách booking của user',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get('get-discount-amount')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy số tiền giảm giá', type: GetDiscountAmountDto })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy số tiền giảm giá' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy số tiền giảm giá' })
+  async getDiscountAmount(
+    @Query() getDiscountAmountDto: GetDiscountAmountDto
+  ): Promise<{discount: number, depositAmount: number, remainingAmount: number}> {
+    try {
+      return await this.bookingService.getDiscountAmount(getDiscountAmountDto.userId, getDiscountAmountDto.serviceConceptId, getDiscountAmountDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy số tiền giảm giá',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

@@ -16,6 +16,8 @@ import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 import { Location } from '../locations/entities/location.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
+import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -28,6 +30,8 @@ import { Invoice } from '../invoices/entities/invoice.entity';
       LocationSlotTimeWorkingDate,
       LocationWorkingDate,
       Invoice,
+      CampaignVoucher,
+      VoucherUser,
     ]),
     ServicePackageModule,
     VoucherModule,

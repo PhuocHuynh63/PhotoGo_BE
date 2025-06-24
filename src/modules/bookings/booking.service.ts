@@ -17,6 +17,9 @@ import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 import { Location } from '../locations/entities/location.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
+import { GetDiscountAmountDto } from './dto/get-booking.dto';
+import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 
 @Injectable()
 export class BookingService {
@@ -40,6 +43,10 @@ export class BookingService {
     private locationRepository: Repository<Location>,
     @InjectRepository(Invoice)
     private invoiceRepository: Repository<Invoice>,
+    @InjectRepository(CampaignVoucher)
+    private campaignVoucherRepository: Repository<CampaignVoucher>,
+    @InjectRepository(VoucherUser)
+    private voucherUserRepository: Repository<VoucherUser>,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -280,7 +287,7 @@ export class BookingService {
     const locationId = createBookingDto.locationId;
     const booking = this.bookingRepository.create({
       ...createBookingDto,
-      date: convertedDate, // Use the converted date
+      date: convertedDate,
       userId,
       serviceConceptId,
       locationId,
@@ -615,4 +622,63 @@ export class BookingService {
       payosLink: null // You may need to reconstruct or store this in the future
     };
   }
+
+  async getDiscountAmount(
+    userId: string,
+    serviceConceptId: string,
+    getDiscountAmountDto: GetDiscountAmountDto
+  ): Promise<{discount: number, depositAmount: number, remainingAmount: number}> {
+    // 1. Find the service concept
+    const serviceConcept = await this.serviceConceptRepository.findOne({ where: { id: serviceConceptId } });
+    if (!serviceConcept) {
+      throw new NotFoundException(`Service Concept với ID ${serviceConceptId} không tìm thấy`);
+    }
+    const price = Number(serviceConcept.price);
+    const depositAmount = getDiscountAmountDto.depositAmount;
+    const deposite = (depositAmount * price / 100).toFixed(0);
+
+    // Nếu không có voucherId thì trả về giá gốc, discount = 0
+    if (!getDiscountAmountDto.voucherId) {
+      return {
+        discount: 0,
+        depositAmount: Number(deposite),
+        remainingAmount: price
+      };
+    }
+
+    // 2. Find the voucher
+    const voucher = await this.voucherRepository.findOne({ where: { id: getDiscountAmountDto.voucherId } });
+    if (!voucher) {
+      throw new NotFoundException(`Voucher với ID ${getDiscountAmountDto.voucherId} không tìm thấy`);
+    }
+    // 3. Check if voucher is in campaign
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true } });
+    // 4. Check if voucher is assigned to user
+    const voucherUser = await this.voucherUserRepository.findOne({ where: { voucher_id: voucher.id, user_id: userId } });
+    if (!campaignVoucher && !voucherUser) {
+      throw new NotFoundException('Voucher không thuộc campaign hoặc không thuộc user');
+    }
+    // 5. Check minPrice
+    if (price < voucher.minPrice) {
+      throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice}`);
+    }
+    // 6. Calculate discount
+    let discount = 0;
+    if (getDiscountAmountDto.depositType === BookingDepositType.PERCENTAGE) {
+      discount = price * depositAmount * (Number(voucher.discount_value) / 100);
+    } else {
+      discount = price - voucher.discount_value;
+    }
+    // 7. Cap discount at maxPrice
+    if (discount > voucher.maxPrice) {
+      discount = voucher.maxPrice;
+    }
+    let remainingAmount = price - discount - Number(deposite);
+    return {
+      discount: Number(discount.toFixed(0)),
+      depositAmount: Number(deposite),
+      remainingAmount: Number(remainingAmount.toFixed(0))
+    };
+  }
+
 }
