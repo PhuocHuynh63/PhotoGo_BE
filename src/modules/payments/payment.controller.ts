@@ -159,9 +159,9 @@ export class PaymentController {
   @ApiOperation({ summary: 'Xử lý callback khi thanh toán thành công' })
   @ApiResponse({ status: 200, description: 'Xử lý callback thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async handlePaymentSuccess(@Query() callbackData: PaymentCallbackDto) {
+  async handlePaymentSuccess(@Query('paymentId') paymentId: string, @Body() callbackData: PaymentCallbackDto) {
     try {
-      await this.paymentService.handlePaymentSuccess(callbackData);
+      await this.paymentService.handlePaymentSuccess(paymentId, callbackData);
       return {
         statusCode: 200,
         message: 'Xử lý thanh toán thành công',
@@ -180,9 +180,9 @@ export class PaymentController {
   @ApiOperation({ summary: 'Xử lý callback khi thanh toán thất bại' })
   @ApiResponse({ status: 200, description: 'Xử lý callback thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async handlePaymentError(@Query() callbackData: PaymentCallbackDto) {
+  async handlePaymentError(@Query('paymentId') paymentId: string, @Body() callbackData: PaymentCallbackDto) {
     try {
-      await this.paymentService.handlePaymentError(callbackData);
+      await this.paymentService.handlePaymentError(paymentId, callbackData);
       return {
         statusCode: 200,
         message: 'Xử lý thanh toán thất bại',
