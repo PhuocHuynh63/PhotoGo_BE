@@ -43,6 +43,10 @@ export class BookingService {
     private locationRepository: Repository<Location>,
     @InjectRepository(Invoice)
     private invoiceRepository: Repository<Invoice>,
+    @InjectRepository(CampaignVoucher)
+    private campaignVoucherRepository: Repository<CampaignVoucher>,
+    @InjectRepository(VoucherUser)
+    private voucherUserRepository: Repository<VoucherUser>,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
