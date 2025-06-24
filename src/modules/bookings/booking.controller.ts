@@ -145,6 +145,23 @@ export class BookingController {
     }
   }
 
+  @Get('get-discount-amount')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy số tiền giảm giá', type: GetDiscountAmountDto })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy số tiền giảm giá' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy số tiền giảm giá' })
+  async getDiscountAmount(@Query() getDiscountAmountDto: GetDiscountAmountDto): Promise<{discount: number, depositAmount: number, remainingAmount: number}> {
+    try {
+      return await this.bookingService.getDiscountAmount(getDiscountAmountDto.userId, getDiscountAmountDto.serviceConceptId, getDiscountAmountDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy số tiền giảm giá',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   @Get(':id')
   @Public()
   @ApiResponse({ status: 200, description: 'Tìm thấy booking', type: Booking })
