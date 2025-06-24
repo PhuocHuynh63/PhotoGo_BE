@@ -40,7 +40,7 @@ export class BookingService {
     private locationRepository: Repository<Location>,
     @InjectRepository(Invoice)
     private invoiceRepository: Repository<Invoice>,
-  ) {}
+  ) { }
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
   private convertDateFormat(dateStr: string): string {
@@ -167,7 +167,7 @@ export class BookingService {
 
     const availability = locationAvailability.data[0];
     const slotTimes = availability.slotTimes;
-    
+
     // Find matching slot time
     const bookingTimeMinutes = this.timeToMinutes(createBookingDto.time);
     const matchingSlot = slotTimes.find(slot => {
@@ -298,7 +298,7 @@ export class BookingService {
         where: { id: createBookingDto.voucherId },
       });
     }
-      
+
     const history = this.bookingHistoryRepository.create({
       bookingId: savedBooking.id,
       status: BookingStatus.PENDING,
@@ -316,7 +316,7 @@ export class BookingService {
 
     // Create payment link for deposit
     const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
-  
+
     return {
       booking: this.formatBookingDates(savedBooking),
       paymentLink: paymentLinkData.checkoutUrl
@@ -344,20 +344,20 @@ export class BookingService {
         created_at: 'DESC'
       }
     });
-    
+
     const formattedBookings = bookings.map(booking => {
       const formatted = this.formatBookingDates(booking);
       // Lấy payablePrice từ invoice cuối cùng (nếu có)
-      const latestInvoice = booking.invoices && booking.invoices.length > 0 
-        ? booking.invoices[booking.invoices.length - 1] 
+      const latestInvoice = booking.invoices && booking.invoices.length > 0
+        ? booking.invoices[booking.invoices.length - 1]
         : null;
-      
+
       return {
         ...formatted,
         payablePrice: latestInvoice ? latestInvoice.payablePrice : null
       };
     });
-    
+
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -392,20 +392,20 @@ export class BookingService {
         created_at: 'DESC'
       }
     });
-    
+
     const formattedBookings = bookings.map(booking => {
       const formatted = this.formatBookingDates(booking);
       // Lấy payablePrice từ invoice cuối cùng (nếu có)
-      const latestInvoice = booking.invoices && booking.invoices.length > 0 
-        ? booking.invoices[booking.invoices.length - 1] 
+      const latestInvoice = booking.invoices && booking.invoices.length > 0
+        ? booking.invoices[booking.invoices.length - 1]
         : null;
-      
+
       return {
         ...formatted,
         payablePrice: latestInvoice ? latestInvoice.payablePrice : null
       };
     });
-    
+
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -427,13 +427,13 @@ export class BookingService {
     if (!booking) {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
-    
+
     const formatted = this.formatBookingDates(booking);
     // Lấy payablePrice từ invoice cuối cùng (nếu có)
-    const latestInvoice = booking.invoices && booking.invoices.length > 0 
-      ? booking.invoices[booking.invoices.length - 1] 
+    const latestInvoice = booking.invoices && booking.invoices.length > 0
+      ? booking.invoices[booking.invoices.length - 1]
       : null;
-    
+
     return {
       ...formatted,
       payablePrice: latestInvoice ? latestInvoice.payablePrice : null
@@ -614,5 +614,16 @@ export class BookingService {
       paymentOSId: depositPayment.paymentOSId,
       payosLink: null // You may need to reconstruct or store this in the future
     };
+  }
+
+  async getBookingByPaymentOSId(paymentOSId: string): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({
+      where: { invoices: { payments: { paymentOSId } } },
+      relations: ['invoices', 'invoices.payments'],
+    });
+    if (!booking) {
+      throw new NotFoundException(`Booking với paymentOSId ${paymentOSId} không tìm thấy`);
+    }
+    return this.formatBookingDates(booking);
   }
 }
