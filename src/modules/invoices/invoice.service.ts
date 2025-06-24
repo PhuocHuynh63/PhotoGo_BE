@@ -193,7 +193,6 @@ export class InvoiceService {
   }
 
   async findAllByUserId(userId: string, paginationDto: PaginationInvoiceDto): Promise<{
-
     data: Invoice[];
     pagination: {
       current: number;
@@ -217,6 +216,25 @@ export class InvoiceService {
       }
     });
     const totalPages = Math.ceil(total / pageSizeNum);
+
+    const serviceConceptCache = new Map<string, any>();
+    const servicePackageCache = new Map<string, any>();
+
+    for (const invoice of invoices) {
+      let serviceConcept = serviceConceptCache.get(invoice.booking.serviceConceptId);
+      if (!serviceConcept) {
+        serviceConcept = await this.servicePackageService.findServiceConcept(invoice.booking.serviceConceptId);
+        serviceConceptCache.set(invoice.booking.serviceConceptId, serviceConcept);
+      }
+
+      let servicePackage = servicePackageCache.get(serviceConcept.servicePackageId);
+      if (!servicePackage) {
+        servicePackage = await this.servicePackageService.findOne(serviceConcept.servicePackageId);
+        servicePackageCache.set(serviceConcept.servicePackageId, servicePackage);
+      }
+
+      invoice.vendorId = servicePackage.vendor.id;
+    }
 
     return {
       data: invoices,
