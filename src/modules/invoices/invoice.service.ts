@@ -254,7 +254,7 @@ export class InvoiceService {
 
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['booking', 'payments', 'refunds'],
+      relations: ['booking', 'payments', 'refunds', 'booking.serviceConcept'],
     });
 
     if (!invoice) {

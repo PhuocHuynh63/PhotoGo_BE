@@ -59,6 +59,15 @@ Handlebars.registerHelper('formatPrice', (price: number) => {
   return price.toLocaleString('vi-VN');
 });
 
+Handlebars.registerHelper('formatCurrency', (value: number) => {
+  if (value === undefined || value === null) return '';
+  return Number(value).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+});
+
+Handlebars.registerHelper('gt', (a, b) => a > b);
+Handlebars.registerHelper('eq', (a, b) => a === b);
+
+
 Handlebars.registerHelper('split', function (value: string) {
   if (typeof value === 'string') {
     return value.split('');
@@ -119,6 +128,9 @@ if (!fs.existsSync(templateDir)) {
             strict: true,
             helpers: {
               formatDate: (date, format = 'DD/MM/YYYY') => {
+                if (typeof format !== 'string') {
+                  format = 'DD/MM/YYYY';
+                }
                 if (!date) return '';
                 return moment(date).format(format);
               },
@@ -126,6 +138,11 @@ if (!fs.existsSync(templateDir)) {
                 if (value === undefined || value === null) return '';
                 return Number(value).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
               },
+              formatPrice: (price) => {
+                if (price === undefined || price === null) return '';
+                return Number(price).toLocaleString('vi-VN');
+              },
+              gt: (a, b) => a > b,
               eq: (a, b) => a === b,
             }
           }
