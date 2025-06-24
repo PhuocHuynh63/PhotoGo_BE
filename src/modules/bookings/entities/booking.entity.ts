@@ -66,6 +66,9 @@ export class Booking {
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'email' })
   email: string;
 
+  @Column({ type: 'varchar', length: 6, nullable: true, name: 'code' })
+  code: string;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 

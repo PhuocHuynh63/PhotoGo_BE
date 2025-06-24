@@ -124,7 +124,7 @@ export class BookingService {
     createBookingDto: CreateBookingDto,
     userId: string,
     serviceConceptId: string,
-  ): Promise<{ booking: Booking; paymentLink: string }> {
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
     // Validate service concept
     const serviceConcept = await this.serviceConceptRepository.findOne({
       where: { id: serviceConceptId },
@@ -285,6 +285,8 @@ export class BookingService {
       throw new BadRequestException('locationId là bắt buộc');
     }
     const locationId = createBookingDto.locationId;
+    // Generate a random code for booking 6 characters uppercase
+    const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
@@ -294,6 +296,7 @@ export class BookingService {
       status: BookingStatus.PENDING,
       depositAmount: createBookingDto.depositAmount,
       depositType: BookingDepositType.PERCENTAGE,
+      code: randomCode
     });
 
     const savedBooking = await this.bookingRepository.save(booking);
@@ -324,9 +327,11 @@ export class BookingService {
     // Create payment link for deposit
     const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
 
+
     return {
       booking: this.formatBookingDates(savedBooking),
-      paymentLink: paymentLinkData.checkoutUrl
+      paymentLink: paymentLinkData.checkoutUrl,
+      code: booking.code
     };
   }
   //#endregion
@@ -630,6 +635,14 @@ export class BookingService {
     });
     if (!booking) {
       throw new NotFoundException(`Booking với paymentOSId ${paymentOSId} không tìm thấy`);
+    }
+    return this.formatBookingDates(booking);
+  }
+
+  async getBookingByCode(code: string): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({ where: { code } });
+    if (!booking) {
+      throw new NotFoundException(`Booking với code ${code} không tìm thấy`);
     }
     return this.formatBookingDates(booking);
   }

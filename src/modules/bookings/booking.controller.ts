@@ -53,7 +53,7 @@ export class BookingController {
     @Body() createBookingDto: CreateBookingDto,
     @Query('userId') userId: string,
     @Query('serviceConceptId') serviceConceptId: string,
-  ): Promise<{ booking: Booking; paymentLink: string }> {
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
     try {
       if (!userId) {
         throw new HttpException('User ID là bắt buộc', HttpStatus.BAD_REQUEST);
@@ -157,6 +157,23 @@ export class BookingController {
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy số tiền giảm giá',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get('get-booking-by-code')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy booking theo code', type: Booking })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy booking theo code' })
+  async getBookingByCode(@Query('code') code: string): Promise<Booking> {
+    try {
+      return await this.bookingService.getBookingByCode(code);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy booking theo code',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
