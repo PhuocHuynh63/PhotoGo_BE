@@ -11,12 +11,14 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { BookingHistory } from '../bookings/entities/booking-history.entity';
 import { Point } from '../points/entities/point.entity';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
+import { MailModule } from 'src/3rdService/mail/mail.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction]),
     VoucherModule,
     PayosModule,
-    AuthModule
+    AuthModule,
+    MailModule,
   ],
   controllers: [PaymentController],
   providers: [PaymentService],

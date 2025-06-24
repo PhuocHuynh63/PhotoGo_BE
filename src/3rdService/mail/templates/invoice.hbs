@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hóa đơn thanh toán PhotoGo</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f7f7f7; color: #333333;">
+  <table width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="padding: 30px 20px; background-color: #FF6B00; color: #ffffff;">
+        <h1 style="margin: 0; font-size: 28px; font-weight: bold;">HÓA ĐƠN THANH TOÁN</h1>
+        <p style="margin: 10px 0 0 0; font-size: 16px;">PhotoGo - Kết nối khách hàng với nhiếp ảnh gia</p>
+      </td>
+    </tr>
+    
+    <!-- Invoice Info -->
+    <tr>
+      <td style="padding: 30px 20px;">
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 30px;">
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+              <strong style="color: #FF6B00;">Mã hóa đơn:</strong> {{invoice.id}}
+            </td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee; text-align: right;">
+              <strong style="color: #FF6B00;">Ngày phát hành:</strong> {{formatDate invoice.issuedAt}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee;">
+              <strong style="color: #FF6B00;">Mã đặt lịch:</strong> {{invoice.booking.code}}
+            </td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #eeeeee; text-align: right;">
+              <strong style="color: #FF6B00;">Trạng thái:</strong> 
+              <span style="color: {{#if (eq invoice.status 'PAID')}}#28a745{{else if (eq invoice.status 'PENDING')}}#ffc107{{else}}#dc3545{{/if}};">
+                {{invoice.status}}
+              </span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Customer Info -->
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 30px; background-color: #f8f9fa; border-radius: 8px;">
+          <tr>
+            <td style="padding: 20px;">
+              <h3 style="margin: 0 0 15px 0; color: #FF6B00; font-size: 18px;">Thông tin khách hàng</h3>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Họ tên:</strong> {{invoice.booking.fullName}}</p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Số điện thoại:</strong> {{invoice.booking.phone}}</p>
+              {{#if invoice.booking.email}}
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Email:</strong> {{invoice.booking.email}}</p>
+              {{/if}}
+            </td>
+          </tr>
+        </table>
+
+        <!-- Booking Code - Số báo danh -->
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 30px; background-color: #FFF4EB; border-radius: 8px; border: 2px solid #FF6B00;">
+          <tr>
+            <td style="padding: 25px; text-align: center;">
+              <h3 style="margin: 0 0 15px 0; color: #FF6B00; font-size: 18px;">MÃ ĐẶT LỊCH CỦA BẠN</h3>
+              <div style="font-size: 36px; font-weight: bold; color: #FF6B00; letter-spacing: 6px; font-family: monospace; background-color: #ffffff; padding: 15px; border-radius: 8px; display: inline-block;">
+                {{invoice.booking.code}}
+              </div>
+              <p style="margin: 15px 0 0 0; font-size: 14px; color: #666666;">Vui lòng lưu lại mã đặt lịch này để tra cứu hoặc xác nhận khi cần thiết</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Service Info -->
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 30px; background-color: #f8f9fa; border-radius: 8px;">
+          <tr>
+            <td style="padding: 20px;">
+              <h3 style="margin: 0 0 15px 0; color: #FF6B00; font-size: 18px;">Thông tin dịch vụ</h3>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Dịch vụ:</strong> {{invoice.booking.serviceConcept.name}}</p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Ngày đặt:</strong> {{formatDate invoice.booking.date}}</p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Giờ đặt:</strong> {{invoice.booking.time}}</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Price Breakdown -->
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 30px;">
+          <tr>
+            <td style="padding: 15px 0; border-bottom: 1px solid #eeeeee;">
+              <span style="font-size: 16px;">Giá gốc:</span>
+              <span style="float: right; font-size: 16px; font-weight: bold;">{{formatCurrency invoice.originalPrice}}</span>
+            </td>
+          </tr>
+          {{#if (gt invoice.discountAmount 0)}}
+          <tr>
+            <td style="padding: 15px 0; border-bottom: 1px solid #eeeeee;">
+              <span style="font-size: 16px; color: #28a745;">Giảm giá:</span>
+              <span style="float: right; font-size: 16px; color: #28a745; font-weight: bold;">-{{formatCurrency invoice.discountAmount}}</span>
+            </td>
+          </tr>
+          {{/if}}
+          {{#if (gt invoice.taxAmount 0)}}
+          <tr>
+            <td style="padding: 15px 0; border-bottom: 1px solid #eeeeee;">
+              <span style="font-size: 16px;">Thuế:</span>
+              <span style="float: right; font-size: 16px; font-weight: bold;">{{formatCurrency invoice.taxAmount}}</span>
+            </td>
+          </tr>
+          {{/if}}
+          {{#if (gt invoice.feeAmount 0)}}
+          <tr>
+            <td style="padding: 15px 0; border-bottom: 1px solid #eeeeee;">
+              <span style="font-size: 16px;">Phí dịch vụ:</span>
+              <span style="float: right; font-size: 16px; font-weight: bold;">{{formatCurrency invoice.feeAmount}}</span>
+            </td>
+          </tr>
+          {{/if}}
+          <tr>
+            <td style="padding: 20px 0; border-top: 2px solid #FF6B00;">
+              <span style="font-size: 18px; font-weight: bold; color: #FF6B00;">Tổng cộng:</span>
+              <span style="float: right; font-size: 18px; font-weight: bold; color: #FF6B00;">{{formatCurrency invoice.payablePrice}}</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Payment Details -->
+        <table width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 30px; background-color: #f8f9fa; border-radius: 8px;">
+          <tr>
+            <td style="padding: 20px;">
+              <h3 style="margin: 0 0 15px 0; color: #FF6B00; font-size: 18px;">Chi tiết thanh toán</h3>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Đã thanh toán:</strong> {{formatCurrency invoice.paidAmount}}</p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Đặt cọc:</strong> {{formatCurrency invoice.depositAmount}}</p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Còn lại:</strong> {{formatCurrency invoice.remainingAmount}}</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CTA Button -->
+        <table cellspacing="0" cellpadding="0" border="0" align="center" style="margin-bottom: 30px;">
+          <tr>
+            <td align="center" style="background-color: #FF6B00; border-radius: 4px;">
+              <a href="https://photogo.com/booking-lookup" target="_blank" style="display: inline-block; padding: 14px 30px; font-size: 16px; color: #ffffff; text-decoration: none; font-weight: bold;">Tra cứu đặt lịch</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="padding: 30px 20px; background-color: #f7f7f7; border-top: 1px solid #eeeeee;">
+        <p style="margin: 0 0 15px 0; font-size: 14px; color: #888888;">PhotoGo - Kết nối khách hàng với nhiếp ảnh gia, studio và chuyên gia trang điểm.</p>
+        <p style="margin: 0; font-size: 12px; color: #999999;">&copy; 2025 PhotoGo. Tất cả các quyền được bảo lưu.<br>Nếu bạn có bất kỳ câu hỏi nào, hãy liên hệ với chúng tôi tại <a href="mailto:support@photogo.com" style="color: #FF6B00; text-decoration: none;">support@photogo.com</a></p>
+        <!-- Social Media Icons -->
+        <table cellspacing="0" cellpadding="0" border="0" align="center" style="margin-top: 20px;">
+          <tr>
+            <td style="padding: 0 5px;">
+              <a href="https://facebook.com/photogo" style="text-decoration: none;">
+                <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png" width="24" height="24" alt="Facebook" style="border: none;">
+              </a>
+            </td>
+            <td style="padding: 0 5px;">
+              <a href="https://instagram.com/photogo" style="text-decoration: none;">
+                <img src="https://cdn-icons-png.flaticon.com/512/2111/2111463.png" width="24" height="24" alt="Instagram" style="border: none;">
+              </a>
+            </td>
+            <td style="padding: 0 5px;">
+              <a href="https://twitter.com/photogo" style="text-decoration: none;">
+                <img src="https://cdn-icons-png.flaticon.com/512/733/733579.png" width="24" height="24" alt="Twitter" style="border: none;">
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html> 

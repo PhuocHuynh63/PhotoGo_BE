@@ -19,6 +19,7 @@ import { PaginationDto } from './dto/pagination.dto';
 import { Point } from '../points/entities/point.entity';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
 import { PointTransactionType } from '../../constants/point.enum';
+import { MailService } from 'src/3rdService/mail/mail.service';
 
 @Injectable()
 export class PaymentService {
@@ -38,6 +39,7 @@ export class PaymentService {
     private readonly pointRepository: Repository<Point>,
     @InjectRepository(PointTransaction)
     private readonly pointTransactionRepository: Repository<PointTransaction>,
+    private readonly mailService: MailService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
@@ -420,6 +422,16 @@ export class PaymentService {
         });
         await this.pointTransactionRepository.save(pointTransaction);
       });
+    }
+
+    // Send invoice to user's email if payment handled successfully
+    if (invoice.booking?.email) {
+      await this.mailService.sendMail(
+        invoice.booking?.email,
+        'Hóa đơn thanh toán của bạn',
+        'invoice', // template name
+        { invoice: invoice }
+      );
     }
 
     // Handle voucher if exists

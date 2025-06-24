@@ -20,6 +20,7 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { GetDiscountAmountDto } from './dto/get-booking.dto';
 import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { MailService } from '../../3rdService/mail/mail.service';
 
 @Injectable()
 export class BookingService {
