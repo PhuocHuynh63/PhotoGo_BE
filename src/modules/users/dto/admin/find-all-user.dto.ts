@@ -1,6 +1,6 @@
 import { ApiProperty, ApiQuery } from "@nestjs/swagger";
 import { IsEnum, IsOptional, IsString } from "class-validator";
-import { UserRank, UserStatus } from "src/constants/user.enum";
+import { UserRank, UserRolesId, UserStatus } from "src/constants/user.enum";
 import { SortableFields, SortAuth, SortDirection } from "src/constants/sort-file.dto";
 
 @ApiQuery({ required: false })
@@ -34,6 +34,15 @@ export class FindAllUserDto {
     required: false,
   })
   rank?: string = '';
+
+  @IsOptional()
+  @IsEnum(UserRolesId)
+  @ApiProperty({
+    enum: UserRolesId,
+    description: 'Vai trò của người dùng [R001: CUSTOMER, R002: PHOTOGRAPHER, R003: MAKE_UP_ARTIST, R004: STUDIO, R005: ADMIN, R006: STAFF, R007: GUEST, R008: VENDOR_OWNER]',
+    required: false,
+  })
+  role?: UserRolesId;
 
   @IsOptional()
   @IsString()

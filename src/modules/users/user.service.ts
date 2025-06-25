@@ -320,6 +320,10 @@ export class UserService {
       queryBuilder.andWhere('user.rank = :rank', { rank: query.rank });
     }
 
+    if (query.role) {
+      queryBuilder.andWhere('role.id = :roleId', { roleId: query.role });
+    }
+
     if (query.auth) {
       queryBuilder.andWhere('user.auth = :auth', { auth: query.auth });
     }
