@@ -328,7 +328,7 @@ export class UserService {
     //#endregion
 
     //#region Sort
-    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank'];
+    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank', 'lastLoginAt', 'role.id'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
