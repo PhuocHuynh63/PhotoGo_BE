@@ -9,7 +9,7 @@ import { CreateAuthDto } from '../auth/dto/create-auth.dto';
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
-import { FindUserDto } from './dto/admin/find-user.dto';
+import { FindAllUserDto } from './dto/admin/find-all-user.dto';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
 import { UserStatus } from 'src/constants/user.enum';
 import { Cron } from '@nestjs/schedule';
@@ -271,7 +271,7 @@ export class UserService {
   //#endregion
 
   //#region findAll
-  async findAll(query: FindUserDto): Promise<{
+  async findAll(query: FindAllUserDto): Promise<{
     data: User[];
     pagination: {
       current: number;
@@ -299,9 +299,7 @@ export class UserService {
         'user.lastLoginAt',
         'user.createdAt',
         'user.updatedAt',
-        'user.avatarUrl',
-        'role.id',
-        'role.name'
+        'user.avatarUrl'
       ]);
 
     // Thêm join để lấy thông tin role
@@ -328,11 +326,16 @@ export class UserService {
     //#endregion
 
     //#region Sort
-    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank', 'lastLoginAt', 'role.id'];
+    const allowedSortFields = ['createdAt', 'updatedAt', 'role', 'fullName', 'email', 'phoneNumber', 'status', 'rank', 'lastLoginAt'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`user.${sortField}`, sortDirection);
+    // Handle role sorting separately since it requires joining
+    if (sortField === 'role') {
+      queryBuilder.addOrderBy('role.name', sortDirection);
+    } else {
+      queryBuilder.addOrderBy(`user.${sortField}`, sortDirection);
+    }
     //#endregion
 
     //#region Pagination
@@ -416,7 +419,7 @@ export class UserService {
   //#endregion Get all ranks with count
 
   //#region exportUsers
-  async exportUsers(query: FindUserDto): Promise<User[]> {
+  async exportUsers(query: FindAllUserDto): Promise<User[]> {
     const queryBuilder = this.userRepository.createQueryBuilder('user');
 
     // Thêm join để lấy thông tin role
@@ -443,11 +446,16 @@ export class UserService {
     }
 
     // Sắp xếp
-    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank'];
+    const allowedSortFields = ['createdAt', 'updatedAt', 'fullName', 'email', 'phoneNumber', 'status', 'rank', 'role', 'lastLoginAt'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`user.${sortField}`, sortDirection);
+    // Handle role sorting separately since it requires joining
+    if (sortField === 'role') {
+      queryBuilder.addOrderBy('role.name', sortDirection);
+    } else {
+      queryBuilder.addOrderBy(`user.${sortField}`, sortDirection);
+    }
 
     // Lấy tất cả dữ liệu (không phân trang)
     const users = await queryBuilder.getMany();

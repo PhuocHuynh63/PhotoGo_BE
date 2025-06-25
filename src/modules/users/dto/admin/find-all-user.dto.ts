@@ -65,7 +65,7 @@ export class FindAllUserDto {
   @ApiProperty({
     enum: SortableFields,
     example: SortableFields.CREATED_AT,
-    description: 'Trường để sắp xếp (ví dụ: createdAt, updatedAt, fullName, email, phoneNumber, status, rank)',
+    description: 'Trường để sắp xếp (ví dụ: createdAt, updatedAt, fullName, email, phoneNumber, status, rank, lastLoginAt, role)',
     required: false,
   })
   sortBy?: SortableFields = SortableFields.CREATED_AT;
