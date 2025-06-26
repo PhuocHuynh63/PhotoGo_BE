@@ -58,10 +58,10 @@ export class FindUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^(createdAt|updatedAt|fullName|email|phoneNumber|status|rank)$/)
+  @Matches(/^(createdAt|updatedAt|fullName|email|phoneNumber|status|rank|lastLoginAt)$/)
   @ApiProperty({
     example: 'createdAt',
-    description: 'Field to sort by (e.g., createdAt, updatedAt, fullName, email, phoneNumber, status, rank)',
+    description: 'Field to sort by (e.g., createdAt, updatedAt, fullName, email, phoneNumber, status, rank, lastLoginAt)',
     required: false,
   })
   sortBy?: string = 'createdAt';
