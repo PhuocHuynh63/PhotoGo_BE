@@ -3,6 +3,7 @@ export enum BookingStatus {
   CONFIRMED = 'đã xác nhận',
   CANCELLED = 'đã hủy',
   COMPLETED = 'đã hoàn thành',
+  PAID = 'đã thanh toán',
 }
 
 export enum BookingSourceType {
