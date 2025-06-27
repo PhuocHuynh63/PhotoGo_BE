@@ -11,6 +11,7 @@ import { SearchLocationDto } from './dto/search-location.dto';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { DataSource } from 'typeorm';
 import { PaginationDto } from './dto/pagination.dto';
+import { GetCitiesDto } from './dto/get-cities.dto';
 
 @Injectable()
 export class LocationService {
@@ -219,7 +220,7 @@ export class LocationService {
   async searchLocations(searchDto: SearchLocationDto) {
     try {
       const { keyword, address, district, ward, city, province } = searchDto;
-      
+
       // Build where conditions
       const whereConditions: any[] = [];
 
@@ -396,4 +397,71 @@ export class LocationService {
     };
   }
   //#endregion getUserLocation
+
+  //#region getAllCities
+  async getAllCities(getCitiesDto: GetCitiesDto): Promise<{
+    data: string[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      const { current, pageSize, sortDirection, filterField } = getCitiesDto;
+
+      const currentPage = current ? Number(current) : 1;
+      const limit = pageSize ? Number(pageSize) : 10;
+      const skip = (currentPage - 1) * limit;
+
+      // Validate pagination parameters
+      if (currentPage < 1) {
+        throw new BadRequestException('Trang hiện tại phải lớn hơn 0');
+      }
+      if (limit < 1 || limit > 100) {
+        throw new BadRequestException('Số lượng item trên trang phải từ 1 đến 100');
+      }
+
+      // Validate filter field
+      const allowedFilterFields = ['city', 'ward', 'district', 'province'];
+      const fieldToFilter = allowedFilterFields.includes(filterField) ? filterField : 'city';
+
+      // Get total count
+      const totalResult = await this.locationRepository
+        .createQueryBuilder('location')
+        .select(`COUNT(DISTINCT location.${fieldToFilter})`, 'total')
+        .where(`location.${fieldToFilter} IS NOT NULL`)
+        .andWhere(`location.${fieldToFilter} != :emptyString`, { emptyString: '' })
+        .getRawOne();
+
+      const totalItem = Number(totalResult.total);
+
+      // Get filtered data with pagination
+      const results = await this.locationRepository
+        .createQueryBuilder('location')
+        .select(`DISTINCT location.${fieldToFilter}`, fieldToFilter)
+        .where(`location.${fieldToFilter} IS NOT NULL`)
+        .andWhere(`location.${fieldToFilter} != :emptyString`, { emptyString: '' })
+        .orderBy(`location.${fieldToFilter}`, sortDirection === 'desc' ? 'DESC' : 'ASC')
+        .limit(limit)
+        .offset(skip)
+        .getRawMany();
+
+      const totalPage = Math.ceil(totalItem / limit);
+
+      return {
+        data: results.map((result) => result[fieldToFilter]),
+        pagination: {
+          current: currentPage,
+          pageSize: limit,
+          totalPage,
+          totalItem,
+        },
+      };
+    } catch (error) {
+      throw new BadRequestException('Không thể lấy danh sách: ' + error.message);
+    }
+  }
+  //#endregion getAllCities
 }

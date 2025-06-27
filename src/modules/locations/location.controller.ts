@@ -8,14 +8,15 @@ import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { SearchLocationDto } from './dto/search-location.dto';
 import { PaginationDto } from './dto/pagination.dto';
+import { GetCitiesDto } from './dto/get-cities.dto';
 @ApiTags('Locations')
 @Controller('locations')
 @ApiBearerAuth('access-token')
 export class LocationController {
-  constructor(private readonly locationService: LocationService) {}
+  constructor(private readonly locationService: LocationService) { }
 
   @Post(':vendor_id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Tạo địa điểm mới (Protected)',
     description: 'Tạo một địa điểm mới với thông tin vendor và địa chỉ'
   })
@@ -41,7 +42,7 @@ export class LocationController {
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy vendor' })
-  @ResponseMessage('Tạo địa điểm thành công') 
+  @ResponseMessage('Tạo địa điểm thành công')
   async create(@Param('vendor_id') vendor_id: string, @Body() createLocationDto: CreateLocationDto): Promise<Location> {
     try {
       return await this.locationService.create(vendor_id, createLocationDto);
@@ -85,8 +86,8 @@ export class LocationController {
   @Get('search')
   @Public()
   @ApiOperation({ summary: 'Tìm kiếm địa điểm' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Danh sách địa điểm tìm được',
     schema: {
       type: 'object',
@@ -102,6 +103,55 @@ export class LocationController {
   @ResponseMessage('Tìm kiếm địa điểm thành công')
   async searchLocations(@Query() searchDto: SearchLocationDto) {
     return await this.locationService.searchLocations(searchDto);
+  }
+
+  @Get('cities')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách tất cả thành phố unique' })
+  @ApiQuery({ name: 'current', required: false, description: 'Trang hiện tại (mặc định: 1)' })
+  @ApiQuery({ name: 'pageSize', required: false, description: 'Số lượng item trên trang (mặc định: 10, tối đa: 100)' })
+  @ApiQuery({ name: 'sortDirection', required: false, description: 'Thứ tự sắp xếp (asc/desc, mặc định: asc)' })
+  @ApiQuery({ name: 'filterField', required: false, description: 'Field để filter (city, ward, district, province, mặc định: city)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách thành phố unique với phân trang',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { type: 'string' }
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            current: { type: 'number' },
+            pageSize: { type: 'number' },
+            totalPage: { type: 'number' },
+            totalItem: { type: 'number' }
+          }
+        }
+      }
+    }
+  })
+  @ResponseMessage('Lấy danh sách thành phố thành công')
+  async getAllCities(@Query() getCitiesDto: GetCitiesDto): Promise<{
+    data: string[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      return await this.locationService.getAllCities(getCitiesDto);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy danh sách', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Get(':vendor_id/:latitude/:longitude')
@@ -181,5 +231,5 @@ export class LocationController {
     }
   }
 
-  
+
 }
