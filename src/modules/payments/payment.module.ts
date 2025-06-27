@@ -13,6 +13,7 @@ import { Point } from '../points/entities/point.entity';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
 import { MailModule } from 'src/3rdService/mail/mail.module';
 import { BookingModule } from '../bookings/booking.module';
+import { RefundModule } from '../refunds/refund.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { BookingModule } from '../bookings/booking.module';
     AuthModule,
     MailModule,
     forwardRef(() => BookingModule),
+    forwardRef(() => RefundModule),
   ],
   controllers: [PaymentController],
   providers: [PaymentService],

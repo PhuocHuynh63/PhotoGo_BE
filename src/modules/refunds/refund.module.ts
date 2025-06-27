@@ -7,6 +7,7 @@ import { RefundController } from './refund.controller';
 import { PaymentModule } from '../payments/payment.module';
 import { PayosModule } from '../../3rdService/payos/payos.module';
 import { MailModule } from '../../3rdService/mail/mail.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MailModule } from '../../3rdService/mail/mail.module';
     forwardRef(() => PaymentModule),
     PayosModule,
     MailModule,
+    AuthModule,
   ],
   controllers: [RefundController],
   providers: [RefundService],
