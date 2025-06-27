@@ -1,9 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNumberString, IsOptional, IsIn } from 'class-validator';
-import { PaginationDto } from './pagination.dto';
 
 export class GetCitiesDto {
-    paginationDto: PaginationDto;
+    @IsOptional()
+    @IsNumberString()
+    @ApiProperty({
+        description: 'Số thứ tự của trang hiện tại',
+        example: '1',
+        required: false,
+    })
+    current?: string;
+
+    @IsOptional()
+    @IsNumberString()
+    @ApiProperty({
+        description: 'Số lượng bản ghi trên mỗi trang',
+        example: '10',
+        required: false,
+    })
+    pageSize?: string;
+
+    @IsOptional()
+    @ApiProperty({
+        description: 'Hướng sắp xếp',
+        enum: ['asc', 'desc'],
+        example: 'asc',
+        required: false,
+    })
+    sortDirection?: 'asc' | 'desc';
 
     @IsOptional()
     @IsIn(['city', 'ward', 'district', 'province'])
@@ -14,4 +38,4 @@ export class GetCitiesDto {
         required: false,
     })
     filterField?: string;
-} 
+}
