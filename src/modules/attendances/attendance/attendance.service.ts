@@ -1,8 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { UserService } from '../../users/user.service';
+import { PointHelperService } from '../../points/point-helper.service';
 import { Attendance } from './entities/attendance.entity';
+import { PointTransactionType } from 'src/constants/point.enum';
 
 @Injectable()
 export class AttendanceService {
@@ -10,7 +16,8 @@ export class AttendanceService {
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
     private userService: UserService,
-  ) { }
+    private pointHelperService: PointHelperService,
+  ) {}
 
   //#region Điểm danh hàng ngày
   async checkIn(userId: string): Promise<Attendance> {
@@ -18,7 +25,7 @@ export class AttendanceService {
     today.setHours(0, 0, 0, 0);
 
     let attendance = await this.attendanceRepository.findOne({
-      where: { userId, date: today }
+      where: { userId, date: today },
     });
 
     if (attendance) {
@@ -31,7 +38,7 @@ export class AttendanceService {
     yesterday.setDate(yesterday.getDate() - 1);
 
     const previousAttendance = await this.attendanceRepository.findOne({
-      where: { userId, date: yesterday }
+      where: { userId, date: yesterday },
     });
 
     const streak = previousAttendance ? previousAttendance.streak + 1 : 1;
@@ -40,12 +47,34 @@ export class AttendanceService {
     attendance = this.attendanceRepository.create({
       userId,
       date: today,
-      isChecked: true, // tạm thời để đó 
+      isChecked: true, // tạm thời để đó
       streak,
       pointsEarned,
     });
 
-    return this.attendanceRepository.save(attendance);
+    const savedAttendance = await this.attendanceRepository.save(attendance);
+
+    // Thêm điểm vào tài khoản người dùng
+    await this.addPointsToUser(userId, pointsEarned);
+
+    return savedAttendance;
+  }
+  //#endregion
+
+  //#region Thêm điểm vào tài khoản người dùng
+  private async addPointsToUser(userId: string, points: number): Promise<void> {
+    try {
+      console.log(`Adding ${points} points to user ${userId}`);
+      
+      // Sử dụng method chung từ PointHelperService
+      const result = await this.pointHelperService.handleDailyCheckIn(userId, points);
+      
+      console.log('Successfully added points:', result.transaction.id);
+      
+    } catch (error) {
+      console.error('Error adding points to user:', error);
+      // Không throw error để không ảnh hưởng đến việc điểm danh
+    }
   }
   //#endregion
 
@@ -53,7 +82,7 @@ export class AttendanceService {
   async getRecentAttendance(userId: string): Promise<Attendance[]> {
     const attendances = await this.attendanceRepository.find({
       where: { userId },
-      order: { date: 'DESC' }
+      order: { date: 'DESC' },
     });
 
     if (attendances.length === 0) {
@@ -70,7 +99,7 @@ export class AttendanceService {
     today.setHours(0, 0, 0, 0);
 
     const attendance = await this.attendanceRepository.findOne({
-      where: { userId, date: today }
+      where: { userId, date: today },
     });
 
     return !!attendance;
@@ -96,7 +125,7 @@ export class AttendanceService {
   async getUserAttendance(userId: string): Promise<Attendance[]> {
     return this.attendanceRepository.find({
       where: { userId },
-      order: { date: 'DESC' }
+      order: { date: 'DESC' },
     });
   }
   //#endregion
@@ -105,12 +134,10 @@ export class AttendanceService {
   async getStreak(userId: string): Promise<number> {
     const latestAttendance = await this.attendanceRepository.findOne({
       where: { userId },
-      order: { date: 'DESC' }
+      order: { date: 'DESC' },
     });
 
     return latestAttendance?.streak || 0;
   }
   //#endregion
-
-
 }
