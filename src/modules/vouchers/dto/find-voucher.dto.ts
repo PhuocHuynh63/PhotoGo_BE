@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumberString } from 'class-validator';
+import { VoucherStatusEnum, VoucherUserStatusEnum } from '../../../constants/voucher.enum';
 
 export class FindVoucherDto {
   @IsNumberString()
@@ -32,8 +33,20 @@ export class FindVoucherDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    example: 'created_at',
+    example: 'active',
+    description: 'Trạng thái voucher (active, expired, inactive)',
+    enum: VoucherStatusEnum,
+    required: false,
+  })
+  status?: VoucherStatusEnum;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: 'maxPrice',
     description: 'Trường để sắp xếp',
+    enum: ['createdAt', 'updatedAt', 'maxPrice'],
+    default: 'maxPrice',
     required: false,
   })
   sortBy?: string;
@@ -41,8 +54,10 @@ export class FindVoucherDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    example: 'asc',
+    example: 'desc',
     description: 'Hướng sắp xếp (asc hoặc desc)',
+    enum: ['asc', 'desc'],
+    default: 'desc',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
@@ -51,11 +66,30 @@ export class FindVoucherDto {
 export class FindVoucherUserDto {
   @IsNumberString()
   @IsOptional()
+  @ApiProperty({
+    example: '1',
+    description: 'Số trang cho phép chia',
+    required: false,
+  })
   current?: string;
 
   @IsNumberString()
   @IsOptional()
+  @ApiProperty({
+    example: '10',
+    description: 'Số mục trên mỗi trang cho phép chia',
+    required: false,
+  })
   pageSize?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: 'GiamGia20',
+    description: 'Từ tìm kiếm để lọc mã giảm giá',
+    required: false,
+  })
+  term?: string;
 
   @IsString()
   @IsOptional()
@@ -63,13 +97,33 @@ export class FindVoucherUserDto {
 
   @IsString()
   @IsOptional()
-  status?: string; // Lọc theo trạng thái voucher (active, expired, used)
+  @ApiProperty({
+    example: 'có sẵn',
+    description: 'Trạng thái voucher user (có sẵn, đã sử dụng, hết hạn)',
+    enum: VoucherUserStatusEnum,
+    required: false,
+  })
+  status?: VoucherUserStatusEnum; // Lọc theo trạng thái voucher user
 
   @IsString()
   @IsOptional()
+  @ApiProperty({
+    example: 'maxPrice',
+    description: 'Trường để sắp xếp',
+    enum: ['assigned_at', 'used_at', 'createdAt', 'updatedAt', 'maxPrice'],
+    default: 'maxPrice',
+    required: false,
+  })
   sortBy?: string;
 
   @IsString()
   @IsOptional()
+  @ApiProperty({
+    example: 'desc',
+    description: 'Hướng sắp xếp (asc hoặc desc)',
+    enum: ['asc', 'desc'],
+    default: 'desc',
+    required: false,
+  })
   sortDirection?: 'asc' | 'desc';
 }

@@ -88,24 +88,17 @@ export class VendorController {
         throw new HttpException('ID người dùng không hợp lệ', HttpStatus.BAD_REQUEST);
       }
 
-      // Validate locations if provided
-      if (createVendorDto.locations) {
-        try {
-          const locations = JSON.parse(createVendorDto.locations as unknown as string);
-          if (!Array.isArray(locations)) {
-            throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+      // Validate locations if provided (locations are already transformed by DTO)
+      if (createVendorDto.locations && Array.isArray(createVendorDto.locations)) {
+        for (const location of createVendorDto.locations) {
+          if (!location.address?.trim()) {
+            throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
           }
-          for (const location of locations) {
-            if (!location.address?.trim()) {
-              throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
-            }
+          if (location.latitude !== undefined && location.longitude !== undefined) {
             if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
               throw new HttpException('Tọa độ không hợp lệ', HttpStatus.BAD_REQUEST);
             }
           }
-          createVendorDto.locations = locations as unknown as CreateLocationDto[];
-        } catch (error) {
-          throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
         }
       }
 
@@ -380,24 +373,17 @@ export class VendorController {
         throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
       }
 
-      // Validate locations if provided
-      if (updateVendorDto.locations) {
-        try {
-          const locations = JSON.parse(updateVendorDto.locations as unknown as string);
-          if (!Array.isArray(locations)) {
-            throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+      // Validate locations if provided (locations are already transformed by DTO)
+      if (updateVendorDto.locations && Array.isArray(updateVendorDto.locations)) {
+        for (const location of updateVendorDto.locations) {
+          if (!location.address?.trim()) {
+            throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
           }
-          for (const location of locations) {
-            if (!location.address?.trim()) {
-              throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
-            }
+          if (location.latitude !== undefined && location.longitude !== undefined) {
             if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
               throw new HttpException('Tọa độ không hợp lệ', HttpStatus.BAD_REQUEST);
             }
           }
-          updateVendorDto.locations = locations as unknown as CreateLocationDto[];
-        } catch (error) {
-          throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
         }
       }
 

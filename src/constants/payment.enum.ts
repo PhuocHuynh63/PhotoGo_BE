@@ -1,5 +1,6 @@
 export enum PaymentType {
   DEPOSIT = 'đặt cọc',
+  RENEWAL = 'gia hạn',
   REMAINING = 'còn lại'
 }
 

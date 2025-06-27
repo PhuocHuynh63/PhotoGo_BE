@@ -5,8 +5,9 @@ import { Transform } from 'class-transformer';
 
 export class CreateSubscriptionDto {
   @IsUUID()
-  @ApiProperty({ description: 'ID của người dùng' })
-  userId: string;
+  @ApiProperty({ description: 'ID của người dùng', required: false })
+  @IsOptional()
+  userId?: string;
 
   @IsString()
   @Length(1, 10)

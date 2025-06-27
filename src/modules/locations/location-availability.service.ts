@@ -127,14 +127,15 @@ export class LocationAvailabilityService {
         const slotEndMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.endSlotTime);
 
         for (const booking of bookings) {
+          // Nếu duration = 0 thì mặc định là 60 phút
+          const duration = booking.duration === 0 ? 60 : booking.duration;
           const bookingStartMinutes = this.timeToMinutes(booking.time);
-          const bookingEndMinutes = bookingStartMinutes + booking.duration;
+          const bookingEndMinutes = bookingStartMinutes + duration;
 
-          // Check if booking overlaps with slot
           if (
-            (bookingStartMinutes >= slotStartMinutes && bookingStartMinutes < slotEndMinutes) || // Booking starts during slot
-            (bookingEndMinutes > slotStartMinutes && bookingEndMinutes <= slotEndMinutes) || // Booking ends during slot
-            (bookingStartMinutes <= slotStartMinutes && bookingEndMinutes >= slotEndMinutes) // Booking spans entire slot
+            (bookingStartMinutes >= slotStartMinutes && bookingStartMinutes < slotEndMinutes) ||
+            (bookingEndMinutes > slotStartMinutes && bookingEndMinutes <= slotEndMinutes) ||
+            (bookingStartMinutes <= slotStartMinutes && bookingEndMinutes >= slotEndMinutes)
           ) {
             alreadyBooked++;
           }
