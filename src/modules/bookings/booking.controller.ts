@@ -216,12 +216,20 @@ export class BookingController {
   @ApiOperation({ summary: 'Xử lý timeout cho các booking chưa thanh toán (Admin only)' })
   @ApiResponse({ status: 200, description: 'Xử lý timeout thành công' })
   @ResponseMessage('Xử lý timeout thành công')
-  async handleBookingTimeout(): Promise<{ message: string; processedCount: number }> {
-    await this.bookingService.handleBookingTimeout();
-    return {
-      message: 'Đã xử lý timeout cho các booking chưa thanh toán',
-      processedCount: 0 // You can modify this to return actual count
-    };
+  async handleBookingTimeout(): Promise<{ message: string; cancelledCount: number }> {
+    return this.bookingService.handleBookingTimeout();
+  }
+
+  @Get('check-slot-availability')
+  @ApiOperation({ summary: 'Kiểm tra slot có khả dụng không trước khi tạo booking' })
+  @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
+  @ResponseMessage('Kiểm tra slot availability thành công')
+  async checkSlotAvailability(
+    @Query('date') date: string,
+    @Query('time') time: string,
+    @Query('locationId') locationId: string,
+  ) {
+    return await this.bookingService.checkSlotAvailabilityWithDetails(date, time, locationId);
   }
 
   @Patch(':id')

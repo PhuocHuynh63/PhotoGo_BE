@@ -229,7 +229,7 @@ export class BookingService {
   }
 
   // Method to handle booking timeout (can be called by a cron job)
-  async handleBookingTimeout(): Promise<void> {
+  async handleBookingTimeout(): Promise<{ message: string; cancelledCount: number }> {
     const timeoutMinutes = 15; // 15 minutes timeout for unpaid bookings
     const timeoutDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
@@ -242,6 +242,8 @@ export class BookingService {
       relations: ['user', 'serviceConcept'],
     });
 
+    let cancelledCount = 0;
+
     for (const booking of expiredBookings) {
       // Cancel the expired booking
       booking.status = BookingStatus.CANCELLED;
@@ -253,6 +255,17 @@ export class BookingService {
         status: BookingStatus.CANCELLED,
       });
       await this.bookingHistoryRepository.save(history);
+
+      // Unlock the slot
+      try {
+        await this.locationAvailabilityService.unlockSlot(
+          this.formatDate(booking.date),
+          booking.time,
+          booking.locationId
+        );
+      } catch (error) {
+        console.error('Error unlocking slot during timeout:', error);
+      }
 
       // Send notification to user about timeout
       if (booking.email) {
@@ -269,6 +282,76 @@ export class BookingService {
           console.error('Error sending timeout email:', error);
         }
       }
+
+      cancelledCount++;
+    }
+
+    return {
+      message: `Đã hủy ${cancelledCount} booking hết hạn`,
+      cancelledCount
+    };
+  }
+
+  // Method to check slot availability before creating booking
+  async checkSlotAvailability(date: string, time: string, locationId: string): Promise<boolean> {
+    return await this.locationAvailabilityService.isSlotAvailableForBooking(date, time, locationId);
+  }
+
+  // Method to check slot availability with detailed information
+  async checkSlotAvailabilityWithDetails(date: string, time: string, locationId: string): Promise<{
+    isAvailable: boolean;
+    reason?: string;
+    alreadyBooked: number;
+    maxParallelBookings: number;
+  }> {
+    try {
+      // Use the existing locationAvailabilityService to get availability info
+      const availability = await this.locationAvailabilityService.findByDate(date, { current: '1', pageSize: '1' });
+      
+      if (!availability.data.length) {
+        return {
+          isAvailable: false,
+          reason: 'Chi nhánh không làm việc vào ngày này',
+          alreadyBooked: 0,
+          maxParallelBookings: 0
+        };
+      }
+
+      const slotTimes = availability.data[0].slotTimes;
+      const bookingTimeMinutes = this.timeToMinutes(time);
+      
+      // Find matching slot time
+      const matchingSlot = slotTimes.find(slot => {
+        const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
+        const slotEndMinutes = this.timeToMinutes(slot.endSlotTime);
+        return bookingTimeMinutes >= slotStartMinutes && bookingTimeMinutes <= slotEndMinutes;
+      });
+
+      if (!matchingSlot) {
+        return {
+          isAvailable: false,
+          reason: 'Thời gian đặt lịch không nằm trong khung giờ làm việc',
+          alreadyBooked: 0,
+          maxParallelBookings: 0
+        };
+      }
+
+      // Check if slot is available using the improved method
+      const isAvailable = await this.locationAvailabilityService.isSlotAvailableForBooking(date, time, locationId);
+
+      return {
+        isAvailable: isAvailable,
+        reason: isAvailable ? 'Slot có sẵn' : 'Slot đã được đặt hoặc đang trong quá trình thanh toán',
+        alreadyBooked: 0, // Will be calculated by the availability service
+        maxParallelBookings: 1 // Default value, will be overridden by actual data
+      };
+    } catch (error) {
+      return {
+        isAvailable: false,
+        reason: 'Lỗi khi kiểm tra slot',
+        alreadyBooked: 0,
+        maxParallelBookings: 0
+      };
     }
   }
 
@@ -362,6 +445,34 @@ export class BookingService {
       throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này hoặc bị chồng lấn thời gian.`);
     }
 
+    // Lấy locationId từ DTO
+    if (!createBookingDto.locationId) {
+      throw new BadRequestException('locationId là bắt buộc');
+    }
+    const locationId = createBookingDto.locationId;
+
+    // Check if slot is available before creating booking (includes timeout check)
+    const isSlotAvailable = await this.locationAvailabilityService.isSlotAvailableForBooking(
+      createBookingDto.date,
+      createBookingDto.time,
+      locationId
+    );
+
+    if (!isSlotAvailable) {
+      throw new BadRequestException('Slot thời gian này đã được đặt bởi người khác hoặc đang trong quá trình thanh toán. Vui lòng chọn thời gian khác.');
+    }
+
+    // Lock the slot for this booking process
+    const slotLocked = await this.locationAvailabilityService.lockSlotForBooking(
+      createBookingDto.date,
+      createBookingDto.time,
+      locationId
+    );
+
+    if (!slotLocked) {
+      throw new BadRequestException('Không thể khóa slot thời gian. Vui lòng thử lại sau.');
+    }
+
     if (!createBookingDto.fullName) {
       throw new BadRequestException('Họ tên là bắt buộc');
     }
@@ -433,11 +544,6 @@ export class BookingService {
       throw new BadRequestException('Loại nguồn booking không hợp lệ');
     }
 
-    // Lấy locationId từ DTO
-    if (!createBookingDto.locationId) {
-      throw new BadRequestException('locationId là bắt buộc');
-    }
-    const locationId = createBookingDto.locationId;
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     const booking = this.bookingRepository.create({
@@ -480,6 +586,53 @@ export class BookingService {
     // Create payment link for deposit
     const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
 
+    // Set timeout to unlock slot if payment is not completed
+    setTimeout(async () => {
+      try {
+        // Check if booking is still pending
+        const currentBooking = await this.bookingRepository.findOne({
+          where: { id: savedBooking.id }
+        });
+
+        if (currentBooking && currentBooking.status === BookingStatus.PENDING) {
+          // Unlock the slot
+          await this.locationAvailabilityService.unlockSlot(
+            createBookingDto.date,
+            createBookingDto.time,
+            locationId
+          );
+
+          // Cancel the booking
+          currentBooking.status = BookingStatus.CANCELLED;
+          await this.bookingRepository.save(currentBooking);
+
+          // Create cancellation history
+          const timeoutHistory = this.bookingHistoryRepository.create({
+            bookingId: currentBooking.id,
+            status: BookingStatus.CANCELLED,
+          });
+          await this.bookingHistoryRepository.save(timeoutHistory);
+
+          // Send notification to user about timeout
+          if (currentBooking.email) {
+            try {
+              await this.mailService.sendBookingCancellationEmail(
+                currentBooking.email,
+                currentBooking.fullName,
+                currentBooking.code,
+                currentBooking.date,
+                currentBooking.time,
+                'Đặt lịch đã hết hạn do không thanh toán trong thời gian quy định'
+              );
+            } catch (error) {
+              console.error('Error sending timeout email:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error in booking timeout handler:', error);
+      }
+    }, 15 * 60 * 1000); // 15 minutes timeout
 
     return {
       booking: this.formatBookingDates(savedBooking),

@@ -22,6 +22,7 @@ import { PointTransactionType } from '../../constants/point.enum';
 import { MailService } from 'src/3rdService/mail/mail.service';
 import { BookingService } from '../bookings/booking.service';
 import { RefundService } from '../refunds/refund.service';
+import { LocationAvailabilityService } from '../locations/location-availability.service';
 
 @Injectable()
 export class PaymentService {
@@ -46,7 +47,18 @@ export class PaymentService {
     private readonly bookingService: BookingService,
     @Inject(forwardRef(() => RefundService))
     private readonly refundService: RefundService,
+    private readonly locationAvailabilityService: LocationAvailabilityService,
   ) {}
+
+  // Helper function to format date to DD/MM/YYYY
+  private formatDate(date: Date): string {
+    if (!date) return null;
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
     // Validate required fields
@@ -315,7 +327,11 @@ export class PaymentService {
 
     if (status === 'COMPLETED') {
       // Check if slot is still available before processing payment
-      const isSlotAvailable = await this.bookingService['isSlotStillAvailable'](booking.id);
+      const isSlotAvailable = await this.locationAvailabilityService.isSlotAvailableForBooking(
+        this.formatDate(booking.date),
+        booking.time,
+        booking.locationId
+      );
       if (!isSlotAvailable) {
         // Slot is no longer available, reject payment and create refund record
         payment.status = PaymentStatus.REFUND_PENDING;
@@ -385,6 +401,19 @@ export class PaymentService {
       // Handle payment priority - cancel overlapping bookings
       if (payment.type === PaymentType.DEPOSIT) {
         await this.bookingService['handlePaymentPriority'](booking.id);
+      }
+
+      // Unlock the slot since payment is successful
+      if (payment.type === PaymentType.DEPOSIT) {
+        try {
+          await this.locationAvailabilityService.unlockSlot(
+            this.formatDate(booking.date),
+            booking.time,
+            booking.locationId
+          );
+        } catch (error) {
+          console.error('Error unlocking slot after successful payment:', error);
+        }
       }
 
       // Handle voucher if exists

@@ -105,7 +105,7 @@ export class LocationAvailabilityService {
       // Get all bookings for this slot time working date
       const bookings = await this.dataSource
         .createQueryBuilder()
-        .select('booking.id, booking.time, service_concept.duration, booking.date')
+        .select('booking.id, booking.time, service_concept.duration, booking.date, booking.status, booking.created_at')
         .from('booking', 'booking')
         .innerJoin('booking.serviceConcept', 'service_concept')
         .innerJoin('booking.location', 'location')
@@ -114,7 +114,7 @@ export class LocationAvailabilityService {
         .innerJoin('slotTimes.locationSlotTimeWorkingDates', 'slotTimeWorkingDates')
         .where('slotTimeWorkingDates.id = :slotTimeWorkingDateId', { slotTimeWorkingDateId: slotTimeWorkingDate.id })
         .andWhere('booking.status IN (:...statuses)', { 
-          statuses: [BookingStatus.PAID] 
+          statuses: [BookingStatus.PAID, BookingStatus.PENDING] 
         })
         .andWhere('booking.date = :bookingDate', { bookingDate: slotTimeWorkingDate.workingDate.date })
         .getRawMany();
@@ -125,8 +125,15 @@ export class LocationAvailabilityService {
       if (slotTimeWorkingDate.slotTime) {
         const slotStartMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.startSlotTime);
         const slotEndMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.endSlotTime);
+        const timeoutMinutes = 15; // 15 minutes timeout
+        const timeoutDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
         for (const booking of bookings) {
+          // Skip PENDING bookings that have timed out
+          if (booking.status === BookingStatus.PENDING && new Date(booking.created_at) < timeoutDate) {
+            continue; // Skip timed out bookings
+          }
+
           // Nếu duration = 0 thì mặc định là 60 phút
           const duration = booking.duration === 0 ? 60 : booking.duration;
           const bookingStartMinutes = this.timeToMinutes(booking.time);
@@ -1039,5 +1046,209 @@ export class LocationAvailabilityService {
     await this.locationWorkingDateRepository.save(workingDate);
 
     return this.formatLocationWorkingDates(workingDate);
+  }
+
+  // Lock slot for booking process
+  async lockSlotForBooking(date: string, time: string, locationId: string): Promise<boolean> {
+    try {
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        throw new BadRequestException('Định dạng ngày không hợp lệ');
+      }
+
+      // Find the working date
+      const workingDate = await this.locationWorkingDateRepository.findOne({
+        where: {
+          date: new Date(convertedDate),
+          locationAvailability: {
+            location: { id: locationId }
+          }
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!workingDate) {
+        throw new NotFoundException('Không tìm thấy thông tin ngày làm việc cho vị trí này');
+      }
+
+      // Find the slot time for this time
+      const slotTime = await this.locationSlotTimeRepository.findOne({
+        where: {
+          startSlotTime: time,
+          locationAvailability: {
+            location: { id: locationId }
+          }
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!slotTime) {
+        throw new NotFoundException('Không tìm thấy thông tin slot time cho thời gian này');
+      }
+
+      // Find the slot time working date relationship
+      const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+        where: {
+          slotTimeId: slotTime.id,
+          workingDateId: workingDate.id
+        },
+        relations: ['slotTime', 'workingDate']
+      });
+
+      if (!slotTimeWorkingDate) {
+        throw new NotFoundException('Không tìm thấy thông tin slot time cho thời gian này trong ngày làm việc này');
+      }
+
+      // Use existing formatSlotTimeWorkingDates to get alreadyBooked count
+      const formattedSlot = await this.formatSlotTimeWorkingDates(slotTimeWorkingDate);
+      if (!formattedSlot) {
+        return false;
+      }
+
+      // Check if slot is available
+      if (formattedSlot.alreadyBooked >= slotTimeWorkingDate.maxParallelBookings) {
+        return false; // Slot is not available
+      }
+
+      // Lock the slot by temporarily reducing maxParallelBookings
+      slotTimeWorkingDate.maxParallelBookings = formattedSlot.alreadyBooked;
+      await this.locationSlotTimeWorkingDateRepository.save(slotTimeWorkingDate);
+
+      return true; // Slot locked successfully
+    } catch (error) {
+      this.logger.error(`Lỗi khóa slot: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Unlock slot after timeout or payment
+  async unlockSlot(date: string, time: string, locationId: string): Promise<void> {
+    try {
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        throw new BadRequestException('Định dạng ngày không hợp lệ');
+      }
+
+      // Find the working date
+      const workingDate = await this.locationWorkingDateRepository.findOne({
+        where: {
+          date: new Date(convertedDate),
+          locationAvailability: {
+            location: { id: locationId }
+          }
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!workingDate) {
+        this.logger.warn('Thông tin ngày làm việc cho vị trí này không tồn tại');
+        return;
+      }
+
+      // Find the slot time for this time
+      const slotTime = await this.locationSlotTimeRepository.findOne({
+        where: {
+          startSlotTime: time,
+          locationAvailability: {
+            location: { id: locationId }
+          }
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!slotTime) {
+        this.logger.warn('Thông tin slot time cho thời gian này không tồn tại');
+        return;
+      }
+
+      // Find the slot time working date relationship
+      const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+        where: {
+          slotTimeId: slotTime.id,
+          workingDateId: workingDate.id
+        }
+      });
+
+      if (!slotTimeWorkingDate) {
+        this.logger.warn('Thông tin slot time cho ngày này không tồn tại');
+        return;
+      }
+
+      // Restore original maxParallelBookings (assuming it was 1 before locking)
+      slotTimeWorkingDate.maxParallelBookings = 1;
+      await this.locationSlotTimeWorkingDateRepository.save(slotTimeWorkingDate);
+
+      this.logger.log(`Slot mở ra cho ngày: ${date}, thời gian: ${time}, vị trí: ${locationId}`);
+    } catch (error) {
+      this.logger.error(`Lỗi mở slot: ${error.message}`);
+    }
+  }
+
+  // Check if slot is available for booking
+  async isSlotAvailableForBooking(date: string, time: string, locationId: string): Promise<boolean> {
+    try {
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        return false;
+      }
+
+      // Find the working date
+      const workingDate = await this.locationWorkingDateRepository.findOne({
+        where: {
+          date: new Date(convertedDate),
+          locationAvailability: {
+            location: { id: locationId }
+          }
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!workingDate || !workingDate.isAvailable) {
+        return false;
+      }
+
+      // Find the slot time for this time
+      const slotTime = await this.locationSlotTimeRepository.findOne({
+        where: {
+          startSlotTime: time,
+          locationAvailability: {
+            location: { id: locationId }
+          }
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!slotTime) {
+        return false;
+      }
+
+      // Find the slot time working date relationship
+      const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+        where: {
+          slotTimeId: slotTime.id,
+          workingDateId: workingDate.id
+        },
+        relations: ['slotTime', 'workingDate']
+      });
+
+      if (!slotTimeWorkingDate) {
+        return false;
+      }
+
+      // Use existing formatSlotTimeWorkingDates to get availability info
+      const formattedSlot = await this.formatSlotTimeWorkingDates(slotTimeWorkingDate);
+      if (!formattedSlot) {
+        return false;
+      }
+
+      // Check if slot has available capacity
+      return formattedSlot.isAvailable;
+    } catch (error) {
+      this.logger.error(`Lỗi kiểm tra tính khả dụng của slot: ${error.message}`);
+      return false;
+    }
   }
 }

@@ -14,6 +14,7 @@ import { PointTransaction } from '../points/entities/point-transaction.entity';
 import { MailModule } from 'src/3rdService/mail/mail.module';
 import { BookingModule } from '../bookings/booking.module';
 import { RefundModule } from '../refunds/refund.module';
+import { LocationAvailabilityModule } from '../locations/location-availability.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RefundModule } from '../refunds/refund.module';
     MailModule,
     forwardRef(() => BookingModule),
     forwardRef(() => RefundModule),
+    LocationAvailabilityModule,
   ],
   controllers: [PaymentController],
   providers: [PaymentService],
