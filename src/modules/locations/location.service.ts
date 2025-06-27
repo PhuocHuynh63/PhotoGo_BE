@@ -12,6 +12,7 @@ import { VendorStatus } from 'src/constants/vendor.enum';
 import { DataSource } from 'typeorm';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
+import { GeocodingService } from 'src/3rdService/google/geocoding.service';
 
 @Injectable()
 export class LocationService {
@@ -21,6 +22,7 @@ export class LocationService {
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
+    private readonly geocodingService: GeocodingService,
   ) { }
 
   //#region create
@@ -31,12 +33,6 @@ export class LocationService {
     }
     if (!createLocationDto.address) {
       throw new BadRequestException('Địa chỉ không được để trống');
-    }
-    if (!createLocationDto.city) {
-      throw new BadRequestException('Thành phố không được để trống');
-    }
-    if (!createLocationDto.province) {
-      throw new BadRequestException('Tỉnh/Thành phố không được để trống');
     }
 
     // Check if vendor exists
@@ -60,21 +56,41 @@ export class LocationService {
       throw new ConflictException('Vendor đã có địa điểm này');
     }
 
-    // Validate coordinates if provided
-    if (createLocationDto.latitude !== undefined || createLocationDto.longitude !== undefined) {
-      if (createLocationDto.latitude === undefined || createLocationDto.longitude === undefined) {
-        throw new BadRequestException('Cả latitude và longitude phải được cung cấp cùng nhau');
-      }
+    // Process location with geocoding if coordinates are not provided
+    let processedLocation = { ...createLocationDto };
+    
+    // If coordinates are already provided, use them
+    if (createLocationDto.latitude !== undefined && createLocationDto.longitude !== undefined) {
+      // Validate provided coordinates
       if (createLocationDto.latitude < -90 || createLocationDto.latitude > 90) {
         throw new BadRequestException('Latitude phải nằm trong khoảng từ -90 đến 90 độ');
       }
       if (createLocationDto.longitude < -180 || createLocationDto.longitude > 180) {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
       }
+    } else if (createLocationDto.autoGeocode !== false) {
+      // Try to get coordinates from Google Maps
+      try {
+        const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+          createLocationDto.address,
+          createLocationDto.district,
+          createLocationDto.ward,
+          createLocationDto.city,
+          createLocationDto.province
+        );
+
+        if (geocodingResult) {
+          processedLocation.latitude = geocodingResult.latitude;
+          processedLocation.longitude = geocodingResult.longitude;
+        }
+      } catch (error) {
+        // If geocoding fails, continue without coordinates
+        console.warn(`Failed to geocode address: ${createLocationDto.address}. Error: ${error.message}`);
+      }
     }
 
     const location = this.locationRepository.create({
-      ...createLocationDto,
+      ...processedLocation,
       vendor,
     });
 
@@ -163,16 +179,36 @@ export class LocationService {
   async updateLocation(id: string, updateLocationDto: UpdateLocationDto): Promise<Location> {
     const location = await this.findOne(id);
 
-    // Validate coordinates if provided
-    if (updateLocationDto.latitude !== undefined || updateLocationDto.longitude !== undefined) {
-      if (updateLocationDto.latitude === undefined || updateLocationDto.longitude === undefined) {
-        throw new BadRequestException('Cả latitude và longitude phải được cung cấp cùng nhau');
-      }
+    // Process location with geocoding if coordinates are not provided
+    let processedLocation = { ...updateLocationDto };
+    
+    // If coordinates are already provided, use them
+    if (updateLocationDto.latitude !== undefined && updateLocationDto.longitude !== undefined) {
+      // Validate provided coordinates
       if (updateLocationDto.latitude < -90 || updateLocationDto.latitude > 90) {
         throw new BadRequestException('Latitude phải nằm trong khoảng từ -90 đến 90 độ');
       }
       if (updateLocationDto.longitude < -180 || updateLocationDto.longitude > 180) {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
+      }
+    } else if (updateLocationDto.autoGeocode !== false && (updateLocationDto.address || updateLocationDto.district || updateLocationDto.ward || updateLocationDto.city || updateLocationDto.province)) {
+      // Try to get coordinates from Google Maps if address components are being updated
+      try {
+        const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+          updateLocationDto.address || location.address,
+          updateLocationDto.district || location.district,
+          updateLocationDto.ward || location.ward,
+          updateLocationDto.city || location.city,
+          updateLocationDto.province || location.province
+        );
+
+        if (geocodingResult) {
+          processedLocation.latitude = geocodingResult.latitude;
+          processedLocation.longitude = geocodingResult.longitude;
+        }
+      } catch (error) {
+        // If geocoding fails, continue without coordinates
+        console.warn(`Failed to geocode address: ${updateLocationDto.address || location.address}. Error: ${error.message}`);
       }
     }
 
@@ -192,7 +228,7 @@ export class LocationService {
       }
     }
 
-    Object.assign(location, updateLocationDto);
+    Object.assign(location, processedLocation);
     return this.locationRepository.save(location);
   }
   //#endregion updateLocation

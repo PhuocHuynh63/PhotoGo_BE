@@ -18,6 +18,7 @@ import { VendorSortField } from 'src/constants/vendor.enum';
 import { User } from '../users/entities/user.entity';
 import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
+import { GeocodingService } from 'src/3rdService/google/geocoding.service';
 
 
 @Injectable()
@@ -38,6 +39,7 @@ export class VendorService {
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
+    private readonly geocodingService: GeocodingService,
   ) { }
 
   //#region CreateVendor
@@ -130,31 +132,32 @@ export class VendorService {
         this.logger.log('Saving vendor');
         const savedVendor = await vendorRepo.save(vendor);
 
-        if (createVendorDto.locations && Array.isArray(createVendorDto.locations) && createVendorDto.locations.length > 0) {
-          this.logger.log('Saving locations');
-          this.logger.log(`Parsed locations: ${JSON.stringify(createVendorDto.locations)}`);
+        if (createVendorDto.location) {
+          this.logger.log('Processing location with geocoding');
+          this.logger.log(`Parsed location: ${JSON.stringify(createVendorDto.location)}`);
 
-          const locations = createVendorDto.locations.map((locationDto, index) => {
-            if (!locationDto.address) {
-              throw new BadRequestException(`Địa chỉ là bắt buộc cho vị trí thứ ${index}`);
-            }
-            const location = locationRepo.create({
-              address: locationDto.address,
-              district: locationDto.district,
-              ward: locationDto.ward,
-              city: locationDto.city,
-              province: locationDto.province,
-              latitude: locationDto.latitude,
-              longitude: locationDto.longitude,
-              vendor: savedVendor,
-            });
-            return location;
+          if (!createVendorDto.location.address) {
+            throw new BadRequestException('Địa chỉ là bắt buộc cho vị trí');
+          }
+          
+          // Process location with geocoding
+          const processedLocation = await this.processLocationWithGeocoding(createVendorDto.location);
+          
+          const location = locationRepo.create({
+            address: processedLocation.address,
+            district: processedLocation.district,
+            ward: processedLocation.ward,
+            city: processedLocation.city,
+            province: processedLocation.province,
+            latitude: processedLocation.latitude,
+            longitude: processedLocation.longitude,
+            vendor: savedVendor,
           });
 
-          this.logger.log(`Mapped locations for saving: ${JSON.stringify(locations)}`);
-          await locationRepo.save(locations);
+          this.logger.log(`Saving location: ${JSON.stringify(location)}`);
+          await locationRepo.save(location);
         } else {
-          this.logger.warn('Không có vị trí hợp lệ được cung cấp');
+          this.logger.warn('Không có vị trí được cung cấp');
         }
 
         this.logger.log('Fetching saved vendor with relations');
@@ -497,50 +500,29 @@ export class VendorService {
         Object.assign(existingVendor, vendorData);
         const updatedVendor = await vendorRepo.save(existingVendor);
 
-        // Update locations if provided
-        if (updateVendorDto.locations && Array.isArray(updateVendorDto.locations)) {
-          this.logger.log('Cập nhật vị trí');
+        // Update location if provided
+        if (updateVendorDto.location) {
+          this.logger.log('Processing location with geocoding');
           
-          // Remove locations that are not in the update list
-          const locationIds = updateVendorDto.locations
-            .filter(loc => loc.id)
-            .map(loc => loc.id);
-          
+          // Remove existing locations
           await locationRepo.delete({
-            vendor: { id: updatedVendor.id },
-            id: Not(In(locationIds))
+            vendor: { id: updatedVendor.id }
           });
 
-          // Update or create locations
-          const locations = await Promise.all(updateVendorDto.locations.map(async loc => {
-            if (loc.id) {
-              // Update existing location
-              const existingLocation = await locationRepo.findOne({
-                where: { id: loc.id, vendor: { id: updatedVendor.id } }
-              });
-              
-              if (existingLocation) {
-                Object.assign(existingLocation, {
-                  address: loc.address,
-                  district: loc.district,
-                  ward: loc.ward,
-                  city: loc.city,
-                  province: loc.province,
-                  latitude: loc.latitude,
-                  longitude: loc.longitude,
-                });
-                return existingLocation;
-              }
-            }
-            
-            // Create new location
-            return locationRepo.create({
-              ...loc,
-              vendor: updatedVendor
-            });
-          }));
+          // Create new location with geocoding
+          const processedLocation = await this.processUpdateLocationWithGeocoding(updateVendorDto.location);
+          const location = locationRepo.create({
+            address: processedLocation.address,
+            district: processedLocation.district,
+            ward: processedLocation.ward,
+            city: processedLocation.city,
+            province: processedLocation.province,
+            latitude: processedLocation.latitude,
+            longitude: processedLocation.longitude,
+            vendor: updatedVendor
+          });
 
-          await locationRepo.save(locations);
+          await locationRepo.save(location);
         }
 
         // Fetch and return updated vendor with all relations
@@ -656,6 +638,96 @@ export class VendorService {
     }
 
     return `${baseSlug}-${maxSuffix + 1}`;
+  }
+
+  private async processLocationWithGeocoding(locationDto: CreateLocationDto): Promise<CreateLocationDto> {
+    // If coordinates are already provided, use them
+    if (locationDto.latitude !== undefined && locationDto.longitude !== undefined) {
+      this.logger.log(`Using provided coordinates: ${locationDto.latitude}, ${locationDto.longitude}`);
+      return locationDto;
+    }
+
+    // If autoGeocode is disabled, return as is
+    if (locationDto.autoGeocode === false) {
+      this.logger.log('Auto geocoding is disabled for this location');
+      return locationDto;
+    }
+
+    // Try to get coordinates from Google Maps
+    try {
+      this.logger.log(`Attempting to geocode address: ${locationDto.address}`);
+      
+      const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+        locationDto.address,
+        locationDto.district,
+        locationDto.ward,
+        locationDto.city,
+        locationDto.province
+      );
+
+      if (geocodingResult) {
+        this.logger.log(`Successfully geocoded: ${geocodingResult.latitude}, ${geocodingResult.longitude}`);
+        return {
+          ...locationDto,
+          latitude: geocodingResult.latitude,
+          longitude: geocodingResult.longitude,
+        };
+      } else {
+        this.logger.warn(`Failed to geocode address: ${locationDto.address}. Using provided coordinates or null.`);
+        return locationDto;
+      }
+    } catch (error) {
+      this.logger.error(`Error during geocoding: ${error.message}`);
+      return locationDto;
+    }
+  }
+
+  private async processUpdateLocationWithGeocoding(locationDto: any): Promise<any> {
+    // If coordinates are already provided, use them
+    if (locationDto.latitude !== undefined && locationDto.longitude !== undefined) {
+      this.logger.log(`Using provided coordinates: ${locationDto.latitude}, ${locationDto.longitude}`);
+      return locationDto;
+    }
+
+    // If autoGeocode is disabled, return as is
+    if (locationDto.autoGeocode === false) {
+      this.logger.log('Auto geocoding is disabled for this location');
+      return locationDto;
+    }
+
+    // If no address provided, return as is
+    if (!locationDto.address) {
+      this.logger.log('No address provided for geocoding');
+      return locationDto;
+    }
+
+    // Try to get coordinates from Google Maps
+    try {
+      this.logger.log(`Attempting to geocode address: ${locationDto.address}`);
+      
+      const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+        locationDto.address,
+        locationDto.district,
+        locationDto.ward,
+        locationDto.city,
+        locationDto.province
+      );
+
+      if (geocodingResult) {
+        this.logger.log(`Successfully geocoded: ${geocodingResult.latitude}, ${geocodingResult.longitude}`);
+        return {
+          ...locationDto,
+          latitude: geocodingResult.latitude,
+          longitude: geocodingResult.longitude,
+        };
+      } else {
+        this.logger.warn(`Failed to geocode address: ${locationDto.address}. Using provided coordinates or null.`);
+        return locationDto;
+      }
+    } catch (error) {
+      this.logger.error(`Error during geocoding: ${error.message}`);
+      return locationDto;
+    }
   }
   //#endregion Utility
   
@@ -1240,6 +1312,469 @@ export class VendorService {
     };
   }
   //#endregion filterVendors
+
+  //#region filterVendorsAdmin
+  async filterVendorsAdmin(params: {
+    name?: string;
+    contact?: string;
+    status?: string;
+    minBranches?: number;
+    maxBranches?: number;
+    minPackages?: number;
+    maxPackages?: number;
+    minOrders?: number;
+    maxOrders?: number;
+    minRating?: number;
+    maxRating?: number;
+    minPriority?: number;
+    maxPriority?: number;
+    joinDateFrom?: string;
+    joinDateTo?: string;
+    category?: string;
+    hasLogo?: boolean;
+    current?: string;
+    pageSize?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+  }): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = params.current ? Number(params.current) : 1;
+    const pageSize = params.pageSize ? Number(params.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
+    let paramIndex = 1;
+    const baseParams: any[] = [];
+
+    // Base query for admin vendor filtering
+    let baseQuery = `
+      WITH vendor_stats AS (
+        SELECT 
+          v.id,
+          COALESCE(AVG(r.rating), 0) as avg_rating,
+          COUNT(r.id) as review_count
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_packages AS (
+        SELECT 
+          v.id,
+          COUNT(sp.id) as package_count
+        FROM vendors v
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_branches AS (
+        SELECT 
+          v.id,
+          COUNT(l.id) as branch_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_orders AS (
+        SELECT 
+          v.id,
+          COUNT(b.id) as order_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        LEFT JOIN booking b ON b.location_id = l.id
+        GROUP BY v.id
+      ),
+      filtered_vendors AS (
+        SELECT DISTINCT v.id
+        FROM vendors v
+        LEFT JOIN category c ON c.id = v.category_id
+        LEFT JOIN vendor_stats vs ON vs.id = v.id
+        LEFT JOIN vendor_packages vp ON vp.id = v.id
+        LEFT JOIN vendor_branches vb ON vb.id = v.id
+        LEFT JOIN vendor_orders vo ON vo.id = v.id
+        LEFT JOIN users u ON u.id = v.user_id
+        WHERE 1=1
+        ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
+        ${params.contact ? `AND (unaccent(u.phone_number) ILIKE unaccent($${paramIndex + (params.name ? 1 : 0)}) OR unaccent(u.email) ILIKE unaccent($${paramIndex + (params.name ? 1 : 0)}))` : ''}
+        ${params.status ? `AND v.status = $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0)}` : ''}
+        ${params.category ? `AND v.category_id = $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0)}` : ''}
+        ${params.hasLogo !== undefined ? `AND v.logo IS ${params.hasLogo ? 'NOT NULL' : 'NULL'}` : ''}
+        ${params.minBranches !== undefined ? `AND vb.branch_count >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0)}` : ''}
+        ${params.maxBranches !== undefined ? `AND vb.branch_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0)}` : ''}
+        ${params.minPackages !== undefined ? `AND vp.package_count >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0)}` : ''}
+        ${params.maxPackages !== undefined ? `AND vp.package_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0)}` : ''}
+        ${params.minOrders !== undefined ? `AND vo.order_count >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0)}` : ''}
+        ${params.maxOrders !== undefined ? `AND vo.order_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0)}` : ''}
+        ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0)}` : ''}
+        ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0)}` : ''}
+        ${params.minPriority !== undefined ? `AND COALESCE(v.priority, 0) >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0)}` : ''}
+        ${params.maxPriority !== undefined ? `AND COALESCE(v.priority, 0) <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0)}` : ''}
+        ${params.joinDateFrom ? `AND DATE(v.created_at) >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0)}` : ''}
+        ${params.joinDateTo ? `AND DATE(v.created_at) <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0) + (params.joinDateFrom ? 1 : 0)}` : ''}
+      )
+      SELECT 
+        v.id,
+        v.name,
+        v.description,
+        v.logo,
+        v.banner,
+        v.status,
+        v.slug,
+        v.created_at,
+        v.updated_at,
+        COALESCE(v.priority, 0) as priority,
+        vs.avg_rating,
+        vs.review_count,
+        vp.package_count,
+        vb.branch_count,
+        vo.order_count,
+        c.id as category_id,
+        c.name as category_name,
+        u.id as user_id,
+        u.phone_number as contact_phone,
+        u.email as contact_email
+      FROM filtered_vendors fv
+      JOIN vendors v ON v.id = fv.id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_packages vp ON vp.id = v.id
+      LEFT JOIN vendor_branches vb ON vb.id = v.id
+      LEFT JOIN vendor_orders vo ON vo.id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
+      LEFT JOIN users u ON u.id = v.user_id
+    `;
+
+    // Add parameters in the correct order
+    if (params.name) {
+      baseParams.push(`%${params.name}%`);
+      paramIndex++;
+    }
+
+    if (params.contact) {
+      baseParams.push(`%${params.contact}%`);
+      paramIndex++;
+    }
+
+    if (params.status) {
+      baseParams.push(params.status);
+      paramIndex++;
+    }
+
+    if (params.category) {
+      baseParams.push(params.category);
+      paramIndex++;
+    }
+
+    if (params.minBranches !== undefined) {
+      baseParams.push(params.minBranches);
+      paramIndex++;
+    }
+
+    if (params.maxBranches !== undefined) {
+      baseParams.push(params.maxBranches);
+      paramIndex++;
+    }
+
+    if (params.minPackages !== undefined) {
+      baseParams.push(params.minPackages);
+      paramIndex++;
+    }
+
+    if (params.maxPackages !== undefined) {
+      baseParams.push(params.maxPackages);
+      paramIndex++;
+    }
+
+    if (params.minOrders !== undefined) {
+      baseParams.push(params.minOrders);
+      paramIndex++;
+    }
+
+    if (params.maxOrders !== undefined) {
+      baseParams.push(params.maxOrders);
+      paramIndex++;
+    }
+
+    if (params.minRating !== undefined) {
+      baseParams.push(params.minRating);
+      paramIndex++;
+    }
+
+    if (params.maxRating !== undefined) {
+      baseParams.push(params.maxRating);
+      paramIndex++;
+    }
+
+    if (params.minPriority !== undefined) {
+      baseParams.push(params.minPriority);
+      paramIndex++;
+    }
+
+    if (params.maxPriority !== undefined) {
+      baseParams.push(params.maxPriority);
+      paramIndex++;
+    }
+
+    if (params.joinDateFrom) {
+      baseParams.push(params.joinDateFrom);
+      paramIndex++;
+    }
+
+    if (params.joinDateTo) {
+      baseParams.push(params.joinDateTo);
+      paramIndex++;
+    }
+
+    // Add sorting
+    let sortField = 'v.created_at'; // default sort field
+    
+    // Map DTO sortBy values to SQL field names
+    switch (params.sortBy) {
+      case 'createdAt':
+        sortField = 'v.created_at';
+        break;
+      case 'updatedAt':
+        sortField = 'v.updated_at';
+        break;
+      case 'name':
+        sortField = 'v.name';
+        break;
+      case 'category':
+        sortField = 'c.name';
+        break;
+      case 'priority':
+        sortField = 'v.priority';
+        break;
+      case 'order_count':
+        sortField = 'vo.order_count';
+        break;
+      case 'package_count':
+        sortField = 'vp.package_count';
+        break;
+      case 'branch_count':
+        sortField = 'vb.branch_count';
+        break;
+      default:
+        sortField = 'v.created_at';
+    }
+    
+    baseQuery += ` ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
+
+    // Add pagination
+    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    baseParams.push(pageSize, skip);
+
+    // Get total count query
+    let countQuery = `
+      WITH vendor_stats AS (
+        SELECT 
+          v.id,
+          COALESCE(AVG(r.rating), 0) as avg_rating
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_packages AS (
+        SELECT 
+          v.id,
+          COUNT(sp.id) as package_count
+        FROM vendors v
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_branches AS (
+        SELECT 
+          v.id,
+          COUNT(l.id) as branch_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_orders AS (
+        SELECT 
+          v.id,
+          COUNT(b.id) as order_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        LEFT JOIN booking b ON b.location_id = l.id
+        GROUP BY v.id
+      )
+      SELECT COUNT(DISTINCT v.id)
+      FROM vendors v
+      LEFT JOIN category c ON c.id = v.category_id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_packages vp ON vp.id = v.id
+      LEFT JOIN vendor_branches vb ON vb.id = v.id
+      LEFT JOIN vendor_orders vo ON vo.id = v.id
+      LEFT JOIN users u ON u.id = v.user_id
+      WHERE 1=1
+    `;
+
+    const countParams: any[] = [];
+    let countParamIndex = 1;
+
+    // Add filters to count query
+    if (params.name) {
+      countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
+      countParams.push(`%${params.name}%`);
+      countParamIndex++;
+    }
+
+    if (params.contact) {
+      countQuery += ` AND (unaccent(u.phone_number) ILIKE unaccent($${countParamIndex}) OR unaccent(u.email) ILIKE unaccent($${countParamIndex}))`;
+      countParams.push(`%${params.contact}%`);
+      countParamIndex++;
+    }
+
+    if (params.status) {
+      countQuery += ` AND v.status = $${countParamIndex}`;
+      countParams.push(params.status);
+      countParamIndex++;
+    }
+
+    if (params.category) {
+      countQuery += ` AND v.category_id = $${countParamIndex}`;
+      countParams.push(params.category);
+      countParamIndex++;
+    }
+
+    if (params.hasLogo !== undefined) {
+      countQuery += ` AND v.logo IS ${params.hasLogo ? 'NOT NULL' : 'NULL'}`;
+    }
+
+    if (params.minBranches !== undefined) {
+      countQuery += ` AND vb.branch_count >= $${countParamIndex}`;
+      countParams.push(params.minBranches);
+      countParamIndex++;
+    }
+
+    if (params.maxBranches !== undefined) {
+      countQuery += ` AND vb.branch_count <= $${countParamIndex}`;
+      countParams.push(params.maxBranches);
+      countParamIndex++;
+    }
+
+    if (params.minPackages !== undefined) {
+      countQuery += ` AND vp.package_count >= $${countParamIndex}`;
+      countParams.push(params.minPackages);
+      countParamIndex++;
+    }
+
+    if (params.maxPackages !== undefined) {
+      countQuery += ` AND vp.package_count <= $${countParamIndex}`;
+      countParams.push(params.maxPackages);
+      countParamIndex++;
+    }
+
+    if (params.minOrders !== undefined) {
+      countQuery += ` AND vo.order_count >= $${countParamIndex}`;
+      countParams.push(params.minOrders);
+      countParamIndex++;
+    }
+
+    if (params.maxOrders !== undefined) {
+      countQuery += ` AND vo.order_count <= $${countParamIndex}`;
+      countParams.push(params.maxOrders);
+      countParamIndex++;
+    }
+
+    if (params.minRating !== undefined) {
+      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
+      countParams.push(params.minRating);
+      countParamIndex++;
+    }
+
+    if (params.maxRating !== undefined) {
+      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
+      countParams.push(params.maxRating);
+      countParamIndex++;
+    }
+
+    if (params.minPriority !== undefined) {
+      countQuery += ` AND COALESCE(v.priority, 0) >= $${countParamIndex}`;
+      countParams.push(params.minPriority);
+      countParamIndex++;
+    }
+
+    if (params.maxPriority !== undefined) {
+      countQuery += ` AND COALESCE(v.priority, 0) <= $${countParamIndex}`;
+      countParams.push(params.maxPriority);
+      countParamIndex++;
+    }
+
+    if (params.joinDateFrom) {
+      countQuery += ` AND DATE(v.created_at) >= $${countParamIndex}`;
+      countParams.push(params.joinDateFrom);
+      countParamIndex++;
+    }
+
+    if (params.joinDateTo) {
+      countQuery += ` AND DATE(v.created_at) <= $${countParamIndex}`;
+      countParams.push(params.joinDateTo);
+      countParamIndex++;
+    }
+
+    // Execute queries
+    const [vendorData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (vendorData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Map vendors for admin response
+    const vendors = vendorData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      logo: row.logo || null,
+      banner: row.banner || null,
+      status: row.status,
+      slug: row.slug,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      priority: Number(parseFloat(row.priority || 0).toFixed(1)),
+      averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
+      reviewCount: parseInt(row.review_count) || 0,
+      packageCount: parseInt(row.package_count) || 0,
+      branchCount: parseInt(row.branch_count) || 0,
+      orderCount: parseInt(row.order_count) || 0,
+      category: row.category_id ? {
+        id: row.category_id,
+        name: row.category_name
+      } : null,
+      contact: {
+        phone: row.contact_phone || '',
+        email: row.contact_email || ''
+      }
+    }));
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    return {
+      data: vendors,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
+  }
+  //#endregion filterVendorsAdmin
 
   // Helper function to convert degrees to radians
   private deg2rad(deg: number): number {

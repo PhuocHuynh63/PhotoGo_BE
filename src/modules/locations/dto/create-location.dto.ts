@@ -1,83 +1,82 @@
-import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsUUID, IsDate, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, Length, IsNumber, IsOptional, IsUUID, IsDate, IsBoolean, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateLocationDto {
   @IsString()
   @IsNotEmpty()
   @ApiProperty({
-    example: '321 Phạm Văn Đồng',
-    description: 'Địa chỉ của vị trí',
-    required: true,
-    name: 'address',
-    title: 'Address Information'
+    description: 'Địa chỉ chi tiết',
+    example: '123 Đường ABC, Phường XYZ',
   })
   address: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @ApiProperty({
+    description: 'Quận/Huyện',
     example: 'Thủ Đức',
-    description: 'Quận của vị trí',
-    required: true,
-    name: 'district',
-    title: 'Address Information'
+    required: false,
   })
-  district: string;
+  district?: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @ApiProperty({
+    description: 'Phường/Xã',
     example: 'Linh Tây',
-    description: 'Phường của vị trí',
-    required: true,
-    name: 'ward',
-    title: 'Address Information'
+    required: false,
   })
-  ward: string;
+  ward?: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @Length(1, 50)
   @ApiProperty({
+    description: 'Thành phố',
     example: 'Hồ Chí Minh',
-    description: 'Thành phố của vị trí',
-    required: true,
-    name: 'city',
-    title: 'Address Information'
+    required: false,
   })
-  city: string;
+  city?: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @Length(1, 50)
   @ApiProperty({
+    description: 'Tỉnh/Thành',
     example: 'Hồ Chí Minh',
-    description: 'Tỉnh của vị trí',
-    required: true,
-    name: 'province',
-    title: 'Address Information'
+    required: false,
   })
-  province: string;
+  province?: string;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   @ApiProperty({
-    example: 10.849100,
-    description: 'Vĩ độ của vị trí',
+    description: 'Vĩ độ (nếu không cung cấp sẽ được tự động lấy từ Google Maps)',
+    example: 10.762622,
     required: false,
-    name: 'latitude',
-    title: 'Coordinates'
   })
   latitude?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   @ApiProperty({
-    example: 106.772400,
-    description: 'Kinh độ của vị trí',
+    description: 'Kinh độ (nếu không cung cấp sẽ được tự động lấy từ Google Maps)',
+    example: 106.660172,
     required: false,
-    name: 'longitude',
-    title: 'Coordinates'
   })
   longitude?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  @Type(() => Boolean)
+  @ApiProperty({
+    description: 'Tự động lấy tọa độ từ Google Maps (mặc định: true)',
+    example: true,
+    required: false,
+    default: true,
+  })
+  autoGeocode?: boolean;
 }

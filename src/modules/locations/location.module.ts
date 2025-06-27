@@ -10,6 +10,7 @@ import { Vendor } from '../vendors/entities/vendor.entity';
 import { LocationWorkingDate } from './entities/location-workingdate.entity';
 import { LocationSlotTime } from './entities/location-slot-time.entity';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
+import { GeocodingModule } from 'src/3rdService/google/geocoding.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-worki
       LocationSlotTime,
       LocationSlotTimeWorkingDate,
     ]),
+    GeocodingModule,
   ],
   controllers: [LocationController, LocationAvailabilityController],
   providers: [LocationService, LocationAvailabilityService],

@@ -40,6 +40,7 @@
     "@nestjs/websockets": "^10.4.17",
     "@payos/node": "^1.0.10",
     "@types/cache-manager-redis-store": "^3.0.0",
+    "axios": "^1.10.0",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
     "bull": "^4.16.5",

@@ -18,14 +18,14 @@ export class LocationController {
   @Post(':vendor_id')
   @ApiOperation({
     summary: 'Tạo địa điểm mới (Protected)',
-    description: 'Tạo một địa điểm mới với thông tin vendor và địa chỉ'
+    description: 'Tạo một địa điểm mới với thông tin vendor và địa chỉ. Tọa độ sẽ được tự động lấy từ Google Maps nếu không cung cấp.'
   })
   @ApiBody({
     type: CreateLocationDto,
     description: 'Thông tin địa điểm cần tạo',
     examples: {
       example1: {
-        summary: 'Tạo địa điểm với đầy đủ thông tin',
+        summary: 'Tạo địa điểm với tọa độ thủ công',
         value: {
           address: '321 Phạm Văn Đồng',
           district: 'Thủ Đức',
@@ -34,6 +34,16 @@ export class LocationController {
           province: 'Hồ Chí Minh',
           latitude: 10.849100,
           longitude: 106.772400
+        }
+      },
+      example2: {
+        summary: 'Tạo địa điểm với tự động lấy tọa độ',
+        value: {
+          address: '321 Phạm Văn Đồng',
+          district: 'Thủ Đức',
+          ward: 'Linh Tây',
+          city: 'Hồ Chí Minh',
+          province: 'Hồ Chí Minh'
         }
       },
     }
@@ -188,7 +198,10 @@ export class LocationController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Cập nhật địa điểm theo ID' })
+  @ApiOperation({ 
+    summary: 'Cập nhật địa điểm theo ID',
+    description: 'Cập nhật thông tin địa điểm. Tọa độ sẽ được tự động cập nhật từ Google Maps nếu thay đổi địa chỉ và không cung cấp tọa độ mới.'
+  })
   @ApiResponse({ status: 200, description: 'Địa điểm được cập nhật thành công', type: Location })
   @ApiResponse({ status: 400, description: 'Dữ liệu cập nhật không hợp lệ' })
   @ApiResponse({ status: 401, description: 'Không được phép truy cập' })

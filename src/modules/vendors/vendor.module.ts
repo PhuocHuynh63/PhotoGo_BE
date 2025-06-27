@@ -10,9 +10,10 @@ import { UploadModule } from '../../3rdService/upload/upload.module'; // Import 
 import { ReviewModule } from '../reviews/reviews.module';
 import { Location } from '../locations/entities/location.entity';
 import { User } from '../users/entities/user.entity';
+import { GeocodingModule } from '../../3rdService/google/geocoding.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, ServicePackage, Location, User]), UploadModule, ReviewModule],
+  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, ServicePackage, Location, User]), UploadModule, ReviewModule, GeocodingModule],
   providers: [VendorService],
   controllers: [VendorController],
   exports: [VendorService],
