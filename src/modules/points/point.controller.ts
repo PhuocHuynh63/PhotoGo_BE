@@ -5,8 +5,9 @@ import { UpdatePointDto } from './dto/update-point.dto';
 import { Point } from './entities/point.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { FindPointDto } from './dto/find-point.dto';
+import { FindPointDto, FindMyTransactionsDto } from './dto/find-point.dto';
 import { PointTransaction } from './entities/point-transaction.entity';
+import { CurrentUserId } from 'src/decorator/user.decorator';
 
 @ApiTags('Points')
 @Controller('points')
@@ -61,6 +62,44 @@ export class PointController {
     };
   }> {
     return this.pointService.findAll(query);
+  }
+
+  @Get('me')
+  @ApiOperation({ summary: 'Lấy điểm của người dùng hiện tại' })
+  @ApiResponse({
+    status: 200,
+    description: 'Điểm của người dùng hiện tại',
+    type: Point,
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy điểm cho người dùng này' })
+  @ResponseMessage('Lấy thông tin điểm thành công')
+  async findMyPoints(@CurrentUserId() userId: string): Promise<Point> {
+    console.log('Current user ID from token:', userId);
+    return this.pointService.findMyPoints(userId);
+  }
+
+  @Get('me/transactions')
+  @ApiOperation({ summary: 'Lấy giao dịch điểm của người dùng hiện tại' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách giao dịch điểm của người dùng hiện tại',
+    type: [PointTransaction],
+  })
+  @ResponseMessage('Lấy danh sách giao dịch điểm thành công')
+  async findMyTransactions(
+    @CurrentUserId() userId: string,
+    @Query() query: FindMyTransactionsDto,
+  ): Promise<{
+    data: PointTransaction[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    console.log('Getting transactions for user ID:', userId);
+    return this.pointService.findMyTransactions(userId, query);
   }
 
   @Public()
