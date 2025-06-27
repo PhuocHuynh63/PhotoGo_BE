@@ -256,6 +256,9 @@ export class PaymentService {
     const orderCode = parseInt(`${timestamp}${paymentType === PaymentType.DEPOSIT ? '1' : '2'}`);
     const description = `PG#${orderCode} - ${paymentType === PaymentType.DEPOSIT ? 'Đặt cọc' : 'Thanh toán còn lại'}`;
   
+    const now = Math.floor(Date.now() / 1000);
+    const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
+
     const paymentLinkData = {
       orderCode,
       amount,
@@ -271,6 +274,7 @@ export class PaymentService {
           price: amount,
         },
       ],
+      expiredAt, // Unix timestamp (giây)
     };
   
     try {
