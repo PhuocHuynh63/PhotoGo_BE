@@ -436,13 +436,20 @@ export class PaymentService {
         success: true,
         message: 'Thanh toán thành công'
       };
-    } else if (status === 'FAILED') {
+    } else if (status === 'FAILED' || status === 'CANCELLED') {
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);
+
+      // Unlock slot
+      await this.locationAvailabilityService.unlockSlot(
+        this.formatDate(booking.date),
+        booking.time,
+        booking.locationId
+      );
       
       return {
         success: false,
-        message: 'Thanh toán thất bại'
+        message: status === 'FAILED' ? 'Thanh toán thất bại' : 'Đơn hàng đã bị huỷ'
       };
     } else {
       throw new BadRequestException(`Trạng thái thanh toán không hợp lệ: ${status}`);
@@ -606,6 +613,15 @@ export class PaymentService {
     // Update payment status to failed
     payment.status = PaymentStatus.FAILED;
     await this.paymentRepository.save(payment);
+
+    // Unlock slot nếu có booking
+    if (payment.invoice.booking) {
+      await this.locationAvailabilityService.unlockSlot(
+        this.formatDate(payment.invoice.booking.date),
+        payment.invoice.booking.time,
+        payment.invoice.booking.locationId
+      );
+    }
 
     // Update invoice status (nếu muốn)
     const invoice = payment.invoice;
