@@ -72,4 +72,53 @@ export class MailService {
       throw error;
     }
   }
+
+  async sendBookingCancellationEmail(
+    email: string,
+    fullName: string,
+    bookingCode: string,
+    bookingDate: Date,
+    bookingTime: string,
+    reason: string
+  ): Promise<void> {
+    const subject = 'Thông báo hủy đặt lịch - PhotoGo';
+    const context = {
+      fullName,
+      bookingCode,
+      bookingDate: this.formatDate(bookingDate),
+      bookingTime,
+      reason,
+      supportEmail: 'support@photogo.id.vn'
+    };
+    
+    await this.sendMail(email, subject, 'booking-cancellation', context);
+  }
+
+  private formatDate(date: Date): string {
+    if (!date) return '';
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  async sendRefundNotificationEmail(
+    email: string,
+    fullName: string,
+    refundAmount: number,
+    refundMethod: string,
+    refundNote: string
+  ): Promise<void> {
+    const subject = 'Thông báo hoàn tiền - PhotoGo';
+    const context = {
+      fullName,
+      refundAmount: refundAmount.toLocaleString('vi-VN'),
+      refundMethod,
+      refundNote,
+      supportEmail: 'support@photogo.id.vn'
+    };
+    
+    await this.sendMail(email, subject, 'refund-notification', context);
+  }
 }

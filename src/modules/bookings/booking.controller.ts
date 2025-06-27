@@ -9,6 +9,7 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -31,6 +32,11 @@ import {
 import { Public } from 'src/decorator/custom';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetDiscountAmountDto } from './dto/get-booking.dto';
+import { ResponseMessage } from '../../decorator/custom';
+import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
+import { RolesGuard } from '../auth/passport/roles.guard';
+import { Roles } from 'src/decorator/role.decorator';
+import { Role } from 'src/modules/roles/entities/role.entity';
 
 @Controller('bookings')
 @ApiExtraModels(CreateBookingDto)
@@ -181,28 +187,41 @@ export class BookingController {
 
   @Get(':id')
   @Public()
-  @ApiResponse({ status: 200, description: 'Tìm thấy booking', type: Booking })
+  @ApiOperation({ summary: 'Lấy thông tin booking theo ID' })
+  @ApiResponse({ status: 200, description: 'Lấy thông tin booking thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
-  @ApiResponse({ status: 500, description: 'Lỗi server' })
-  @ApiOperation({ summary: 'Lấy booking theo ID' })
+  @ResponseMessage('Lấy thông tin booking thành công')
   async findOne(@Param('id') id: string): Promise<Booking> {
-    try {
-      if (!id) {
-        throw new HttpException(
-          'Booking ID là bắt buộc',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      return await this.bookingService.findOne(id);
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException(
-        error.message || 'Có lỗi xảy ra khi tìm booking',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+    return this.bookingService.findOne(id);
+  }
+
+  // @Get(':id/check-availability')
+  // @ApiOperation({ summary: 'Kiểm tra slot thời gian còn khả dụng không trước khi thanh toán' })
+  // @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
+  // @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  // @ResponseMessage('Kiểm tra slot thành công')
+  // async checkSlotAvailability(@Param('id') id: string): Promise<{ available: boolean; message: string }> {
+  //   const isAvailable = await this.bookingService['isSlotStillAvailable'](id);
+  //   return {
+  //     available: isAvailable,
+  //     message: isAvailable 
+  //       ? 'Slot thời gian vẫn còn khả dụng' 
+  //       : 'Slot thời gian đã được đặt bởi người khác'
+  //   };
+  // }
+
+  @Post('admin/handle-timeout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles({ id: 'R005' } as Role)
+  @ApiOperation({ summary: 'Xử lý timeout cho các booking chưa thanh toán (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Xử lý timeout thành công' })
+  @ResponseMessage('Xử lý timeout thành công')
+  async handleBookingTimeout(): Promise<{ message: string; processedCount: number }> {
+    await this.bookingService.handleBookingTimeout();
+    return {
+      message: 'Đã xử lý timeout cho các booking chưa thanh toán',
+      processedCount: 0 // You can modify this to return actual count
+    };
   }
 
   @Patch(':id')

@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException, ConflictException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
@@ -20,6 +20,8 @@ import { Point } from '../points/entities/point.entity';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
 import { PointTransactionType } from '../../constants/point.enum';
 import { MailService } from 'src/3rdService/mail/mail.service';
+import { BookingService } from '../bookings/booking.service';
+import { RefundService } from '../refunds/refund.service';
 
 @Injectable()
 export class PaymentService {
@@ -40,6 +42,10 @@ export class PaymentService {
     @InjectRepository(PointTransaction)
     private readonly pointTransactionRepository: Repository<PointTransaction>,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => BookingService))
+    private readonly bookingService: BookingService,
+    @Inject(forwardRef(() => RefundService))
+    private readonly refundService: RefundService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
@@ -212,6 +218,14 @@ export class PaymentService {
     if (existingPayment) {
       throw new ConflictException(`Đã tồn tại thanh toán ${paymentType} cho hóa đơn này`);
     }
+
+    // NEW: Pre-payment validation - check slot availability before creating payment link
+    if (paymentType === PaymentType.DEPOSIT) {
+      const isSlotAvailable = await this.bookingService['isSlotStillAvailable'](invoice.booking.id);
+      if (!isSlotAvailable) {
+        throw new BadRequestException('Slot thời gian không còn khả dụng. Vui lòng chọn slot khác.');
+      }
+    }
   
     let amount = 0;
     if (paymentType === PaymentType.DEPOSIT) {
@@ -300,6 +314,45 @@ export class PaymentService {
     const booking = invoice.booking;
 
     if (status === 'COMPLETED') {
+      // Check if slot is still available before processing payment
+      const isSlotAvailable = await this.bookingService['isSlotStillAvailable'](booking.id);
+      if (!isSlotAvailable) {
+        // Slot is no longer available, reject payment and create refund record
+        payment.status = PaymentStatus.REFUND_PENDING;
+        await this.paymentRepository.save(payment);
+        
+        // Create refund record for manual processing
+        try {
+          await this.refundService.createConflictRefund(payment.id, {
+            bankCode: data.bankCode,
+            accountNumber: data.accountNumber,
+            accountName: data.accountName,
+            transferId: data.transferId,
+            transferTime: data.transferTime,
+            paymentMethod: data.paymentMethod,
+          });
+        } catch (refundError) {
+          console.error('Error creating refund record:', refundError);
+        }
+        
+        // Send notification to user about slot unavailability and pending refund
+        if (booking.email) {
+          await this.mailService.sendBookingCancellationEmail(
+            booking.email,
+            booking.fullName,
+            booking.code,
+            booking.date,
+            booking.time,
+            'Slot thời gian đã được đặt bởi người khác. Tiền sẽ được hoàn lại trong 1-3 ngày làm việc.'
+          );
+        }
+        
+        return {
+          success: false,
+          message: 'Slot thời gian không còn khả dụng. Tiền sẽ được hoàn lại.'
+        };
+      }
+
       // Update payment status
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
@@ -329,6 +382,11 @@ export class PaymentService {
       });
       await this.bookingHistoryRepository.save(history);
 
+      // Handle payment priority - cancel overlapping bookings
+      if (payment.type === PaymentType.DEPOSIT) {
+        await this.bookingService['handlePaymentPriority'](booking.id);
+      }
+
       // Handle voucher if exists
       const activeVoucherUser = booking?.user?.voucherUsers?.find(
         vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
@@ -340,9 +398,19 @@ export class PaymentService {
           console.error('Error updating voucher usage:', error);
         }
       }
+
+      return {
+        success: true,
+        message: 'Thanh toán thành công'
+      };
     } else if (status === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);
+      
+      return {
+        success: false,
+        message: 'Thanh toán thất bại'
+      };
     } else {
       throw new BadRequestException(`Trạng thái thanh toán không hợp lệ: ${status}`);
     }
@@ -371,6 +439,31 @@ export class PaymentService {
     const invoice = payment.invoice;
     const booking = invoice.booking;
 
+    // Check if slot is still available before processing payment
+    const isSlotAvailable = await this.bookingService['isSlotStillAvailable'](booking.id);
+    if (!isSlotAvailable) {
+      // Slot is no longer available, reject payment
+      payment.status = PaymentStatus.FAILED;
+      await this.paymentRepository.save(payment);
+      
+      // Send notification to user about slot unavailability
+      if (booking.email) {
+        await this.mailService.sendBookingCancellationEmail(
+          booking.email,
+          booking.fullName,
+          booking.code,
+          booking.date,
+          booking.time,
+          'Slot thời gian đã được đặt bởi người khác trước khi bạn thanh toán'
+        );
+      }
+      
+      return {
+        success: false,
+        message: 'Slot thời gian không còn khả dụng'
+      };
+    }
+
     // Update payment status
     payment.status = PaymentStatus.PAID;
     await this.paymentRepository.save(payment);
@@ -387,9 +480,9 @@ export class PaymentService {
 
     // Update booking status
     if (payment.type === PaymentType.DEPOSIT) {
-      booking.status = BookingStatus.PAID;
+      booking.status = BookingStatus.CONFIRMED;
     } else if (payment.type === PaymentType.REMAINING) {
-      booking.status = BookingStatus.PAID;
+      booking.status = BookingStatus.COMPLETED;
     }
     await this.bookingRepository.save(booking);
 
@@ -399,6 +492,11 @@ export class PaymentService {
       status: booking.status,
     });
     await this.bookingHistoryRepository.save(history);
+
+    // Handle payment priority - cancel overlapping bookings
+    if (payment.type === PaymentType.DEPOSIT) {
+      await this.bookingService['handlePaymentPriority'](booking.id);
+    }
 
     // handle point
     const points = booking?.user?.points;
@@ -448,6 +546,11 @@ export class PaymentService {
         console.error('Error updating voucher usage:', error);
       }
     }
+
+    return {
+      success: true,
+      message: 'Thanh toán thành công'
+    };
   }
 
   async handlePaymentError(paymentId: string, callbackData: PaymentCallbackDto) {
@@ -496,18 +599,30 @@ export class PaymentService {
   async findOneByTransactionId(transactionId: string): Promise<string> {
     const payment = await this.paymentRepository.findOne({
       where: { transactionId },
-      relations: [
-        'invoice', 
-        'invoice.booking',
-      ]
+      relations: ['invoice', 'invoice.booking'],
     });
 
     if (!payment) {
-      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${transactionId}`);
+      throw new NotFoundException(`Không tìm thấy thanh toán với transaction ID ${transactionId}`);
     }
 
-    const bookingId = payment.invoice.booking.id;
+    return payment.invoice.booking.id;
+  }
 
-    return bookingId;
+  async checkSlotAvailability(invoiceId: string): Promise<boolean> {
+    const invoice = await this.invoiceRepo.findOne({
+      where: { id: invoiceId },
+      relations: ['booking'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${invoiceId}`);
+    }
+
+    if (!invoice.booking) {
+      throw new NotFoundException('Hóa đơn không liên kết với booking');
+    }
+
+    return await this.bookingService['isSlotStillAvailable'](invoice.booking.id);
   }
 }

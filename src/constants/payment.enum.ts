@@ -8,7 +8,9 @@ export enum PaymentStatus {
   PENDING = 'chờ xử lý',
   PAID = 'đã hoàn thành',
   FAILED = 'thất bại',
-  REFUNDED = 'hoàn trả'
+  REFUNDED = 'hoàn trả',
+  REFUND_PENDING = 'chờ hoàn tiền',
+  REFUND_PROCESSING = 'đang xử lý hoàn tiền'
 }
 
 export enum InvoiceStatus {

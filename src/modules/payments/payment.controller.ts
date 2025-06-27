@@ -132,6 +132,32 @@ export class PaymentController {
     }
   }
 
+  // @Get('/:invoiceId/check-slot-availability')
+  // @ApiOperation({ summary: 'Kiểm tra slot thời gian còn khả dụng không trước khi thanh toán' })
+  // @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
+  // @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
+  // @ResponseMessage('Kiểm tra slot thành công')
+  // async checkSlotAvailability(@Param('invoiceId') invoiceId: string): Promise<{ available: boolean; message: string }> {
+  //   if (!invoiceId) {
+  //     throw new HttpException('ID hóa đơn không được để trống', HttpStatus.BAD_REQUEST);
+  //   }
+
+  //   try {
+  //     const isAvailable = await this.paymentService.checkSlotAvailability(invoiceId);
+  //     return {
+  //       available: isAvailable,
+  //       message: isAvailable 
+  //         ? 'Slot thời gian vẫn còn khả dụng' 
+  //         : 'Slot thời gian đã được đặt bởi người khác'
+  //     };
+  //   } catch (error) {
+  //     if (error instanceof HttpException) {
+  //       throw error;
+  //     }
+  //     throw new HttpException('Lỗi khi kiểm tra slot', HttpStatus.INTERNAL_SERVER_ERROR);
+  //   }
+  // }
+
   @Post('/webhook/payos')
   @ApiOperation({ summary: 'Xử lý webhook PayOS' })
   @ApiResponse({ status: 200, description: 'Webhook đã được xử lý thành công' })

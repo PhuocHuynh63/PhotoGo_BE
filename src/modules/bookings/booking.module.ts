@@ -19,6 +19,8 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { MailModule } from '../../3rdService/mail/mail.module';
+import { AuthModule } from '../auth/auth.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -36,10 +38,11 @@ import { MailModule } from '../../3rdService/mail/mail.module';
     ]),
     ServicePackageModule,
     VoucherModule,
-    PaymentModule,
+    forwardRef(() => PaymentModule),
     InvoiceModule,
     LocationAvailabilityModule,
     MailModule,
+    AuthModule,
   ],
   controllers: [BookingController],
   providers: [BookingService],

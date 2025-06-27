@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment } from './entities/payment.entity';
 import { PaymentService } from './payment.service';
@@ -12,6 +12,8 @@ import { BookingHistory } from '../bookings/entities/booking-history.entity';
 import { Point } from '../points/entities/point.entity';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
 import { MailModule } from 'src/3rdService/mail/mail.module';
+import { BookingModule } from '../bookings/booking.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction]),
@@ -19,6 +21,7 @@ import { MailModule } from 'src/3rdService/mail/mail.module';
     PayosModule,
     AuthModule,
     MailModule,
+    forwardRef(() => BookingModule),
   ],
   controllers: [PaymentController],
   providers: [PaymentService],

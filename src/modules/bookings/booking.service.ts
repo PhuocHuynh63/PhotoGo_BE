@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { BookingDepositType, BookingStatus, BookingSourceType } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
@@ -21,6 +21,7 @@ import { GetDiscountAmountDto } from './dto/get-booking.dto';
 import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { MailService } from '../../3rdService/mail/mail.service';
+import { LessThan } from 'typeorm';
 
 @Injectable()
 export class BookingService {
@@ -34,6 +35,7 @@ export class BookingService {
     @InjectRepository(Voucher)
     private voucherRepository: Repository<Voucher>,
     private invoiceService: InvoiceService,
+    @Inject(forwardRef(() => PaymentService))
     private paymentService: PaymentService,
     private locationAvailabilityService: LocationAvailabilityService,
     @InjectRepository(LocationSlotTimeWorkingDate)
@@ -48,6 +50,7 @@ export class BookingService {
     private campaignVoucherRepository: Repository<CampaignVoucher>,
     @InjectRepository(VoucherUser)
     private voucherUserRepository: Repository<VoucherUser>,
+    private mailService: MailService,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -118,6 +121,155 @@ export class BookingService {
       }
     }
     return count;
+  }
+
+  // New method to handle payment priority and auto-cancel overlapping bookings
+  private async handlePaymentPriority(bookingId: string): Promise<void> {
+    const currentBooking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['serviceConcept'],
+    });
+
+    if (!currentBooking || currentBooking.status !== BookingStatus.CONFIRMED) {
+      return;
+    }
+
+    const bookingDate = currentBooking.date;
+    const bookingTime = currentBooking.time;
+    const bookingDuration = currentBooking.serviceConcept.duration;
+
+    // Find all overlapping PENDING bookings for the same time slot
+    const overlappingBookings = await this.bookingRepository.find({
+      where: {
+        date: bookingDate,
+        status: BookingStatus.PENDING,
+        id: Not(bookingId), // Exclude current booking
+      },
+      relations: ['serviceConcept', 'user'],
+    });
+
+    const startTimeMinutes = this.timeToMinutes(bookingTime);
+    const endTimeMinutes = startTimeMinutes + bookingDuration;
+
+    for (const booking of overlappingBookings) {
+      const bookingStartMinutes = this.timeToMinutes(booking.time);
+      const bookingEndMinutes = bookingStartMinutes + booking.serviceConcept.duration;
+
+      // Check if bookings overlap
+      if (
+        (bookingStartMinutes >= startTimeMinutes && bookingStartMinutes < endTimeMinutes) ||
+        (startTimeMinutes >= bookingStartMinutes && startTimeMinutes < bookingEndMinutes)
+      ) {
+        // Cancel the overlapping booking
+        booking.status = BookingStatus.CANCELLED;
+        await this.bookingRepository.save(booking);
+
+        // Create cancellation history
+        const history = this.bookingHistoryRepository.create({
+          bookingId: booking.id,
+          status: BookingStatus.CANCELLED,
+        });
+        await this.bookingHistoryRepository.save(history);
+
+        // Send notification to user about cancellation
+        try {
+          await this.mailService.sendBookingCancellationEmail(
+            booking.email,
+            booking.fullName,
+            booking.code,
+            booking.date,
+            booking.time,
+            'Slot thời gian đã được đặt bởi người khác'
+          );
+        } catch (error) {
+          console.error('Error sending cancellation email:', error);
+        }
+      }
+    }
+  }
+
+  // New method to check if slot is still available before payment
+  private async isSlotStillAvailable(bookingId: string): Promise<boolean> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['serviceConcept'],
+    });
+
+    if (!booking) {
+      return false;
+    }
+
+    // Check if there are any CONFIRMED bookings for the same time slot
+    const confirmedBookings = await this.bookingRepository.find({
+      where: {
+        date: booking.date,
+        status: BookingStatus.CONFIRMED,
+        id: Not(bookingId),
+      },
+      relations: ['serviceConcept'],
+    });
+
+    const startTimeMinutes = this.timeToMinutes(booking.time);
+    const endTimeMinutes = startTimeMinutes + booking.serviceConcept.duration;
+
+    for (const confirmedBooking of confirmedBookings) {
+      const confirmedStartMinutes = this.timeToMinutes(confirmedBooking.time);
+      const confirmedEndMinutes = confirmedStartMinutes + confirmedBooking.serviceConcept.duration;
+
+      // Check if bookings overlap
+      if (
+        (confirmedStartMinutes >= startTimeMinutes && confirmedStartMinutes < endTimeMinutes) ||
+        (startTimeMinutes >= confirmedStartMinutes && startTimeMinutes < confirmedEndMinutes)
+      ) {
+        return false; // Slot is no longer available
+      }
+    }
+
+    return true; // Slot is still available
+  }
+
+  // Method to handle booking timeout (can be called by a cron job)
+  async handleBookingTimeout(): Promise<void> {
+    const timeoutMinutes = 15; // 15 minutes timeout for unpaid bookings
+    const timeoutDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+    // Find all PENDING bookings older than timeout
+    const expiredBookings = await this.bookingRepository.find({
+      where: {
+        status: BookingStatus.PENDING,
+        created_at: LessThan(timeoutDate),
+      },
+      relations: ['user', 'serviceConcept'],
+    });
+
+    for (const booking of expiredBookings) {
+      // Cancel the expired booking
+      booking.status = BookingStatus.CANCELLED;
+      await this.bookingRepository.save(booking);
+
+      // Create cancellation history
+      const history = this.bookingHistoryRepository.create({
+        bookingId: booking.id,
+        status: BookingStatus.CANCELLED,
+      });
+      await this.bookingHistoryRepository.save(history);
+
+      // Send notification to user about timeout
+      if (booking.email) {
+        try {
+          await this.mailService.sendBookingCancellationEmail(
+            booking.email,
+            booking.fullName,
+            booking.code,
+            booking.date,
+            booking.time,
+            'Đặt lịch đã hết hạn do không thanh toán trong thời gian quy định'
+          );
+        } catch (error) {
+          console.error('Error sending timeout email:', error);
+        }
+      }
+    }
   }
 
   //#region Create Booking
