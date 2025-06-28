@@ -172,11 +172,23 @@
         <strong>Mã đặt lịch:</strong>
         <span>{{invoice.booking.code}}</span>
       </div>
+      {{#if invoice.booking.vendor}}
+      <div class="info-row">
+        <strong>Nhà cung cấp:</strong>
+        <span>{{invoice.booking.vendor.name}}</span>
+      </div>
+      {{/if}}
       {{#if invoice.booking.serviceConcept}}
       <div class="info-row">
         <strong>Dịch vụ:</strong>
         <span>{{invoice.booking.serviceConcept.name}}</span>
       </div>
+      {{#if invoice.booking.serviceConcept.servicePackage}}
+      <div class="info-row">
+        <strong>Gói dịch vụ:</strong>
+        <span>{{invoice.booking.serviceConcept.servicePackage.name}}</span>
+      </div>
+      {{/if}}
       {{else}}
       <div class="info-row">
         <strong>Dịch vụ:</strong>
@@ -205,14 +217,6 @@
       <div class="price-row">
         <span>Giảm giá:</span>
         <span>-{{invoice.discountAmount}} VND</span>
-      </div>
-      {{/if}}
-      {{/if}}
-      {{#if invoice.taxAmount}}
-      {{#if (gt invoice.taxAmount 0)}}
-      <div class="price-row">
-        <span>Thuế:</span>
-        <span>{{invoice.taxAmount}} VND</span>
       </div>
       {{/if}}
       {{/if}}

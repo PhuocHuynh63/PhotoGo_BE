@@ -468,7 +468,11 @@ export class PaymentService {
         'invoice.booking.user', 
         'invoice.booking.user.voucherUsers', 
         'invoice.booking.user.voucherUsers.voucher',
-        'invoice.booking.histories'
+        'invoice.booking.histories',
+        'invoice.booking.location',
+        'invoice.booking.location.vendor',
+        'invoice.booking.serviceConcept',
+        'invoice.booking.serviceConcept.servicePackage',
       ]
     });
 

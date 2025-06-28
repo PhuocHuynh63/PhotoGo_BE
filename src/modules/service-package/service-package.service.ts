@@ -448,7 +448,7 @@ export class ServicePackageService {
     });
     await this.commissionRepository.save(commissionData);
     // Modify price to include commission and tax (10% tax)
-    serviceConceptData.price = serviceConceptData.price * (1 + commissionData.commissionRate / 100) + serviceConceptData.price * 0.1;
+    serviceConceptData.price = serviceConceptData.price * (1 + commissionData.commissionRate / 100) + serviceConceptData.price * 0.05;
 
     // Create the service concept
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
@@ -676,7 +676,7 @@ export class ServicePackageService {
       }
 
       // Modify price to include commission and tax (10% tax)
-      serviceConcept.price = updateServiceConceptDto.price * (1 + 30 / 100) + updateServiceConceptDto.price * 0.1;
+      serviceConcept.price = updateServiceConceptDto.price * (1 + 30 / 100) + updateServiceConceptDto.price * 0.05;
     }
     if (updateServiceConceptDto.duration !== undefined) {
       serviceConcept.duration = updateServiceConceptDto.duration;

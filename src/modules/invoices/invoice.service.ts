@@ -112,7 +112,7 @@ export class InvoiceService {
     const commission = await this.commissionRepository.findOne({
       where: { serviceConceptId: serviceConcept.id }
     });
-    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.1;
+    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.05;
     const feeAmount = 0;
     const payablePrice = discountedPrice + feeAmount;
 
@@ -254,7 +254,7 @@ export class InvoiceService {
 
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['booking', 'payments', 'refunds', 'booking.serviceConcept'],
+      relations: ['booking', 'payments', 'refunds', 'booking.serviceConcept', 'booking.location', 'booking.location.vendor', 'booking.serviceConcept.servicePackage'],
     });
 
     if (!invoice) {
