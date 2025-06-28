@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { UserModule } from './modules/users/user.module';
 import { TransformInterceptor } from './core/transform.interceptor';
+import { TimezoneInterceptor } from './core/timezone.interceptor';
 import { JwtAuthGuard } from './modules/auth/passport/jwt-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoleModule } from './modules/roles/role.module';
@@ -193,6 +194,10 @@ if (!fs.existsSync(templateDir)) {
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TimezoneInterceptor,
     },
   ],
 })

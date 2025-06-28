@@ -10,6 +10,7 @@ import { CreateBookingDto } from './modules/bookings/dto/create-booking.dto';
 
 async function bootstrap() {
 
+  process.env.TZ = 'Asia/Ho_Chi_Minh';
   // const httpsOptions = {
   //   // pfx: fs.readFileSync('src/config/keystore.p12'),
 
