@@ -47,7 +47,7 @@ export class GeminiService {
         this.genAI = new GoogleGenerativeAI(apiKey);
 
         // Lấy model từ cấu hình hoặc sử dụng model mặc định
-        this.modelName = this.configService.get<string>('gemini.model') || 'models/gemini-1.5-pro-001';
+        this.modelName = this.configService.get<string>('gemini.model') || 'models/gemini-2.0-flash-001';
 
         // Lấy cấu hình generation và safety từ cấu hình
         this.generationConfig = this.configService.get('gemini.generationConfig') || {};

@@ -438,21 +438,24 @@ export class ServicePackageService {
       status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
       servicePackage: servicePackage,
     };
-    // save commission
+
+    // Create the service concept first
+    const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
+    const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
+
+    // Now create commission with the actual service concept ID
     const commissionData = this.commissionRepository.create({
-      serviceConceptId: serviceConceptData.id,
+      serviceConceptId: savedServiceConcept.id,
       commissionRate: 30,
       commissionType: CommissionType.PERCENTAGE,
-      commissionAmount: serviceConceptData.price * 0.3,
+      commissionAmount: createServiceConceptDto.price * 0.3,
       status: CommissionStatus.ACTIVE,
     });
     await this.commissionRepository.save(commissionData);
-    // Modify price to include commission and tax (10% tax)
-    serviceConceptData.price = serviceConceptData.price * (1 + commissionData.commissionRate / 100) + serviceConceptData.price * 0.05;
 
-    // Create the service concept
-    const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
-    const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
+    // Update the service concept price to include commission and tax (10% tax)
+    savedServiceConcept.price = createServiceConceptDto.price * (1 + commissionData.commissionRate / 100) + createServiceConceptDto.price * 0.05;
+    await this.serviceConceptRepository.save(savedServiceConcept);
 
     // Create service concept images
     if (uploadedImageUrls.length > 0) {
