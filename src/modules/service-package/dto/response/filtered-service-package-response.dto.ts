@@ -25,6 +25,7 @@ export class VendorResponseDto {
   slug: string;
   createdAt: Date;
   updatedAt: Date;
+  locations: LocationResponseDto[];
 }
 
 export class LocationResponseDto {
@@ -49,7 +50,6 @@ export class FilteredServicePackageResponseDto {
   minPrice: number | null;
   maxPrice: number | null;
   vendor: VendorResponseDto;
-  locations: LocationResponseDto[];
   serviceConcepts: ServiceConceptResponseDto[];
 }
 
