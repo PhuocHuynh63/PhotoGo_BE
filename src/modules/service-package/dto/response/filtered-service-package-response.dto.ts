@@ -16,6 +16,28 @@ export class ServiceConceptResponseDto {
   serviceTypes: ServiceTypeResponseDto[];
 }
 
+export class VendorResponseDto {
+  id: string;
+  name: string;
+  description: string;
+  logo: string;
+  status: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class LocationResponseDto {
+  id: string;
+  address: string;
+  district: string;
+  ward: string;
+  city: string;
+  province: string;
+  latitude: number;
+  longitude: number;
+}
+
 export class FilteredServicePackageResponseDto {
   id: string;
   name: string;
@@ -26,6 +48,8 @@ export class FilteredServicePackageResponseDto {
   updatedAt: Date;
   minPrice: number | null;
   maxPrice: number | null;
+  vendor: VendorResponseDto;
+  locations: LocationResponseDto[];
   serviceConcepts: ServiceConceptResponseDto[];
 }
 
