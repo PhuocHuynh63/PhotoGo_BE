@@ -208,7 +208,7 @@ export class InvoiceService {
 
     const [invoices, total] = await this.invoiceRepository.findAndCount({
       where: { booking: { userId } },
-      relations: ['booking', 'payments', 'refunds'],
+      relations: ['booking', 'payments'],
       skip,
       take: pageSizeNum,
       order: {
@@ -254,7 +254,7 @@ export class InvoiceService {
 
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['booking', 'payments', 'refunds', 'booking.serviceConcept', 'booking.location', 'booking.location.vendor', 'booking.serviceConcept.servicePackage'],
+      relations: ['booking', 'payments', 'booking.serviceConcept', 'booking.location', 'booking.location.vendor', 'booking.serviceConcept.servicePackage'],
     });
 
     if (!invoice) {
