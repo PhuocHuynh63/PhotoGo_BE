@@ -1061,8 +1061,8 @@ export class ServicePackageService {
             slug: row.vendor_slug,
             createdAt: row.vendor_created_at,
             updatedAt: row.vendor_updated_at,
+            locations: new Map<string, any>(),
           },
-          locations: new Map<string, any>(),
           serviceConcepts: new Map<string, any>() // Use a Map for concepts to avoid duplicates
         });
       }
@@ -1095,8 +1095,8 @@ export class ServicePackageService {
       }
 
       if (row.location_id) {
-        if (!servicePackage.locations.has(row.location_id)) {
-          servicePackage.locations.set(row.location_id, {
+        if (!servicePackage.vendor.locations.has(row.location_id)) {
+          servicePackage.vendor.locations.set(row.location_id, {
             id: row.location_id,
             address: row.location_address,
             district: row.location_district,
@@ -1105,8 +1105,6 @@ export class ServicePackageService {
             province: row.location_province,
             latitude: row.location_latitude,
             longitude: row.location_longitude,
-            createdAt: row.location_created_at,
-            updatedAt: row.location_updated_at,
           });
         }
       }
@@ -1116,7 +1114,10 @@ export class ServicePackageService {
     const servicePackages = Array.from(packagesByServicePackage.values())
       .map(pkg => ({
         ...pkg,
-        locations: Array.from(pkg.locations.values()),
+        vendor: {
+          ...pkg.vendor,
+          locations: Array.from(pkg.vendor.locations.values()),
+        },
         serviceConcepts: Array.from(pkg.serviceConcepts.values()).map((concept: any) => ({
           ...concept,
           serviceTypes: Array.from(concept.serviceTypes.values())
@@ -1137,8 +1138,10 @@ export class ServicePackageService {
         updatedAt: pkg.updatedAt,
         minPrice: pkg.minPrice,
         maxPrice: pkg.maxPrice,
-        vendor: pkg.vendor,
-        locations: Array.from(pkg.locations.values()),
+        vendor: {
+          ...pkg.vendor,
+          locations: Array.from(pkg.vendor.locations.values()),
+        },
         serviceConcepts: pkg.serviceConcepts
       })),
       pagination: {
