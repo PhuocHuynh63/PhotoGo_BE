@@ -838,6 +838,7 @@ export class CampaignService {
   async joinWelcomeCampaign(userId: string, note?: string): Promise<{
     message: string;
     userCampaign: UserCampaign;
+    voucherUser: VoucherUser;
   }> {
     // 1. Tìm campaign "Chào Bạn Mới"
     const campaign = await this.campaignRepository.findOne({
@@ -909,18 +910,30 @@ export class CampaignService {
       throw new BadRequestException('User đã tham gia campaign "Chào Bạn Mới"');
     }
 
-    // 6. Thêm user vào campaign (không tạo voucher_user record)
+    // 6. Thêm user vào campaign
     const userCampaign = this.userCampaignRepository.create({
       campaignId: campaign.id,
       userId,
       isAvailable: true,
     });
 
+    // 7. Tạo voucher-user record
+    const voucherUser = this.voucherUserRepository.create({
+      user_id: userId, // Sử dụng userId trực tiếp thay vì query lại
+      voucher_id: voucher.id,
+      status: VoucherUserStatusEnum.AVAILABLE,
+      from: VoucherUserFromEnum.CAMPAIGN,
+      assigned_at: new Date(),
+      used_at: null,
+    });
+
     const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
+    const savedVoucherUser = await this.voucherUserRepository.save(voucherUser);
 
     return {
-      message: 'Thêm user vào campaign "Chào Bạn Mới" thành công. Voucher "CHAOBANMOI" sẽ được sử dụng thông qua campaign.',
-      userCampaign: savedUserCampaign
+      message: 'Thêm user vào campaign "Chào Bạn Mới" thành công. Voucher "CHAOBANMOI" đã được gán cho user.',
+      userCampaign: savedUserCampaign,
+      voucherUser: savedVoucherUser
     };
   }
   

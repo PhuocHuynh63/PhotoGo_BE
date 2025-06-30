@@ -15,6 +15,7 @@ import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignSt
 import { PaginationDto } from './dto/pagination.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { JoinWelcomeCampaignDto } from './dto/join-welcome-campaign.dto';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 
 @Controller('campaigns')
 @ApiTags('Campaigns')
@@ -319,6 +320,7 @@ export class CampaignController {
   async joinWelcomeCampaign(@Body() joinWelcomeCampaignDto: JoinWelcomeCampaignDto): Promise<{
     message: string;
     userCampaign: UserCampaign;
+    voucherUser: VoucherUser;
   }> {
     return this.campaignService.joinWelcomeCampaign(
       joinWelcomeCampaignDto.userId,
