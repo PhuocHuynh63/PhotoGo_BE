@@ -20,6 +20,7 @@ import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { MailModule } from '../../3rdService/mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AuthModule } from '../auth/auth.module';
     LocationAvailabilityModule,
     MailModule,
     AuthModule,
+    SubscriptionModule,
   ],
   controllers: [BookingController],
   providers: [BookingService],

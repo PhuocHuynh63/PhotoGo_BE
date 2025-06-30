@@ -69,6 +69,9 @@ export class Booking {
   @Column({ type: 'varchar', length: 6, nullable: true, name: 'code' })
   code: string;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0, name: 'priority_score' })
+  priorityScore: number;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 

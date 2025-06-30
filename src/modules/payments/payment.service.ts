@@ -9,7 +9,7 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { ConfigService } from '@nestjs/config';
 import { BookingDepositType, BookingStatus } from '../../constants/booking.enum';
 import { VoucherService } from '../vouchers/voucher.service';
-import { VoucherUserStatusEnum } from '../../constants/voucher.enum';
+import { VoucherUserStatusEnum, VoucherStatusEnum } from '../../constants/voucher.enum';
 import PayOS from '@payos/node';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { BookingHistory } from '../bookings/entities/booking-history.entity';
@@ -419,17 +419,21 @@ export class PaymentService {
           console.error('Error unlocking slot after successful payment:', error);
         }
       }
-
+      
       // Handle voucher if exists
-      const activeVoucherUser = booking?.user?.voucherUsers?.find(
-        vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
-      );
-      if (activeVoucherUser?.voucher) {
+      if (invoice.voucherId) {
         try {
-          await this.voucherService.updateVoucherUsage(activeVoucherUser.voucher.id);
+          await this.voucherService.updateVoucherUsage(invoice.voucherId);
         } catch (error) {
           console.error('Error updating voucher usage:', error);
         }
+      }
+
+      // Calculate and update priority score for the booking
+      try {
+        await this.bookingService.updatePriorityScore(booking.id);
+      } catch (error) {
+        console.error('Error updating priority score:', error);
       }
 
       return {
@@ -580,15 +584,21 @@ export class PaymentService {
     }
 
     // Handle voucher if exists
-    const activeVoucherUser = booking?.user?.voucherUsers?.find(
-      vu => vu.status === VoucherUserStatusEnum.USED && vu.voucher
-    );
-    if (activeVoucherUser?.voucher) {
+    // Since voucher validation is already done during booking creation, 
+    // we can now read the voucherId directly from the invoice
+    if (invoice.voucherId) {
       try {
-        await this.voucherService.updateVoucherUsage(activeVoucherUser.voucher.id);
+        await this.voucherService.updateVoucherUsage(invoice.voucherId);
       } catch (error) {
         console.error('Error updating voucher usage:', error);
       }
+    }
+
+    // Calculate and update priority score for the booking
+    try {
+      await this.bookingService.updatePriorityScore(booking.id);
+    } catch (error) {
+      console.error('Error updating priority score:', error);
     }
 
     return {

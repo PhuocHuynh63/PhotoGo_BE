@@ -22,6 +22,10 @@ import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { MailService } from '../../3rdService/mail/mail.service';
 import { LessThan } from 'typeorm';
+import { UserRank } from '../../constants/user.enum';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
+import { SubscriptionStatus } from '../../constants/subscription.enum';
 
 @Injectable()
 export class BookingService {
@@ -51,6 +55,8 @@ export class BookingService {
     @InjectRepository(VoucherUser)
     private voucherUserRepository: Repository<VoucherUser>,
     private mailService: MailService,
+    private readonly subscriptionService: SubscriptionService,
+    private readonly subscriptionPlanService: SubscriptionPlanService,
   ) {}
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -1011,4 +1017,178 @@ export class BookingService {
     };
   }
 
+  /**
+   * Calculate priority score for a booking
+   * Priority score = deposit percentage + subscription score + rank score
+   */
+  async calculatePriorityScore(booking: Booking, invoice: any): Promise<number> {
+    let priorityScore = 0;
+
+    // 1. Calculate deposit percentage
+    const depositScore = await this.calculateDepositScore(booking, invoice);
+    priorityScore += depositScore;
+
+    // 2. Calculate subscription score
+    const subscriptionScore = await this.calculateSubscriptionScore(booking.userId);
+    priorityScore += subscriptionScore;
+
+    // 3. Calculate rank score
+    const rankScore = this.calculateRankScore(booking.user?.rank);
+    priorityScore += rankScore;
+
+    return Math.round(priorityScore * 100) / 100; // Round to 2 decimal places
+  }
+
+  /**
+   * Calculate deposit score based on deposit percentage
+   */
+  private async calculateDepositScore(booking: Booking, invoice: any): Promise<number> {
+    if (!invoice || !invoice.payablePrice) {
+      return 0;
+    }
+
+    let depositPercentage = 0;
+
+    if (booking.depositType === BookingDepositType.PERCENTAGE) {
+      // If deposit type is percentage, use deposit amount directly
+      depositPercentage = booking.depositAmount || 0;
+    } else {
+      // If deposit type is fixed amount, calculate percentage
+      const depositAmount = booking.depositAmount || 0;
+      depositPercentage = (depositAmount / invoice.originalPrice) * 100;
+    }
+
+    return depositPercentage;
+  }
+
+  /**
+   * Calculate subscription score based on user's subscription plan
+   */
+  private async calculateSubscriptionScore(userId: string): Promise<number> {
+    try {
+      // Get user's active subscriptions
+      const subscriptions = await this.subscriptionService.findAll({
+        userId,
+        status: SubscriptionStatus.ACTIVE,
+        current: 1,
+        pageSize: 10
+      });
+
+      if (!subscriptions.data || subscriptions.data.length === 0) {
+        return 0;
+      }
+
+      // Get all active subscription plans
+      const allPlans = await this.subscriptionPlanService.findAll({ isActive: true });
+      
+      if (allPlans.length === 0) {
+        return 0;
+      }
+
+      // Calculate total price of all plans
+      const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.price), 0);
+      
+      if (totalPlanPrice === 0) {
+        return 0;
+      }
+
+      // Get the user's subscription plan price
+      const userSubscription = subscriptions.data[0]; // One-to-one relationship
+      const userPlanPrice = Number(userSubscription.plan.price);
+      
+      // Calculate subscription score: (user plan price / total plan price) * 100
+      const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
+      
+      return subscriptionScore;
+    } catch (error) {
+      console.error('Error calculating subscription score:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Calculate rank score based on user's rank
+   */
+  private calculateRankScore(userRank: string): number {
+    const rankScores = {
+      [UserRank.BRONZE]: 10,
+      [UserRank.SILVER]: 20,
+      [UserRank.GOLD]: 50,
+      [UserRank.PLATINUM]: 75,
+      [UserRank.DIAMOND]: 100,
+      [UserRank.UNRANK]: 0,
+    };
+
+    return rankScores[userRank] || 0;
+  }
+
+  /**
+   * Update priority score for a booking
+   */
+  async updatePriorityScore(bookingId: string): Promise<void> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['user', 'invoices']
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    // Get the first invoice for this booking
+    const invoice = booking.invoices?.[0];
+    if (!invoice) {
+      console.warn(`No invoice found for booking ${bookingId}`);
+      return;
+    }
+
+    const priorityScore = await this.calculatePriorityScore(booking, invoice);
+    
+    booking.priorityScore = priorityScore;
+    await this.bookingRepository.save(booking);
+  }
+
+  /**
+   * Get bookings sorted by priority score for vendor approval
+   */
+  async getBookingsByPriorityScore(
+    vendorId: string,
+    paginationDto: PaginationDto
+  ): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10 } = paginationDto;
+    const skip = (current - 1) * pageSize;
+
+    const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
+      // .leftJoinAndSelect('booking.user', 'user')
+      .leftJoinAndSelect('booking.location', 'location')
+      // .leftJoinAndSelect('booking.serviceConcept', 'serviceConcept')
+      // .leftJoinAndSelect('booking.invoices', 'invoices')
+      // .leftJoinAndSelect('booking.histories', 'histories')
+      .where('location.vendorId = :vendorId', { vendorId })
+      .andWhere('booking.status = :status', { status: BookingStatus.PENDING || BookingStatus.CONFIRMED })
+      .orderBy('booking.priorityScore', 'DESC')
+      .addOrderBy('booking.created_at', 'ASC')
+      .skip(skip)
+      .take(pageSize);
+
+    const [data, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: data.map(booking => this.formatBookingDates(booking)),
+      pagination: {
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total
+      }
+    };
+  }
 }

@@ -5,6 +5,7 @@ import { Vendor } from '../../vendors/entities/vendor.entity';
 import { VoucherUser } from 'src/modules/vouchers/entities/voucher-user.entity';
 import { UserCampaign } from 'src/modules/campaign/entities/user-campaign.entity';
 import { Point } from 'src/modules/points/entities/point.entity';
+import { Subscription } from '../../subscription/entities/subscription.entity';
 
 @Entity('users') // Tên bảng là "users"
 export class User {
@@ -73,4 +74,7 @@ export class User {
 
   @OneToMany(() => Point, (point) => point.user)
   points: Point[];
+
+  @OneToOne(() => Subscription, (subscription) => subscription.user)
+  subscription: Subscription;
 }

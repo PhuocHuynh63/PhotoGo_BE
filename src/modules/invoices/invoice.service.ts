@@ -139,6 +139,7 @@ export class InvoiceService {
     const invoice = this.invoiceRepository.create({
       ...createInvoiceDto,
       bookingId: booking.id,
+      voucherId: voucher?.id || null,
       originalPrice,
       discountAmount,
       discountedPrice,
