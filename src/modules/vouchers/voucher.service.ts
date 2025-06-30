@@ -7,7 +7,7 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { FindVoucherDto } from './dto/find-voucher.dto';
 import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { User } from '../users/entities/user.entity';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
@@ -142,6 +142,7 @@ export class VoucherService {
       user_id: userId,
       voucher_id: voucherId,
       status: VoucherUserStatusEnum.AVAILABLE,
+      from: createVoucherUserDto.from || null,
       assigned_at: createVoucherUserDto.assigned_at || new Date(),
       used_at: null,
     });
@@ -236,6 +237,10 @@ export class VoucherService {
       .leftJoinAndSelect('voucherUser.voucher', 'voucher')
       .addSelect('voucher.maxprice')
       .where('voucherUser.user_id = :userId', { userId });
+
+    if (query.from) {
+      queryBuilder.andWhere('voucherUser.from = :from', { from: query.from });
+    }
 
     // Thêm filter theo term (tìm kiếm)
     if (query.term) {
@@ -388,13 +393,14 @@ export class VoucherService {
       await this.pointTransactionRepository.save(pointTransaction);
     }
 
-    // 4. Gán voucher cho user
+    // 4. Gán voucher cho user với from = 'đổi điểm'
     const existingVoucherUser = await this.voucherUserRepository.findOne({ where: { user_id: userId, voucher_id: voucherId } });
     if (existingVoucherUser) throw new BadRequestException('Bạn đã sở hữu voucher này');
     const voucherUser = this.voucherUserRepository.create({
       user_id: userId,
       voucher_id: voucherId,
       status: VoucherUserStatusEnum.AVAILABLE,
+      from: VoucherUserFromEnum.POINT_REDEEM,
       assigned_at: new Date(),
       used_at: null,
     });

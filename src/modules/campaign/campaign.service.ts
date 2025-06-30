@@ -15,7 +15,7 @@ import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
 
 @Injectable()
 export class CampaignService {
@@ -321,6 +321,39 @@ export class CampaignService {
     campaign.status = true;
     await this.campaignRepository.save(campaign);
 
+    // Auto-assign voucher to all existing users in campaign
+    const existingUserCampaigns = await this.userCampaignRepository.find({
+      where: { campaignId, isAvailable: true },
+    });
+
+    for (const userCampaign of existingUserCampaigns) {
+      // Check if voucher is still available and not expired
+      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+        // Check if user already has this voucher
+        const existingVoucherUser = await this.voucherUserRepository.findOne({
+          where: { user_id: userCampaign.userId, voucher_id: voucherId }
+        });
+        
+        if (!existingVoucherUser) {
+          // Create voucher-user relationship with from = 'chiến dịch'
+          const voucherUser = this.voucherUserRepository.create({
+            user_id: userCampaign.userId,
+            voucher_id: voucherId,
+            status: VoucherUserStatusEnum.AVAILABLE,
+            from: VoucherUserFromEnum.CAMPAIGN,
+            assigned_at: new Date(),
+            used_at: null,
+          });
+          
+          await this.voucherUserRepository.save(voucherUser);
+          
+          // Update voucher quantity
+          voucher.quantity -= 1;
+          await this.voucherRepository.save(voucher);
+        }
+      }
+    }
+
     return savedCampaignVoucher;
   }
 
@@ -333,6 +366,11 @@ export class CampaignService {
 
     const results: CampaignVoucher[] = [];
     const errors: string[] = [];
+
+    // Get existing users in campaign to assign vouchers later
+    const existingUserCampaigns = await this.userCampaignRepository.find({
+      where: { campaignId, isAvailable: true },
+    });
 
     for (const voucherId of voucherIds) {
       try {
@@ -370,6 +408,35 @@ export class CampaignService {
 
         const saved = await this.campaignVoucherRepository.save(campaignVoucher);
         results.push(saved);
+
+        // Auto-assign voucher to all existing users in campaign
+        for (const userCampaign of existingUserCampaigns) {
+          // Check if voucher is still available and not expired
+          if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+            // Check if user already has this voucher
+            const existingVoucherUser = await this.voucherUserRepository.findOne({
+              where: { user_id: userCampaign.userId, voucher_id: voucherId }
+            });
+            
+            if (!existingVoucherUser) {
+              // Create voucher-user relationship with from = 'chiến dịch'
+              const voucherUser = this.voucherUserRepository.create({
+                user_id: userCampaign.userId,
+                voucher_id: voucherId,
+                status: VoucherUserStatusEnum.AVAILABLE,
+                from: VoucherUserFromEnum.CAMPAIGN,
+                assigned_at: new Date(),
+                used_at: null,
+              });
+              
+              await this.voucherUserRepository.save(voucherUser);
+              
+              // Update voucher quantity
+              voucher.quantity -= 1;
+              await this.voucherRepository.save(voucher);
+            }
+          }
+        }
       } catch (error) {
         errors.push(`Lỗi khi thêm voucher ${voucherId}: ${error.message}`);
       }
@@ -488,17 +555,17 @@ export class CampaignService {
       throw new NotFoundException('Campaign không tồn tại');
     }
 
-    // Check if user exists (you might need to inject UserRepository)
+    // Check if user exists
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User không tồn tại');
     }
 
-    // Check if the relationship already exists
-    const existing = await this.userCampaignRepository.findOne({
+    // Check if user is already in campaign
+    const existingUserCampaign = await this.userCampaignRepository.findOne({
       where: { campaignId, userId },
     });
-    if (existing) {
+    if (existingUserCampaign) {
       throw new BadRequestException('User đã tham gia campaign này');
     }
 
@@ -508,7 +575,45 @@ export class CampaignService {
       isAvailable: true,
     });
 
-    return this.userCampaignRepository.save(userCampaign);
+    const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
+
+    // Auto-assign vouchers from campaign to user
+    const campaignVouchers = await this.campaignVoucherRepository.find({
+      where: { campaignId, isAvailable: true },
+      relations: ['voucher'],
+    });
+
+    for (const campaignVoucher of campaignVouchers) {
+      const voucher = campaignVoucher.voucher;
+      
+      // Check if voucher is still available and not expired
+      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+        // Check if user already has this voucher
+        const existingVoucherUser = await this.voucherUserRepository.findOne({
+          where: { user_id: userId, voucher_id: voucher.id }
+        });
+        
+        if (!existingVoucherUser) {
+          // Create voucher-user relationship with from = 'chiến dịch'
+          const voucherUser = this.voucherUserRepository.create({
+            user_id: userId,
+            voucher_id: voucher.id,
+            status: VoucherUserStatusEnum.AVAILABLE,
+            from: VoucherUserFromEnum.CAMPAIGN,
+            assigned_at: new Date(),
+            used_at: null,
+          });
+          
+          await this.voucherUserRepository.save(voucherUser);
+          
+          // Update voucher quantity
+          voucher.quantity -= 1;
+          await this.voucherRepository.save(voucher);
+        }
+      }
+    }
+
+    return savedUserCampaign;
   }
 
   async createMultipleUserCampaigns(
@@ -561,6 +666,12 @@ export class CampaignService {
       });
     }
 
+    // Get campaign vouchers to assign to users
+    const campaignVouchers = await this.campaignVoucherRepository.find({
+      where: { campaignId, isAvailable: true },
+      relations: ['voucher'],
+    });
+
     // Process existing users
     for (const userId of existingUserIds) {
       try {
@@ -585,8 +696,40 @@ export class CampaignService {
         });
 
         const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
+        
         if (savedUserCampaign) {
           successfulUsers.push(userId);
+          
+          // Auto-assign vouchers from campaign to user
+          for (const campaignVoucher of campaignVouchers) {
+            const voucher = campaignVoucher.voucher;
+            
+            // Check if voucher is still available and not expired
+            if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+              // Check if user already has this voucher
+              const existingVoucherUser = await this.voucherUserRepository.findOne({
+                where: { user_id: userId, voucher_id: voucher.id }
+              });
+              
+              if (!existingVoucherUser) {
+                // Create voucher-user relationship with from = 'chiến dịch'
+                const voucherUser = this.voucherUserRepository.create({
+                  user_id: userId,
+                  voucher_id: voucher.id,
+                  status: VoucherUserStatusEnum.AVAILABLE,
+                  from: VoucherUserFromEnum.CAMPAIGN,
+                  assigned_at: new Date(),
+                  used_at: null,
+                });
+                
+                await this.voucherUserRepository.save(voucherUser);
+                
+                // Update voucher quantity
+                voucher.quantity -= 1;
+                await this.voucherRepository.save(voucher);
+              }
+            }
+          }
         }
       } catch (error) {
         if (error.code === '23503') { // Foreign key violation

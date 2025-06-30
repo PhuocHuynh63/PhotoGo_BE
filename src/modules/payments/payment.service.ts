@@ -23,6 +23,7 @@ import { MailService } from 'src/3rdService/mail/mail.service';
 import { BookingService } from '../bookings/booking.service';
 import { RefundService } from '../refunds/refund.service';
 import { LocationAvailabilityService } from '../locations/location-availability.service';
+import { Voucher } from '../vouchers/entities/voucher.entity';
 
 @Injectable()
 export class PaymentService {
@@ -48,6 +49,8 @@ export class PaymentService {
     @Inject(forwardRef(() => RefundService))
     private readonly refundService: RefundService,
     private readonly locationAvailabilityService: LocationAvailabilityService,
+    @InjectRepository(Voucher)
+    private readonly voucherRepository: Repository<Voucher>,
   ) {}
 
   // Helper function to format date to DD/MM/YYYY
@@ -592,6 +595,13 @@ export class PaymentService {
       } catch (error) {
         console.error('Error updating voucher usage:', error);
       }
+    }
+    
+    const voucher = await this.voucherRepository.findOne({
+      where: { id: invoice.voucherId },
+    });
+    if (voucher) {
+      await this.voucherService.useVoucher(voucher.id, booking.userId);
     }
 
     // Calculate and update priority score for the booking

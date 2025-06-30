@@ -19,3 +19,8 @@ export enum VoucherTypeDiscount {
 export enum VoucherTypePoint {
     POINT = 'điểm',
 }
+
+export enum VoucherUserFromEnum {
+    CAMPAIGN = 'chiến dịch',
+    POINT_REDEEM = 'đổi điểm',
+}
