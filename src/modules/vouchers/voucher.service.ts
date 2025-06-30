@@ -142,7 +142,7 @@ export class VoucherService {
       user_id: userId,
       voucher_id: voucherId,
       status: VoucherUserStatusEnum.AVAILABLE,
-      assigned_at: createVoucherUserDto.assigned_at || currentDate,
+      assigned_at: createVoucherUserDto.assigned_at || new Date(),
       used_at: null,
     });
     return this.voucherUserRepository.save(voucherUser);

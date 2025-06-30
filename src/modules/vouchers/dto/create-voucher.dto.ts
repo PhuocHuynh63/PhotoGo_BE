@@ -130,6 +130,8 @@ export class CreateVoucherUserDto {
   @ApiProperty({
     description: 'Ngày gán mã giảm giá cho người dùng',
     example: '2025-10-01',
+    default: new Date().toISOString(),
+    required: false,
   })
-  assigned_at: string
+  assigned_at?: string;
 }

@@ -14,6 +14,7 @@ import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
+import { JoinWelcomeCampaignDto } from './dto/join-welcome-campaign.dto';
 
 @Controller('campaigns')
 @ApiTags('Campaigns')
@@ -292,5 +293,36 @@ export class CampaignController {
   @ApiParam({ name: 'voucherId', description: 'ID của voucher' })
   async updateCampaignVoucherStatus(@Param('campaignId') campaignId: string, @Param('voucherId') voucherId: string, @Body() updateCampaignVoucherStatusDto: CampaignVoucherStatusDto): Promise<CampaignVoucher> {
     return this.campaignService.updateCampaignVoucherStatus(campaignId, voucherId, updateCampaignVoucherStatusDto);
+  }
+
+  @Post('welcome/join')
+  @ApiOperation({ summary: 'Thêm user vào campaign "Chào Bạn Mới"' })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'User đã được thêm vào campaign thành công',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        userCampaign: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            campaignId: { type: 'string' },
+            isAvailable: { type: 'boolean' },
+            joinedAt: { type: 'string', format: 'date-time' }
+          }
+        }
+      }
+    }
+  })
+  async joinWelcomeCampaign(@Body() joinWelcomeCampaignDto: JoinWelcomeCampaignDto): Promise<{
+    message: string;
+    userCampaign: UserCampaign;
+  }> {
+    return this.campaignService.joinWelcomeCampaign(
+      joinWelcomeCampaignDto.userId,
+      joinWelcomeCampaignDto.note
+    );
   }
 } 
