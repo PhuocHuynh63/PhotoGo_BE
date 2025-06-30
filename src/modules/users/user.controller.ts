@@ -22,6 +22,7 @@ import { Role } from '../roles/entities/role.entity';
 @ApiBearerAuth('access-token')
 export class UserController {
   constructor(private readonly userService: UserService) { }
+  
   @Post('/create/user')
   @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ApiConsumes('multipart/form-data')

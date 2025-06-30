@@ -12,7 +12,7 @@ import { VendorStatus } from 'src/constants/vendor.enum';
 import { DataSource } from 'typeorm';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
-import { GeocodingService } from 'src/3rdService/google/geocoding.service';
+import { GeocodingWrapperService } from 'src/3rdService/goong';
 
 @Injectable()
 export class LocationService {
@@ -22,7 +22,7 @@ export class LocationService {
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
-    private readonly geocodingService: GeocodingService,
+    private readonly geocodingWrapperService: GeocodingWrapperService,
   ) { }
 
   //#region create
@@ -58,7 +58,7 @@ export class LocationService {
 
     // Process location with geocoding if coordinates are not provided
     let processedLocation = { ...createLocationDto };
-    
+
     // If coordinates are already provided, use them
     if (createLocationDto.latitude !== undefined && createLocationDto.longitude !== undefined) {
       // Validate provided coordinates
@@ -69,9 +69,9 @@ export class LocationService {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
       }
     } else if (createLocationDto.autoGeocode !== false) {
-      // Try to get coordinates from Google Maps
+      // Try to get coordinates from GoongAPI (with Google Maps fallback)
       try {
-        const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+        const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
           createLocationDto.address,
           createLocationDto.district,
           createLocationDto.ward,
@@ -181,7 +181,7 @@ export class LocationService {
 
     // Process location with geocoding if coordinates are not provided
     let processedLocation = { ...updateLocationDto };
-    
+
     // If coordinates are already provided, use them
     if (updateLocationDto.latitude !== undefined && updateLocationDto.longitude !== undefined) {
       // Validate provided coordinates
@@ -192,9 +192,9 @@ export class LocationService {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
       }
     } else if (updateLocationDto.autoGeocode !== false && (updateLocationDto.address || updateLocationDto.district || updateLocationDto.ward || updateLocationDto.city || updateLocationDto.province)) {
-      // Try to get coordinates from Google Maps if address components are being updated
+      // Try to get coordinates from GoongAPI (with Google Maps fallback) if address components are being updated
       try {
-        const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+        const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
           updateLocationDto.address || location.address,
           updateLocationDto.district || location.district,
           updateLocationDto.ward || location.ward,
@@ -500,4 +500,42 @@ export class LocationService {
     }
   }
   //#endregion getAllCities
+
+  //#region testGoongAPI
+  async testGoongAPI() {
+    try {
+      // Test 1: Provider Status
+      const status = await this.geocodingWrapperService.checkProvidersStatus();
+
+      // Test 2: Geocoding
+      const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
+        '123 Đường ABC',
+        'Quận 1',
+        'Phường Bến Nghé',
+        'TP. Hồ Chí Minh',
+        'Việt Nam'
+      );
+
+      // Test 3: Reverse Geocoding
+      const reverseResult = await this.geocodingWrapperService.getAddressFromCoordinates(
+        10.762622,
+        106.660172
+      );
+
+      // Test 4: Provider Comparison
+      const comparison = await this.geocodingWrapperService.compareProviders(
+        '123 Đường ABC, Quận 1, TP. Hồ Chí Minh'
+      );
+
+      return {
+        providerStatus: status,
+        geocoding: geocodingResult,
+        reverseGeocoding: reverseResult,
+        comparison: comparison
+      };
+    } catch (error) {
+      throw new Error(`GoongAPI test failed: ${error.message}`);
+    }
+  }
+  //#endregion testGoongAPI
 }
