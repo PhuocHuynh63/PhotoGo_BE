@@ -2,6 +2,7 @@ import { IsUUID, IsNotEmpty, IsString, IsOptional, IsEnum, IsArray, IsNumber, Mi
 import { ServicePackageStatus, ServiceConceptStatus } from 'src/constants/servicePackage.enum';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import { ServiceTypeStatus } from 'src/constants/serviceType.enum';
 
 export class CreateServiceConceptDto {
   @ApiProperty({
@@ -187,4 +188,14 @@ export class CreateServiceTypeDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiProperty({
+    example: 'active',
+    description: 'Trạng thái của loại dịch vụ',
+    enum: ServiceTypeStatus,  
+    required: false
+  })
+  @IsEnum(ServiceTypeStatus)
+  @IsOptional()
+  status?: ServiceTypeStatus;
 }

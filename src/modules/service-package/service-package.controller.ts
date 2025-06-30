@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Delete, Body, UseInterceptors, UploadedFiles, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Delete, Body, UseInterceptors, UploadedFiles, UseGuards, Query, BadRequestException, Logger } from '@nestjs/common';
 import { ServicePackageService } from './service-package.service';
 import {
   CreateServicePackageDto,
@@ -31,12 +31,16 @@ import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filte
 import { Roles } from 'src/decorator/role.decorator';
 import { Role } from 'src/modules/roles/entities/role.entity';
 import { PaginationDto } from './dto/pagination.dto';
+import { FilterServiceTypeDto } from './dto/filter-service-type.dto';
+import { PaginatedServiceTypeResponseDto } from './dto/response/service-type-response.dto';
 
 @ApiTags('Service Packages')
 @Controller('service-packages')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ServicePackageController {
+  private readonly logger = new Logger(ServicePackageController.name);
+
   constructor(private readonly servicePackageService: ServicePackageService) {}
 
   //#region ServicePackage - Static Routes
@@ -181,12 +185,26 @@ export class ServicePackageController {
     return this.servicePackageService.findAllServiceTypes(query);
   }
 
+  @Get('service-type/filter')
+  @Public()
+  @ApiOperation({ summary: 'Lọc loại dịch vụ' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách loại dịch vụ đã được lọc',
+    type: PaginatedServiceTypeResponseDto,
+  })
+  async filterServiceTypes(
+    @Query() filterDto: FilterServiceTypeDto,
+  ): Promise<PaginatedServiceTypeResponseDto> {
+    return this.servicePackageService.findAllServiceTypes(filterDto);
+  }
+
   @Get('service-type/:id')
   @Public()
   @ApiOperation({ summary: 'Lấy loại dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Loại dịch vụ đã được tìm thấy', type: ServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy loại dịch vụ' })
-  async findServiceType(@Param('id') id: string): Promise<ServiceType> {
+  async findServiceType(@Param('id') id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     return this.servicePackageService.findServiceType(id);
   }
 
@@ -196,8 +214,37 @@ export class ServicePackageController {
   @ApiResponse({ status: 200, description: 'Loại dịch vụ đã được cập nhật thành công', type: ServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy loại dịch vụ' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async updateServiceType(@Param('id') id: string, @Body() dto: UpdateServiceTypeDto): Promise<ServiceType> {
+  async updateServiceType(@Param('id') id: string, @Body() dto: UpdateServiceTypeDto): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     return this.servicePackageService.updateServiceType(id, dto);
+  }
+
+  @Patch('service-type/:id/toggle-status')
+  @Roles({ id: 'R008' } as Role)
+  @ApiOperation({ summary: 'Chuyển đổi trạng thái ẩn/hiện của loại dịch vụ' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Trạng thái loại dịch vụ đã được chuyển đổi thành công',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        description: { type: 'string' },
+        status: { 
+          type: 'string', 
+          enum: ['hoạt động', 'không hoạt động'],
+          example: 'hoạt động'
+        },
+        conceptCount: { type: 'number', example: 5 },
+        packageCount: { type: 'number', example: 3 },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy loại dịch vụ' })
+  async toggleServiceTypeStatus(@Param('id') id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
+    return this.servicePackageService.toggleServiceTypeStatus(id);
   }
 
   @Delete('service-type/:id')
@@ -389,10 +436,38 @@ export class ServicePackageController {
   @Delete('service-concept/:id')
   @Roles({ id: 'R008' } as Role)
   @ApiOperation({ summary: 'Xóa concept dịch vụ theo ID' })
-  @ApiResponse({ status: 200, description: 'Concept dịch vụ đã được xóa thành công' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Concept dịch vụ đã được xóa thành công',
+    schema: {
+      type: 'object',
+      properties: {
+        success: {
+          type: 'boolean',
+          example: true,
+          description: 'Trạng thái thành công'
+        },
+        message: {
+          type: 'string',
+          example: 'Concept dịch vụ đã được xóa thành công',
+          description: 'Thông báo kết quả'
+        },
+      }
+    }
+  })
   @ApiResponse({ status: 404, description: 'Không tìm thấy concept dịch vụ' })
-  async removeServiceConcept(@Param('id') id: string): Promise<void> {
-    return this.servicePackageService.removeServiceConcept(id);
+  async removeServiceConcept(@Param('id') id: string): Promise<{ success: boolean; message: string }> {
+    try {
+      await this.servicePackageService.removeServiceConcept(id);
+      this.logger.log(`Concept dịch vụ ${id} đã được xóa thành công`);
+      return {
+        success: true,
+        message: `Concept dịch vụ ${id} đã được xóa thành công`,
+      };
+    } catch (error) {
+      this.logger.error(`Lỗi khi xóa concept dịch vụ ${id}: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
   //#endregion ServiceConcept
 

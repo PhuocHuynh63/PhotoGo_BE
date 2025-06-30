@@ -11,6 +11,7 @@ import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateService
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
+import { ServiceTypeStatus } from 'src/constants/serviceType.enum';
 import { DataSource } from 'typeorm';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
@@ -18,6 +19,7 @@ import { GeminiService } from 'src/3rdService/gemini/gemini.service';
 import { PaginationDto } from './dto/pagination.dto';
 import { Commission } from '../commission/entities/commission.entity';
 import { CommissionStatus, CommissionType } from 'src/constants/commision.enum';
+import { FilterServiceTypeDto } from './dto/filter-service-type.dto';
 
 @Injectable()
 export class ServicePackageService {
@@ -340,12 +342,15 @@ export class ServicePackageService {
 
   //#region ServiceType
   async createServiceType(dto: CreateServiceTypeDto): Promise<ServiceType> {
-    const serviceType = this.serviceTypeRepository.create(dto);
+    const serviceType = this.serviceTypeRepository.create({
+      ...dto,
+      status: dto.status || ServiceTypeStatus.ACTIVE
+    });
     return this.serviceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceTypes(query?: PaginationDto): Promise<{
-    data: ServiceType[];
+  async findAllServiceTypes(query?: PaginationDto | FilterServiceTypeDto): Promise<{
+    data: (ServiceType & { conceptCount: number; packageCount: number })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -357,6 +362,14 @@ export class ServicePackageService {
     const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
     const skip = (currentPage - 1) * pageSize;
 
+    // Check if this is a filter query
+    const isFilterQuery = query && ('name' in query || 'status' in query || 'sortBy' in query || 'sortDirection' in query);
+    
+    if (isFilterQuery) {
+      return this.filterServiceTypes(query as FilterServiceTypeDto);
+    }
+
+    // Original simple query
     const queryBuilder = this.serviceTypeRepository.createQueryBuilder('service_type');
     queryBuilder.leftJoinAndSelect('service_type.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
 
@@ -365,8 +378,19 @@ export class ServicePackageService {
       .take(pageSize)
       .getManyAndCount();
 
+    // Get counts for each service type
+    const serviceTypeIds = data.map(type => type.id);
+    const counts = await this.getServiceTypeCounts(serviceTypeIds);
+
+    // Add counts to each service type
+    const serviceTypesWithCounts = data.map(type => ({
+      ...type,
+      conceptCount: counts.conceptCounts.get(type.id) || 0,
+      packageCount: counts.packageCounts.get(type.id) || 0
+    })) as (ServiceType & { conceptCount: number; packageCount: number })[];
+
     return {
-      data,
+      data: serviceTypesWithCounts,
       pagination: {
         current: currentPage,
         pageSize,
@@ -376,7 +400,191 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceType(id: string): Promise<ServiceType> {
+  private async getServiceTypeCounts(serviceTypeIds: string[]): Promise<{
+    conceptCounts: Map<string, number>;
+    packageCounts: Map<string, number>;
+  }> {
+    if (serviceTypeIds.length === 0) {
+      return {
+        conceptCounts: new Map(),
+        packageCounts: new Map()
+      };
+    }
+
+    // Get concept counts
+    const conceptCounts = await this.dataSource.query(`
+      SELECT sct.service_type_id, COUNT(DISTINCT sct.service_concept_id)::integer as count
+      FROM service_concept_service_type sct
+      WHERE sct.service_type_id = ANY($1)
+      GROUP BY sct.service_type_id
+    `, [serviceTypeIds]);
+
+    // Get package counts
+    const packageCounts = await this.dataSource.query(`
+      SELECT sct.service_type_id, COUNT(DISTINCT sp.id)::integer as count
+      FROM service_concept_service_type sct
+      JOIN service_concept sc ON sc.id = sct.service_concept_id
+      JOIN service_package sp ON sp.id = sc.service_package_id
+      WHERE sct.service_type_id = ANY($1)
+      GROUP BY sct.service_type_id
+    `, [serviceTypeIds]);
+
+    // Create maps
+    const conceptCountMap = new Map<string, number>(conceptCounts.map((c: any) => [c.service_type_id, Number(c.count)]));
+    const packageCountMap = new Map<string, number>(packageCounts.map((c: any) => [c.service_type_id, Number(c.count)]));
+
+    return {
+      conceptCounts: conceptCountMap,
+      packageCounts: packageCountMap
+    };
+  }
+
+  async filterServiceTypes(params: FilterServiceTypeDto): Promise<{
+    data: (ServiceType & { conceptCount: number; packageCount: number })[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = params.current || 1;
+    const pageSize = params.pageSize || 10;
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
+
+    const filterConditions: string[] = [];
+    const baseParams: any[] = [];
+
+    // Base query for service type filtering
+    let baseQuery = `
+      WITH service_type_counts AS (
+        SELECT 
+          st.id,
+          COUNT(DISTINCT sct.service_concept_id)::integer as concept_count,
+          COUNT(DISTINCT sp.id)::integer as package_count
+        FROM service_type st
+        LEFT JOIN service_concept_service_type sct ON sct.service_type_id = st.id
+        LEFT JOIN service_concept sc ON sc.id = sct.service_concept_id
+        LEFT JOIN service_package sp ON sp.id = sc.service_package_id
+        GROUP BY st.id
+      )
+      SELECT 
+        st.id,
+        st.name,
+        st.description,
+        st.status,
+        st.created_at,
+        st.updated_at,
+        COALESCE(stc.concept_count, 0) as concept_count,
+        COALESCE(stc.package_count, 0) as package_count
+      FROM service_type st
+      LEFT JOIN service_type_counts stc ON stc.id = st.id
+      WHERE 1=1
+    `;
+
+    if (params.name) {
+      filterConditions.push(`unaccent(st.name) ILIKE unaccent($${filterConditions.length + 1})`);
+      baseParams.push(`%${params.name}%`);
+    }
+
+    if (params.status) {
+      filterConditions.push(`st.status = $${filterConditions.length + 1}`);
+      baseParams.push(params.status);
+    }
+
+    // Append filters to the base query
+    if (filterConditions.length > 0) {
+      baseQuery += ` AND ${filterConditions.join(' AND ')}`;
+    }
+
+    // Add sorting
+    switch (params.sortBy) {
+      case 'concept_count':
+        baseQuery += ` ORDER BY concept_count ${sortDirection}`;
+        break;
+      case 'package_count':
+        baseQuery += ` ORDER BY package_count ${sortDirection}`;
+        break;
+      case 'name':
+        baseQuery += ` ORDER BY st.name ${sortDirection}`;
+        break;
+      default:
+        baseQuery += ` ORDER BY st.created_at ${sortDirection}`;
+    }
+
+    // Add pagination
+    baseQuery += ` LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`;
+    baseParams.push(pageSize, skip);
+
+    // Get total count query
+    const countFilterConditions: string[] = [];
+    const countParams: any[] = [];
+
+    let countQuery = `
+      SELECT COUNT(*)::integer as count
+      FROM service_type st
+      WHERE 1=1
+    `;
+
+    if (params.name) {
+      countFilterConditions.push(`unaccent(st.name) ILIKE unaccent($${countFilterConditions.length + 1})`);
+      countParams.push(`%${params.name}%`);
+    }
+
+    if (params.status) {
+      countFilterConditions.push(`st.status = $${countFilterConditions.length + 1}`);
+      countParams.push(params.status);
+    }
+
+    if (countFilterConditions.length > 0) {
+      countQuery += ` AND ${countFilterConditions.join(' AND ')}`;
+    }
+
+    // Execute queries
+    const [serviceTypeData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (serviceTypeData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Transform data to match entity structure
+    const serviceTypes = serviceTypeData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      conceptCount: Number(row.concept_count),
+      packageCount: Number(row.package_count)
+    })) as (ServiceType & { conceptCount: number; packageCount: number })[];
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    return {
+      data: serviceTypes,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
+  }
+
+  async findServiceType(id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     const serviceType = await this.serviceTypeRepository.findOne({
       where: { id },
       relations: ['serviceConceptServiceTypes'],
@@ -384,13 +592,40 @@ export class ServicePackageService {
     if (!serviceType) {
       throw new NotFoundException(`Loại dịch vụ với ID ${id} không tồn tại`);
     }
-    return serviceType;
+
+    // Get counts for this service type
+    const counts = await this.getServiceTypeCounts([id]);
+
+    return {
+      ...serviceType,
+      conceptCount: counts.conceptCounts.get(id) || 0,
+      packageCount: counts.packageCounts.get(id) || 0
+    } as ServiceType & { conceptCount: number; packageCount: number };
   }
 
-  async updateServiceType(id: string, dto: UpdateServiceTypeDto): Promise<ServiceType> {
+  async updateServiceType(id: string, dto: UpdateServiceTypeDto): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     const serviceType = await this.findServiceType(id);
     Object.assign(serviceType, dto);
-    return this.serviceTypeRepository.save(serviceType);
+    const updatedServiceType = await this.serviceTypeRepository.save(serviceType);
+    
+    // Return with counts
+    return this.findServiceType(updatedServiceType.id);
+  }
+
+  async toggleServiceTypeStatus(id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
+    const serviceType = await this.findServiceType(id);
+    
+    // Toggle status
+    serviceType.status = serviceType.status === ServiceTypeStatus.ACTIVE 
+      ? ServiceTypeStatus.INACTIVE 
+      : ServiceTypeStatus.ACTIVE;
+    
+    const updatedServiceType = await this.serviceTypeRepository.save(serviceType);
+    
+    this.logger.log(`Service type ${id} status changed to: ${updatedServiceType.status}`);
+    
+    // Return with counts
+    return this.findServiceType(updatedServiceType.id);
   }
 
   async removeServiceType(id: string): Promise<void> {
@@ -793,8 +1028,76 @@ export class ServicePackageService {
   }
 
   async removeServiceConcept(id: string): Promise<void> {
+    const startTime = Date.now();
+    this.logger.log(`Bắt đầu quá trình xóa khái niệm dịch vụ ${id}`);
+
     const serviceConcept = await this.findServiceConcept(id);
-    await this.serviceConceptRepository.remove(serviceConcept);
+
+    // Check if there are any active bookings using this concept
+    const activeBookings = await this.dataSource.query(`
+      SELECT COUNT(*)::integer as count
+      FROM booking
+      WHERE service_concept_id = $1
+      AND status IN ('đã xác nhận', 'đã thanh toán', 'đã hoàn thành')
+    `, [id]);
+
+    if (activeBookings[0].count > 0) {
+      throw new BadRequestException(
+        `Không thể xóa khái niệm dịch vụ vì có ${activeBookings[0].count} booking đang sử dụng`
+      );
+    }
+
+    // Check if there are any pending bookings
+    const pendingBookings = await this.dataSource.query(`
+      SELECT COUNT(*)::integer as count
+      FROM booking
+      WHERE service_concept_id = $1
+      AND status = 'chờ xử lý'
+    `, [id]);
+
+    if (pendingBookings[0].count > 0) {
+      this.logger.warn(`Có ${pendingBookings[0].count} booking đang chờ xác nhận cho concept ${id}`);
+    }
+
+    try {
+      // Delete related data in the correct order
+      
+      // 1. Delete commission records
+      await this.commissionRepository.delete({ serviceConceptId: id });
+      this.logger.log(`Đã xóa commission cho concept ${id}`);
+
+      // 2. Delete service concept images
+      await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
+      this.logger.log(`Đã xóa images cho concept ${id}`);
+
+      // 3. Delete service concept service type relationships
+      await this.serviceConceptServiceTypeRepository.delete({ serviceConceptId: id });
+      this.logger.log(`Đã xóa service type relationships cho concept ${id}`);
+
+      // 4. Delete concept vector if exists (this would be handled by Gemini service)
+      try {
+        // Note: This would require implementing a method in GeminiService to delete vectors
+        // await this.geminiService.deleteConceptVector(id);
+        this.logger.log(`Đã xóa concept vector cho concept ${id}`);
+      } catch (error) {
+        this.logger.warn(`Không thể xóa concept vector: ${error.message}`);
+      }
+
+      // 4.5. Delete concept vector records from database
+      await this.dataSource.query(`
+        DELETE FROM concept_vector 
+        WHERE concept_id = $1
+      `, [id]);
+      this.logger.log(`Đã xóa concept vector records cho concept ${id}`);
+
+      // 5. Finally delete the service concept
+      await this.serviceConceptRepository.remove(serviceConcept);
+      
+      this.logger.log(`Khái niệm dịch vụ ${id} đã được xóa thành công trong ${Date.now() - startTime}ms`);
+    } catch (error) {
+      this.logger.error(`Lỗi khi xóa khái niệm dịch vụ ${id}: ${error.message}`);
+      throw new BadRequestException(`Lỗi khi xóa khái niệm dịch vụ: ${error.message}`);
+    }
   }
   //#endregion ServiceConcept
 
