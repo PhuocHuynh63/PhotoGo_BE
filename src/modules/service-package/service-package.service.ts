@@ -43,7 +43,7 @@ export class ServicePackageService {
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
     private readonly geminiService: GeminiService,
-  ) {}
+  ) { }
 
   async create(
     createServicePackageDto: CreateServicePackageDto,
@@ -103,7 +103,8 @@ export class ServicePackageService {
       .getManyAndCount();
 
     // Get counts for each package
-    const packageIds = data.map(pkg => pkg.id);
+    const packageIds = data.map((pkg) => pkg.id);
+
     const counts = await this.dataSource.query(`
       WITH package_concepts AS (
         SELECT sp.id as package_id, sc.id as concept_id
@@ -119,12 +120,14 @@ export class ServicePackageService {
     `, [packageIds]);
 
     // Create a map of package ID to count
-    const countMap = new Map(counts.map(c => [c.package_id, Number(c.count)]));
+    const countMap = new Map(
+      counts.map((c) => [c.package_id, Number(c.count)]),
+    );
 
     // Add counts to each package
-    const packagesWithCounts = data.map(pkg => ({
+    const packagesWithCounts = data.map((pkg) => ({
       ...pkg,
-      countPackageUsed: countMap.get(pkg.id) || 0
+      countPackageUsed: countMap.get(pkg.id) || 0,
     })) as (ServicePackage & { countPackageUsed: number })[];
 
     return {
@@ -694,7 +697,7 @@ export class ServicePackageService {
 
     // Create service concept images
     if (uploadedImageUrls.length > 0) {
-      const imageEntities = uploadedImageUrls.map(url => 
+      const imageEntities = uploadedImageUrls.map(url =>
         this.serviceConceptImageRepository.create({
           imageUrl: url,
           serviceConceptId: savedServiceConcept.id
@@ -728,13 +731,13 @@ export class ServicePackageService {
     }
 
     this.logger.log(`Khái niệm dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
-    
+
     // Generate concept vector if images are provided
     if (files?.images && files.images.length > 0) {
       try {
         this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${savedServiceConcept.id}`);
         const vectorStartTime = Date.now();
-        
+
         // Try with first image
         try {
           await this.geminiService.generateConceptVector(files.images[0], savedServiceConcept.id);
@@ -764,7 +767,7 @@ export class ServicePackageService {
         // Don't throw error to prevent service concept creation from failing
       }
     }
-    
+
     // Return the concept with its service types
     return this.serviceConceptRepository.findOne({
       where: { id: savedServiceConcept.id },
@@ -863,12 +866,12 @@ export class ServicePackageService {
       this.logger.log('Uploading new images');
       try {
         const uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
-        
+
         // Delete existing images first
         await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
 
         // Then create new images
-        const imageEntities = uploadedImageUrls.map(url => 
+        const imageEntities = uploadedImageUrls.map(url =>
           this.serviceConceptImageRepository.create({
             imageUrl: url,
             serviceConceptId: id
@@ -968,7 +971,7 @@ export class ServicePackageService {
         // Add new relationships
         const toAdd = updateServiceConceptDto.serviceTypeIds
           .filter(typeId => !existingMap.has(typeId))
-          .map(typeId => 
+          .map(typeId =>
             this.serviceConceptServiceTypeRepository.create({
               serviceConceptId: id,
               serviceTypeId: typeId
@@ -992,7 +995,7 @@ export class ServicePackageService {
       try {
         this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${updatedServiceConcept.id}`);
         const vectorStartTime = Date.now();
-        
+
         // Try with first image
         try {
           await this.geminiService.generateConceptVector(files.images[0], updatedServiceConcept.id);
@@ -1193,6 +1196,22 @@ export class ServicePackageService {
         spp.max_price,
         COALESCE(spp.max_price, 0) as sort_price_desc,
         COALESCE(spp.min_price, 0) as sort_price_asc,
+        v.id as vendor_id,
+        v.name as vendor_name,
+        v.description as vendor_description,
+        v.logo as vendor_logo,
+        v.status as vendor_status,
+        v.slug as vendor_slug,
+        v.created_at as vendor_created_at,
+        v.updated_at as vendor_updated_at,
+        l.id as location_id,
+        l.address as location_address,
+        l.district as location_district,
+        l.ward as location_ward,
+        l.city as location_city,
+        l.province as location_province,
+        l.latitude as location_latitude,
+        l.longitude as location_longitude,
         sc.id as service_concept_id,
         sc.name as service_concept_name,
         sc.description as service_concept_description,
@@ -1205,13 +1224,17 @@ export class ServicePackageService {
       FROM filtered_packages fp
       JOIN service_package sp ON sp.id = fp.id
       LEFT JOIN service_package_prices spp ON spp.id = sp.id
+      LEFT JOIN vendors v ON v.id = sp.vendor_id
+      LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN service_concept sc ON sc.service_package_id = sp.id AND sc.status = 'hoạt động'
       LEFT JOIN service_concept_image sci ON sci.service_concept_id = sc.id
       LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
       LEFT JOIN service_type st ON st.id = sct.service_type_id
       GROUP BY 
         sp.id, sp.name, sp.description, sp.image_url, sp.status, sp.created_at, sp.updated_at,
-        spp.min_price, spp.max_price, sc.id, sc.name, sc.description, sc.price, sc.duration,
+        spp.min_price, spp.max_price, v.id, v.name, v.description, v.logo, v.status, v.slug, v.created_at, v.updated_at,
+        l.id, l.address, l.district, l.ward, l.city, l.province, l.latitude, l.longitude,
+        sc.id, sc.name, sc.description, sc.price, sc.duration,
         st.id, st.name, st.description
     `;
 
@@ -1319,7 +1342,6 @@ export class ServicePackageService {
 
     // Group service concepts and types by package
     const packagesByServicePackage = new Map();
-    // const serviceTypesByConcept = new Map(); // This map is not used
 
     packageData.forEach((row: any) => {
       if (!packagesByServicePackage.has(row.id)) {
@@ -1333,6 +1355,17 @@ export class ServicePackageService {
           updatedAt: row.updated_at,
           minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
           maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          vendor: {
+            id: row.vendor_id,
+            name: row.vendor_name,
+            description: row.vendor_description,
+            logo: row.vendor_logo,
+            status: row.vendor_status,
+            slug: row.vendor_slug,
+            createdAt: row.vendor_created_at,
+            updatedAt: row.vendor_updated_at,
+            locations: new Map<string, any>(),
+          },
           serviceConcepts: new Map<string, any>() // Use a Map for concepts to avoid duplicates
         });
       }
@@ -1363,12 +1396,31 @@ export class ServicePackageService {
           }
         }
       }
+
+      if (row.location_id) {
+        if (!servicePackage.vendor.locations.has(row.location_id)) {
+          servicePackage.vendor.locations.set(row.location_id, {
+            id: row.location_id,
+            address: row.location_address,
+            district: row.location_district,
+            ward: row.location_ward,
+            city: row.location_city,
+            province: row.location_province,
+            latitude: row.location_latitude,
+            longitude: row.location_longitude,
+          });
+        }
+      }
     });
 
     // After getting the results, slice to only show requested page size
     const servicePackages = Array.from(packagesByServicePackage.values())
       .map(pkg => ({
         ...pkg,
+        vendor: {
+          ...pkg.vendor,
+          locations: Array.from(pkg.vendor.locations.values()),
+        },
         serviceConcepts: Array.from(pkg.serviceConcepts.values()).map((concept: any) => ({
           ...concept,
           serviceTypes: Array.from(concept.serviceTypes.values())
@@ -1389,6 +1441,10 @@ export class ServicePackageService {
         updatedAt: pkg.updatedAt,
         minPrice: pkg.minPrice,
         maxPrice: pkg.maxPrice,
+        vendor: {
+          ...pkg.vendor,
+          locations: Array.from(pkg.vendor.locations.values()),
+        },
         serviceConcepts: pkg.serviceConcepts
       })),
       pagination: {
@@ -1399,5 +1455,4 @@ export class ServicePackageService {
       },
     };
   }
-  //#endregion filterServicePackages
 }
