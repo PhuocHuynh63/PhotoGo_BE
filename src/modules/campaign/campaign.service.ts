@@ -51,7 +51,7 @@ export class CampaignService {
 
   // Campaign endpoints
   async findAllCampaigns(findAllDto: FindAllDto): Promise<{ 
-    data: CampaignResponseDto[], 
+    data: any[], // Đổi sang any để trả về đúng format UI
     pagination: {
       current: number,
       pageSize: number,
@@ -59,7 +59,7 @@ export class CampaignService {
       totalItem: number,
     } 
   }> {
-    const { name, status, startDate, endDate, current, pageSize, sortBy, sortDirection } = findAllDto;
+    const { name, status, startDate, endDate, current, pageSize, sortBy, sortDirection, showAll } = findAllDto;
   
     // Validate dates
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
@@ -110,6 +110,10 @@ export class CampaignService {
       if (endDate) {
         q.andWhere('campaign.endDate <= :endDate', { endDate: this.convertDateFormat(endDate) });
       }
+      // Nếu không phải admin (showAll !== 'true') thì chỉ lấy campaign đang hoạt động
+      if (showAll !== 'true') {
+        q.andWhere('campaign.status = :activeStatus', { activeStatus: true });
+      }
     };
   
     addConditions(countQuery);
@@ -124,33 +128,46 @@ export class CampaignService {
     query.skip(skip).take(pageSize);
   
     const campaigns = await query.getMany();
-  
-    return {
-      data: campaigns.map(campaign => ({
+
+    // Tính toán response đúng format UI
+    const data = campaigns.map(campaign => {
+      const now = new Date();
+      const startDate = new Date(campaign.startDate);
+      const endDate = new Date(campaign.endDate);
+
+      // Tính status
+      let statusText = '';
+      if (now < startDate) statusText = 'Sắp diễn ra';
+      else if (now > endDate) statusText = 'Đã kết thúc';
+      else statusText = 'Đang chạy';
+
+      // Tính progress
+      let progress = 0;
+      if (now <= startDate) progress = 0;
+      else if (now >= endDate) progress = 100;
+      else progress = Math.round(((now.getTime() - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100);
+
+      // Tính voucher
+      const totalVoucher = campaign.campaignVouchers?.reduce((sum, cv) => sum + (cv.voucher?.quantity || 0), 0) || 0;
+      const usedVoucher = campaign.campaignVouchers?.reduce((sum, cv) => sum + (cv.voucher?.usedCount || 0), 0) || 0;
+      const remainingVoucher = totalVoucher - usedVoucher;
+
+      return {
         id: campaign.id,
         name: campaign.name,
-        status: campaign.status,
-        vouchers: campaign.campaignVouchers?.map(cv => ({
-          id: cv.voucher.id,
-          code: cv.voucher.code,
-          description: cv.voucher.description,
-          discount_type: cv.voucher.discount_type,
-          discount_value: cv.voucher.discount_value,
-          minPrice: cv.voucher.minPrice,
-          maxPrice: cv.voucher.maxPrice,
-          quantity: cv.voucher.quantity,
-          usedCount: cv.voucher.usedCount,
-          point: cv.voucher.point
-        })) || [],
-        users: campaign.userCampaigns?.map(uc => ({
-          id: uc.user.id,
-          fullName: uc.user.fullName,
-          email: uc.user.email,
-          phoneNumber: uc.user.phoneNumber,
-          status: uc.user.status,
-          rank: uc.user.rank
-        })) || []
-      })),
+        description: campaign.description,
+        status: statusText,
+        progress,
+        startDate: campaign.startDate,
+        endDate: campaign.endDate,
+        totalVoucher,
+        usedVoucher,
+        remainingVoucher,
+      };
+    });
+
+    return {
+      data,
       pagination: {
         current,
         pageSize,
@@ -161,7 +178,7 @@ export class CampaignService {
   }
 
   async createCampaign(createCampaignDto: CreateCampaignDto): Promise<Campaign> {
-    const { startDate, endDate, ...rest } = createCampaignDto;
+    const { startDate, endDate, status, ...rest } = createCampaignDto;
 
     // Validate dates
     if (new Date(this.convertDateFormat(startDate)) > new Date(this.convertDateFormat(endDate))) {
@@ -172,6 +189,7 @@ export class CampaignService {
       ...rest,
       startDate: this.convertDateFormat(startDate),
       endDate: this.convertDateFormat(endDate),
+      status: false,
     });
 
     return this.campaignRepository.save(campaign);
@@ -296,7 +314,13 @@ export class CampaignService {
       isAvailable: true,
     });
 
-    return this.campaignVoucherRepository.save(campaignVoucher);
+    const savedCampaignVoucher = await this.campaignVoucherRepository.save(campaignVoucher);
+
+    // Update campaign status to true after successfully adding voucher
+    campaign.status = true;
+    await this.campaignRepository.save(campaign);
+
+    return savedCampaignVoucher;
   }
 
   async createMultipleCampaignVouchers(campaignId: string, voucherIds: string[]): Promise<CampaignVoucher[]> {
@@ -357,6 +381,10 @@ export class CampaignService {
         successfulVouchers: results,
       });
     }
+
+    //update status of campaign
+    campaign.status = true;
+    await this.campaignRepository.save(campaign);
 
     return results;
   }

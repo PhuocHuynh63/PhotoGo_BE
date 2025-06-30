@@ -25,7 +25,7 @@ export class FilterServicePackageDto {
   @Transform(({ value }) => Array.isArray(value) ? value : [value])
   serviceTypeIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Trạng thái', enum: ServicePackageStatus, example: ServicePackageStatus.ACTIVE })
+  @ApiPropertyOptional({ description: 'Trạng thái', enum: ServicePackageStatus, example: ServicePackageStatus.ACTIVE, default: ServicePackageStatus.ACTIVE })
   @IsOptional()
   @IsEnum(ServicePackageStatus)
   status?: ServicePackageStatus;
@@ -49,4 +49,8 @@ export class FilterServicePackageDto {
   @IsOptional()
   @IsString()
   sortDirection?: 'asc' | 'desc';
+
+  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+  @IsOptional()
+  showAll?: string;
 }

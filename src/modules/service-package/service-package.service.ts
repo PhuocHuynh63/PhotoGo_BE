@@ -79,7 +79,7 @@ export class ServicePackageService {
     return savedServicePackage;
   }
 
-  async findAll(query?: PaginationDto): Promise<{
+  async findAll(query?: PaginationDto, showAll = false): Promise<{
     data: (ServicePackage & { countPackageUsed: number })[];
     pagination: {
       current: number;
@@ -93,6 +93,9 @@ export class ServicePackageService {
     const skip = (currentPage - 1) * pageSize;
 
     const queryBuilder = this.servicePackageRepository.createQueryBuilder('service_package');
+    if (!showAll) {
+      queryBuilder.andWhere('service_package.status = :status', { status: ServicePackageStatus.ACTIVE });
+    }
     queryBuilder.leftJoinAndSelect('service_package.vendor', 'vendor');
     queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
     queryBuilder.leftJoinAndSelect('service_concept.images', 'images');
@@ -141,11 +144,9 @@ export class ServicePackageService {
     };
   }
 
-  async findOne(
-    id: string,
-  ): Promise<ServicePackage & { countPackageUsed: number }> {
+  async findOne(id: string, showAll = false): Promise<ServicePackage & { countPackageUsed: number }> {
     const servicePackage = await this.servicePackageRepository.findOne({
-      where: { id },
+      where: showAll ? { id } : { id, status: ServicePackageStatus.ACTIVE },
       relations: [
         'vendor',
         'vendor.locations',
@@ -227,7 +228,7 @@ export class ServicePackageService {
     return this.servicePackageMetadataRepository.save(metadata);
   }
 
-  async findAllMetadata(query?: PaginationDto): Promise<{
+  async findAllMetadata(query?: PaginationDto, showAll = false): Promise<{
     data: ServicePackageMetadata[];
     pagination: {
       current: number;
@@ -259,7 +260,7 @@ export class ServicePackageService {
     };
   }
 
-  async findMetadata(id: string): Promise<ServicePackageMetadata> {
+  async findMetadata(id: string, showAll = false): Promise<ServicePackageMetadata> {
     const metadata = await this.servicePackageMetadataRepository.findOne({
       where: { id },
       relations: ['servicePackage'],
@@ -288,7 +289,7 @@ export class ServicePackageService {
     return this.serviceConceptServiceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceConceptServiceType(query?: PaginationDto): Promise<{
+  async findAllServiceConceptServiceType(query?: PaginationDto, showAll = false): Promise<{
     data: ServiceConceptServiceType[];
     pagination: {
       current: number;
@@ -320,7 +321,7 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string): Promise<ServiceConceptServiceType> {
+  async findServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string, showAll = false): Promise<ServiceConceptServiceType> {
     const serviceType = await this.serviceConceptServiceTypeRepository.findOne({
       where: { serviceConceptId, serviceTypeId },
       relations: ['serviceConcept'],
@@ -352,7 +353,7 @@ export class ServicePackageService {
     return this.serviceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceTypes(query?: PaginationDto | FilterServiceTypeDto): Promise<{
+  async findAllServiceTypes(query?: PaginationDto, showAll = false): Promise<{
     data: (ServiceType & { conceptCount: number; packageCount: number })[];
     pagination: {
       current: number;
@@ -367,13 +368,15 @@ export class ServicePackageService {
 
     // Check if this is a filter query
     const isFilterQuery = query && ('name' in query || 'status' in query || 'sortBy' in query || 'sortDirection' in query);
-    
     if (isFilterQuery) {
-      return this.filterServiceTypes(query as FilterServiceTypeDto);
+      return this.filterServiceTypes(query as any);
     }
 
     // Original simple query
     const queryBuilder = this.serviceTypeRepository.createQueryBuilder('service_type');
+    if (!showAll) {
+      queryBuilder.andWhere('service_type.status = :status', { status: ServiceTypeStatus.ACTIVE });
+    }
     queryBuilder.leftJoinAndSelect('service_type.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
 
     const [data, totalItem] = await queryBuilder
@@ -587,9 +590,9 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceType(id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
+  async findServiceType(id: string, showAll = false): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     const serviceType = await this.serviceTypeRepository.findOne({
-      where: { id },
+      where: showAll ? { id } : { id, status: ServiceTypeStatus.ACTIVE },
       relations: ['serviceConceptServiceTypes'],
     });
     if (!serviceType) {
@@ -775,7 +778,7 @@ export class ServicePackageService {
     });
   }
 
-  async findAllServiceConcepts(query?: PaginationDto): Promise<{
+  async findAllServiceConcepts(query?: PaginationDto, showAll = false): Promise<{
     data: (ServiceConcept & { countConceptUsed: number })[];
     pagination: {
       current: number;
@@ -789,6 +792,9 @@ export class ServicePackageService {
     const skip = (currentPage - 1) * pageSize;
 
     const queryBuilder = this.serviceConceptRepository.createQueryBuilder('service_concept');
+    if (!showAll) {
+      queryBuilder.andWhere('service_concept.status = :status', { status: ServiceConceptStatus.ACTIVE });
+    }
     queryBuilder.leftJoinAndSelect('service_concept.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
     queryBuilder.leftJoinAndSelect('serviceConceptServiceTypes.serviceType', 'serviceType');
     queryBuilder.leftJoinAndSelect('service_concept.images', 'images');
@@ -828,9 +834,9 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceConcept(id: string): Promise<ServiceConcept & { countConceptUsed: number }> {
+  async findServiceConcept(id: string, showAll = false): Promise<ServiceConcept & { countConceptUsed: number }> {
     const serviceConcept = await this.serviceConceptRepository.findOne({
-      where: { id },
+      where: showAll ? { id } : { id, status: ServiceConceptStatus.ACTIVE },
       relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType', 'images'],
     });
     if (!serviceConcept) {

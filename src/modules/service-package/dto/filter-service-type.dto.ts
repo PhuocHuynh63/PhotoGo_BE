@@ -15,7 +15,8 @@ export class FilterServiceTypeDto {
   @ApiPropertyOptional({
     description: 'Trạng thái của loại dịch vụ',
     enum: ServiceTypeStatus,
-    example: ServiceTypeStatus.ACTIVE
+    example: ServiceTypeStatus.ACTIVE,
+    default: ServiceTypeStatus.ACTIVE
   })
   @IsOptional()
   @IsEnum(ServiceTypeStatus)
@@ -62,4 +63,8 @@ export class FilterServiceTypeDto {
   @Min(1)
   @Max(100)
   pageSize?: number;
+
+  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+  @IsOptional()
+  showAll?: string;
 } 

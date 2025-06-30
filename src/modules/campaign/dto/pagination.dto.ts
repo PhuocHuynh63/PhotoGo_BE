@@ -1,5 +1,5 @@
 import { IsOptional, IsString, IsNumber, Min } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class PaginationDto {
@@ -36,4 +36,8 @@ export class PaginationDto {
     @IsString()
     @IsOptional()
     sortDirection?: string;
+
+    @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+    @IsOptional()
+    showAll?: string;
 }

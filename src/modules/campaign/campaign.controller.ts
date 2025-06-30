@@ -53,8 +53,8 @@ export class CampaignController {
       }
     }
   })
-  async findAllCampaigns(@Query() findAllDto: FindAllDto) {
-    return this.campaignService.findAllCampaigns(findAllDto);
+  async findAll(@Query() query: FindAllDto, @Query('showAll') showAll?: string) {
+    return this.campaignService.findAllCampaigns({ ...query, showAll });
   }
 
   @Post()
