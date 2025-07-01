@@ -1057,43 +1057,23 @@ export class LocationAvailabilityService {
         throw new BadRequestException('Định dạng ngày không hợp lệ');
       }
 
-      // Find the working date
-      const workingDate = await this.locationWorkingDateRepository.findOne({
-        where: {
-          date: new Date(convertedDate),
-          locationAvailability: {
-            location: { id: locationId }
-          }
-        },
-        relations: ['locationAvailability', 'locationAvailability.location']
-      });
-
-      if (!workingDate) {
-        throw new NotFoundException('Không tìm thấy thông tin ngày làm việc cho vị trí này');
-      }
-
-      // Find the slot time for this time
-      const slotTime = await this.locationSlotTimeRepository.findOne({
-        where: {
-          startSlotTime: time,
-          locationAvailability: {
-            location: { id: locationId }
-          }
-        },
-        relations: ['locationAvailability', 'locationAvailability.location']
-      });
-
-      if (!slotTime) {
-        throw new NotFoundException('Không tìm thấy thông tin slot time cho thời gian này');
-      }
-
-      // Find the slot time working date relationship
+      // Find the slot time working date relationship directly
       const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
         where: {
-          slotTimeId: slotTime.id,
-          workingDateId: workingDate.id
+          workingDate: {
+            date: new Date(convertedDate),
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          },
+          slotTime: {
+            startSlotTime: time,
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          }
         },
-        relations: ['slotTime', 'workingDate']
+        relations: ['slotTime', 'workingDate', 'workingDate.locationAvailability', 'workingDate.locationAvailability.location', 'slotTime.locationAvailability', 'slotTime.locationAvailability.location']
       });
 
       if (!slotTimeWorkingDate) {
@@ -1131,44 +1111,23 @@ export class LocationAvailabilityService {
         throw new BadRequestException('Định dạng ngày không hợp lệ');
       }
 
-      // Find the working date
-      const workingDate = await this.locationWorkingDateRepository.findOne({
-        where: {
-          date: new Date(convertedDate),
-          locationAvailability: {
-            location: { id: locationId }
-          }
-        },
-        relations: ['locationAvailability', 'locationAvailability.location']
-      });
-
-      if (!workingDate) {
-        this.logger.warn('Thông tin ngày làm việc cho vị trí này không tồn tại');
-        return;
-      }
-
-      // Find the slot time for this time
-      const slotTime = await this.locationSlotTimeRepository.findOne({
-        where: {
-          startSlotTime: time,
-          locationAvailability: {
-            location: { id: locationId }
-          }
-        },
-        relations: ['locationAvailability', 'locationAvailability.location']
-      });
-
-      if (!slotTime) {
-        this.logger.warn('Thông tin slot time cho thời gian này không tồn tại');
-        return;
-      }
-
-      // Find the slot time working date relationship
+      // Find the slot time working date relationship directly
       const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
         where: {
-          slotTimeId: slotTime.id,
-          workingDateId: workingDate.id
-        }
+          workingDate: {
+            date: new Date(convertedDate),
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          },
+          slotTime: {
+            startSlotTime: time,
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          }
+        },
+        relations: ['slotTime', 'workingDate', 'workingDate.locationAvailability', 'workingDate.locationAvailability.location', 'slotTime.locationAvailability', 'slotTime.locationAvailability.location']
       });
 
       if (!slotTimeWorkingDate) {
@@ -1195,46 +1154,31 @@ export class LocationAvailabilityService {
         return false;
       }
 
-      // Find the working date
-      const workingDate = await this.locationWorkingDateRepository.findOne({
-        where: {
-          date: new Date(convertedDate),
-          locationAvailability: {
-            location: { id: locationId }
-          }
-        },
-        relations: ['locationAvailability', 'locationAvailability.location']
-      });
-
-      if (!workingDate || !workingDate.isAvailable) {
-        return false;
-      }
-
-      // Find the slot time for this time
-      const slotTime = await this.locationSlotTimeRepository.findOne({
-        where: {
-          startSlotTime: time,
-          locationAvailability: {
-            location: { id: locationId }
-          }
-        },
-        relations: ['locationAvailability', 'locationAvailability.location']
-      });
-
-      if (!slotTime) {
-        return false;
-      }
-
-      // Find the slot time working date relationship
+      // Find the slot time working date relationship directly
       const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
         where: {
-          slotTimeId: slotTime.id,
-          workingDateId: workingDate.id
+          workingDate: {
+            date: new Date(convertedDate),
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          },
+          slotTime: {
+            startSlotTime: time,
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          }
         },
-        relations: ['slotTime', 'workingDate']
+        relations: ['slotTime', 'workingDate', 'workingDate.locationAvailability', 'workingDate.locationAvailability.location', 'slotTime.locationAvailability', 'slotTime.locationAvailability.location']
       });
 
       if (!slotTimeWorkingDate) {
+        return false;
+      }
+
+      // Check if working date is available
+      if (!slotTimeWorkingDate.workingDate.isAvailable) {
         return false;
       }
 

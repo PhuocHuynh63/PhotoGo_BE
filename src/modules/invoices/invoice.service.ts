@@ -100,10 +100,15 @@ export class InvoiceService {
     }
 
     let discountedPrice = originalPrice - discountAmount;
-    const commission = await this.commissionRepository.findOne({
-      where: { serviceConceptId: serviceConcept.id }
-    });
-    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.05;
+    
+    // Calculate tax amount by reverse engineering from originalPrice
+    // originalPrice = basePrice * (1 + 30/100) + basePrice * 0.05
+    // originalPrice = basePrice * 1.35
+    // basePrice = originalPrice / 1.35
+    // taxAmount = basePrice * 0.05
+    const basePrice = originalPrice / 1.35;
+    const taxAmount = Math.round(basePrice * 0.05);
+    
     const feeAmount = 0;
     const payablePrice = discountedPrice + feeAmount;
 
