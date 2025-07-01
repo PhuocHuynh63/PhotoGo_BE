@@ -352,6 +352,7 @@ export class GoongService {
 
     /**
      * Tạo địa chỉ hoàn chỉnh từ các thành phần địa chỉ
+     * Format: <số nhà> <tên đường>, <phường/xã>, <quận/huyện>, <thành phố>
      */
     private buildCompleteAddress(addressComponents: any): string {
         const parts: string[] = [];
@@ -362,30 +363,33 @@ export class GoongService {
             return '';
         }
 
-        // Số nhà và đường
+        // 1. Số nhà và đường (bắt buộc)
         if (addressComponents.streetNumber && addressComponents.route) {
             parts.push(`${addressComponents.streetNumber} ${addressComponents.route}`);
         } else if (addressComponents.route) {
             parts.push(addressComponents.route);
+        } else if (addressComponents.streetNumber) {
+            parts.push(addressComponents.streetNumber);
         }
 
-        // Phường/Xã
+        // 2. Phường/Xã (sublocality)
         if (addressComponents.sublocality) {
             parts.push(addressComponents.sublocality);
         }
 
-        // Quận/Huyện
+        // 3. Quận/Huyện (administrative_area_level_2)
         if (addressComponents.administrativeAreaLevel2) {
             parts.push(addressComponents.administrativeAreaLevel2);
         }
 
-        // Thành phố/Tỉnh
+        // 4. Thành phố/Tỉnh (administrative_area_level_1)
         if (addressComponents.administrativeAreaLevel1) {
             parts.push(addressComponents.administrativeAreaLevel1);
         }
 
-        // Quốc gia
-        if (addressComponents.country) {
+        // Không thêm quốc gia vào địa chỉ chính để giữ format gọn gàng
+        // Chỉ thêm nếu không có đủ các thành phần khác
+        if (parts.length === 0 && addressComponents.country) {
             parts.push(addressComponents.country);
         }
 
