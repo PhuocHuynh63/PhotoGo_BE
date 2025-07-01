@@ -151,6 +151,41 @@ export class BookingController {
     }
   }
 
+  @Get('vendor/:vendorId/priority')
+  @Public()
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách booking được sắp xếp theo độ ưu tiên',
+    type: [Booking],
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy danh sách booking được sắp xếp theo độ ưu tiên cho vendor' })
+  async getBookingsByPriorityScore(
+    @Param('vendorId') vendorId: string,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      if (!vendorId) {
+        throw new HttpException('Vendor ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.getBookingsByPriorityScore(vendorId, paginationDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking theo độ ưu tiên',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get('get-discount-amount')
   @Public()
   @ApiResponse({ status: 200, description: 'Lấy số tiền giảm giá', type: GetDiscountAmountDto })

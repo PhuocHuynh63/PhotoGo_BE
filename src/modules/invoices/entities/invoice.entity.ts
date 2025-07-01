@@ -7,11 +7,13 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToOne,
 } from 'typeorm';
 import { Booking } from '../../bookings/entities/booking.entity';
 import { InvoiceStatus } from 'src/constants/payment.enum';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Refund } from '../../refunds/entities/refund.entity';
+import { Voucher } from '../../vouchers/entities/voucher.entity';
 
 @Entity('invoice')
 export class Invoice {
@@ -24,6 +26,13 @@ export class Invoice {
 
   @Column({ type: 'uuid', name: 'booking_id' })
   bookingId: string;
+
+  @OneToOne(() => Voucher, voucher => voucher.invoice, { nullable: true })
+  @JoinColumn({ name: 'voucher_id' })
+  voucher: Voucher;
+
+  @Column({ type: 'uuid', nullable: true, name: 'voucher_id' })
+  voucherId: string;
 
   @Column({ type: 'integer', default: 0 })
   originalPrice: number;

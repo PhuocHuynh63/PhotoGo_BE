@@ -15,10 +15,11 @@ import { MailModule } from 'src/3rdService/mail/mail.module';
 import { BookingModule } from '../bookings/booking.module';
 import { RefundModule } from '../refunds/refund.module';
 import { LocationAvailabilityModule } from '../locations/location-availability.module';
+import { Voucher } from '../vouchers/entities/voucher.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction]),
+    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction, Voucher]),
     VoucherModule,
     PayosModule,
     AuthModule,

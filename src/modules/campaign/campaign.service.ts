@@ -15,6 +15,7 @@ import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
 
 @Injectable()
 export class CampaignService {
@@ -51,7 +52,7 @@ export class CampaignService {
 
   // Campaign endpoints
   async findAllCampaigns(findAllDto: FindAllDto): Promise<{ 
-    data: CampaignResponseDto[], 
+    data: any[], // Đổi sang any để trả về đúng format UI
     pagination: {
       current: number,
       pageSize: number,
@@ -59,7 +60,7 @@ export class CampaignService {
       totalItem: number,
     } 
   }> {
-    const { name, status, startDate, endDate, current, pageSize, sortBy, sortDirection } = findAllDto;
+    const { name, status, startDate, endDate, current, pageSize, sortBy, sortDirection, showAll } = findAllDto;
   
     // Validate dates
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
@@ -110,6 +111,10 @@ export class CampaignService {
       if (endDate) {
         q.andWhere('campaign.endDate <= :endDate', { endDate: this.convertDateFormat(endDate) });
       }
+      // Nếu không phải admin (showAll !== 'true') thì chỉ lấy campaign đang hoạt động
+      if (showAll !== 'true') {
+        q.andWhere('campaign.status = :activeStatus', { activeStatus: true });
+      }
     };
   
     addConditions(countQuery);
@@ -124,33 +129,46 @@ export class CampaignService {
     query.skip(skip).take(pageSize);
   
     const campaigns = await query.getMany();
-  
-    return {
-      data: campaigns.map(campaign => ({
+
+    // Tính toán response đúng format UI
+    const data = campaigns.map(campaign => {
+      const now = new Date();
+      const startDate = new Date(campaign.startDate);
+      const endDate = new Date(campaign.endDate);
+
+      // Tính status
+      let statusText = '';
+      if (now < startDate) statusText = 'Sắp diễn ra';
+      else if (now > endDate) statusText = 'Đã kết thúc';
+      else statusText = 'Đang chạy';
+
+      // Tính progress
+      let progress = 0;
+      if (now <= startDate) progress = 0;
+      else if (now >= endDate) progress = 100;
+      else progress = Math.round(((now.getTime() - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100);
+
+      // Tính voucher
+      const totalVoucher = campaign.campaignVouchers?.reduce((sum, cv) => sum + (cv.voucher?.quantity || 0), 0) || 0;
+      const usedVoucher = campaign.campaignVouchers?.reduce((sum, cv) => sum + (cv.voucher?.usedCount || 0), 0) || 0;
+      const remainingVoucher = totalVoucher - usedVoucher;
+
+      return {
         id: campaign.id,
         name: campaign.name,
-        status: campaign.status,
-        vouchers: campaign.campaignVouchers?.map(cv => ({
-          id: cv.voucher.id,
-          code: cv.voucher.code,
-          description: cv.voucher.description,
-          discount_type: cv.voucher.discount_type,
-          discount_value: cv.voucher.discount_value,
-          minPrice: cv.voucher.minPrice,
-          maxPrice: cv.voucher.maxPrice,
-          quantity: cv.voucher.quantity,
-          usedCount: cv.voucher.usedCount,
-          point: cv.voucher.point
-        })) || [],
-        users: campaign.userCampaigns?.map(uc => ({
-          id: uc.user.id,
-          fullName: uc.user.fullName,
-          email: uc.user.email,
-          phoneNumber: uc.user.phoneNumber,
-          status: uc.user.status,
-          rank: uc.user.rank
-        })) || []
-      })),
+        description: campaign.description,
+        status: statusText,
+        progress,
+        startDate: campaign.startDate,
+        endDate: campaign.endDate,
+        totalVoucher,
+        usedVoucher,
+        remainingVoucher,
+      };
+    });
+
+    return {
+      data,
       pagination: {
         current,
         pageSize,
@@ -161,7 +179,7 @@ export class CampaignService {
   }
 
   async createCampaign(createCampaignDto: CreateCampaignDto): Promise<Campaign> {
-    const { startDate, endDate, ...rest } = createCampaignDto;
+    const { startDate, endDate, status, ...rest } = createCampaignDto;
 
     // Validate dates
     if (new Date(this.convertDateFormat(startDate)) > new Date(this.convertDateFormat(endDate))) {
@@ -172,6 +190,7 @@ export class CampaignService {
       ...rest,
       startDate: this.convertDateFormat(startDate),
       endDate: this.convertDateFormat(endDate),
+      status: false,
     });
 
     return this.campaignRepository.save(campaign);
@@ -296,7 +315,46 @@ export class CampaignService {
       isAvailable: true,
     });
 
-    return this.campaignVoucherRepository.save(campaignVoucher);
+    const savedCampaignVoucher = await this.campaignVoucherRepository.save(campaignVoucher);
+
+    // Update campaign status to true after successfully adding voucher
+    campaign.status = true;
+    await this.campaignRepository.save(campaign);
+
+    // Auto-assign voucher to all existing users in campaign
+    const existingUserCampaigns = await this.userCampaignRepository.find({
+      where: { campaignId, isAvailable: true },
+    });
+
+    for (const userCampaign of existingUserCampaigns) {
+      // Check if voucher is still available and not expired
+      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+        // Check if user already has this voucher
+        const existingVoucherUser = await this.voucherUserRepository.findOne({
+          where: { user_id: userCampaign.userId, voucher_id: voucherId }
+        });
+        
+        if (!existingVoucherUser) {
+          // Create voucher-user relationship with from = 'chiến dịch'
+          const voucherUser = this.voucherUserRepository.create({
+            user_id: userCampaign.userId,
+            voucher_id: voucherId,
+            status: VoucherUserStatusEnum.AVAILABLE,
+            from: VoucherUserFromEnum.CAMPAIGN,
+            assigned_at: new Date(),
+            used_at: null,
+          });
+          
+          await this.voucherUserRepository.save(voucherUser);
+          
+          // Update voucher quantity
+          voucher.quantity -= 1;
+          await this.voucherRepository.save(voucher);
+        }
+      }
+    }
+
+    return savedCampaignVoucher;
   }
 
   async createMultipleCampaignVouchers(campaignId: string, voucherIds: string[]): Promise<CampaignVoucher[]> {
@@ -308,6 +366,11 @@ export class CampaignService {
 
     const results: CampaignVoucher[] = [];
     const errors: string[] = [];
+
+    // Get existing users in campaign to assign vouchers later
+    const existingUserCampaigns = await this.userCampaignRepository.find({
+      where: { campaignId, isAvailable: true },
+    });
 
     for (const voucherId of voucherIds) {
       try {
@@ -345,6 +408,35 @@ export class CampaignService {
 
         const saved = await this.campaignVoucherRepository.save(campaignVoucher);
         results.push(saved);
+
+        // Auto-assign voucher to all existing users in campaign
+        for (const userCampaign of existingUserCampaigns) {
+          // Check if voucher is still available and not expired
+          if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+            // Check if user already has this voucher
+            const existingVoucherUser = await this.voucherUserRepository.findOne({
+              where: { user_id: userCampaign.userId, voucher_id: voucherId }
+            });
+            
+            if (!existingVoucherUser) {
+              // Create voucher-user relationship with from = 'chiến dịch'
+              const voucherUser = this.voucherUserRepository.create({
+                user_id: userCampaign.userId,
+                voucher_id: voucherId,
+                status: VoucherUserStatusEnum.AVAILABLE,
+                from: VoucherUserFromEnum.CAMPAIGN,
+                assigned_at: new Date(),
+                used_at: null,
+              });
+              
+              await this.voucherUserRepository.save(voucherUser);
+              
+              // Update voucher quantity
+              voucher.quantity -= 1;
+              await this.voucherRepository.save(voucher);
+            }
+          }
+        }
       } catch (error) {
         errors.push(`Lỗi khi thêm voucher ${voucherId}: ${error.message}`);
       }
@@ -357,6 +449,10 @@ export class CampaignService {
         successfulVouchers: results,
       });
     }
+
+    //update status of campaign
+    campaign.status = true;
+    await this.campaignRepository.save(campaign);
 
     return results;
   }
@@ -459,17 +555,17 @@ export class CampaignService {
       throw new NotFoundException('Campaign không tồn tại');
     }
 
-    // Check if user exists (you might need to inject UserRepository)
+    // Check if user exists
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User không tồn tại');
     }
 
-    // Check if the relationship already exists
-    const existing = await this.userCampaignRepository.findOne({
+    // Check if user is already in campaign
+    const existingUserCampaign = await this.userCampaignRepository.findOne({
       where: { campaignId, userId },
     });
-    if (existing) {
+    if (existingUserCampaign) {
       throw new BadRequestException('User đã tham gia campaign này');
     }
 
@@ -479,7 +575,45 @@ export class CampaignService {
       isAvailable: true,
     });
 
-    return this.userCampaignRepository.save(userCampaign);
+    const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
+
+    // Auto-assign vouchers from campaign to user
+    const campaignVouchers = await this.campaignVoucherRepository.find({
+      where: { campaignId, isAvailable: true },
+      relations: ['voucher'],
+    });
+
+    for (const campaignVoucher of campaignVouchers) {
+      const voucher = campaignVoucher.voucher;
+      
+      // Check if voucher is still available and not expired
+      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+        // Check if user already has this voucher
+        const existingVoucherUser = await this.voucherUserRepository.findOne({
+          where: { user_id: userId, voucher_id: voucher.id }
+        });
+        
+        if (!existingVoucherUser) {
+          // Create voucher-user relationship with from = 'chiến dịch'
+          const voucherUser = this.voucherUserRepository.create({
+            user_id: userId,
+            voucher_id: voucher.id,
+            status: VoucherUserStatusEnum.AVAILABLE,
+            from: VoucherUserFromEnum.CAMPAIGN,
+            assigned_at: new Date(),
+            used_at: null,
+          });
+          
+          await this.voucherUserRepository.save(voucherUser);
+          
+          // Update voucher quantity
+          voucher.quantity -= 1;
+          await this.voucherRepository.save(voucher);
+        }
+      }
+    }
+
+    return savedUserCampaign;
   }
 
   async createMultipleUserCampaigns(
@@ -532,6 +666,12 @@ export class CampaignService {
       });
     }
 
+    // Get campaign vouchers to assign to users
+    const campaignVouchers = await this.campaignVoucherRepository.find({
+      where: { campaignId, isAvailable: true },
+      relations: ['voucher'],
+    });
+
     // Process existing users
     for (const userId of existingUserIds) {
       try {
@@ -556,8 +696,40 @@ export class CampaignService {
         });
 
         const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
+        
         if (savedUserCampaign) {
           successfulUsers.push(userId);
+          
+          // Auto-assign vouchers from campaign to user
+          for (const campaignVoucher of campaignVouchers) {
+            const voucher = campaignVoucher.voucher;
+            
+            // Check if voucher is still available and not expired
+            if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+              // Check if user already has this voucher
+              const existingVoucherUser = await this.voucherUserRepository.findOne({
+                where: { user_id: userId, voucher_id: voucher.id }
+              });
+              
+              if (!existingVoucherUser) {
+                // Create voucher-user relationship with from = 'chiến dịch'
+                const voucherUser = this.voucherUserRepository.create({
+                  user_id: userId,
+                  voucher_id: voucher.id,
+                  status: VoucherUserStatusEnum.AVAILABLE,
+                  from: VoucherUserFromEnum.CAMPAIGN,
+                  assigned_at: new Date(),
+                  used_at: null,
+                });
+                
+                await this.voucherUserRepository.save(voucherUser);
+                
+                // Update voucher quantity
+                voucher.quantity -= 1;
+                await this.voucherRepository.save(voucher);
+              }
+            }
+          }
         }
       } catch (error) {
         if (error.code === '23503') { // Foreign key violation
@@ -658,6 +830,111 @@ export class CampaignService {
     }
     campaignVoucher.isAvailable = status;
     return this.campaignVoucherRepository.save(campaignVoucher);
+  }
+
+  /**
+   * Thêm user vào campaign "Chào Bạn Mới" (voucher chỉ được sử dụng thông qua campaign)
+   */
+  async joinWelcomeCampaign(userId: string, note?: string): Promise<{
+    message: string;
+    userCampaign: UserCampaign;
+    voucherUser: VoucherUser;
+  }> {
+    // 1. Tìm campaign "Chào Bạn Mới"
+    const campaign = await this.campaignRepository.findOne({
+      where: { name: 'Chào Bạn Mới' }
+    });
+
+    if (!campaign) {
+      throw new NotFoundException('Campaign "Chào Bạn Mới" không tồn tại');
+    }
+
+    if (!campaign.status) {
+      throw new BadRequestException('Campaign "Chào Bạn Mới" đã bị vô hiệu hóa');
+    }
+
+    // 2. Kiểm tra thời gian campaign
+    const now = new Date();
+    const startDate = new Date(campaign.startDate);
+    const endDate = new Date(campaign.endDate);
+    
+    if (now < startDate) {
+      throw new BadRequestException('Campaign "Chào Bạn Mới" chưa bắt đầu');
+    }
+    
+    if (now > endDate) {
+      throw new BadRequestException('Campaign "Chào Bạn Mới" đã kết thúc');
+    }
+
+    // 3. Tìm voucher "CHAOBANMOI" trong campaign
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { 
+        campaignId: campaign.id,
+        isAvailable: true 
+      },
+      relations: ['voucher']
+    });
+
+    if (!campaignVoucher) {
+      throw new NotFoundException('Voucher "CHAOBANMOI" không có trong campaign "Chào Bạn Mới"');
+    }
+
+    const voucher = campaignVoucher.voucher;
+    if (!voucher) {
+      throw new NotFoundException('Voucher "CHAOBANMOI" không tồn tại');
+    }
+
+    if (voucher.status !== VoucherStatusEnum.ACTIVE) {
+      throw new BadRequestException('Voucher "CHAOBANMOI" không còn hiệu lực');
+    }
+
+    if (voucher.quantity <= 0) {
+      throw new BadRequestException('Voucher "CHAOBANMOI" đã hết số lượng');
+    }
+
+    // 4. Kiểm tra user có tồn tại không
+    const user = await this.userRepository.findOne({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('User không tồn tại');
+    }
+
+    // 5. Kiểm tra user đã tham gia campaign chưa
+    const existingUserCampaign = await this.userCampaignRepository.findOne({
+      where: { campaignId: campaign.id, userId }
+    });
+
+    if (existingUserCampaign) {
+      throw new BadRequestException('User đã tham gia campaign "Chào Bạn Mới"');
+    }
+
+    // 6. Thêm user vào campaign
+    const userCampaign = this.userCampaignRepository.create({
+      campaignId: campaign.id,
+      userId,
+      isAvailable: true,
+    });
+
+    // 7. Tạo voucher-user record
+    const voucherUser = this.voucherUserRepository.create({
+      user_id: userId, // Sử dụng userId trực tiếp thay vì query lại
+      voucher_id: voucher.id,
+      status: VoucherUserStatusEnum.AVAILABLE,
+      from: VoucherUserFromEnum.CAMPAIGN,
+      assigned_at: new Date(),
+      used_at: null,
+    });
+
+    const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
+    const savedVoucherUser = await this.voucherUserRepository.save(voucherUser);
+
+    return {
+      message: 'Thêm user vào campaign "Chào Bạn Mới" thành công. Voucher "CHAOBANMOI" đã được gán cho user.',
+      userCampaign: savedUserCampaign,
+      voucherUser: savedVoucherUser
+    };
   }
   
 } 

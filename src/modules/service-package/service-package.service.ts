@@ -11,6 +11,7 @@ import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateService
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
 import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
+import { ServiceTypeStatus } from 'src/constants/serviceType.enum';
 import { DataSource } from 'typeorm';
 import { PaginatedFilteredServicePackageResponseDto } from './dto/response/filtered-service-package-response.dto';
 import { ServiceConceptImage } from './entities/service-concept-image.entity';
@@ -18,6 +19,7 @@ import { GeminiService } from 'src/3rdService/gemini/gemini.service';
 import { PaginationDto } from './dto/pagination.dto';
 import { Commission } from '../commission/entities/commission.entity';
 import { CommissionStatus, CommissionType } from 'src/constants/commision.enum';
+import { FilterServiceTypeDto } from './dto/filter-service-type.dto';
 
 @Injectable()
 export class ServicePackageService {
@@ -41,7 +43,7 @@ export class ServicePackageService {
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
     private readonly geminiService: GeminiService,
-  ) {}
+  ) { }
 
   async create(
     createServicePackageDto: CreateServicePackageDto,
@@ -77,7 +79,7 @@ export class ServicePackageService {
     return savedServicePackage;
   }
 
-  async findAll(query?: PaginationDto): Promise<{
+  async findAll(query?: PaginationDto, showAll = false): Promise<{
     data: (ServicePackage & { countPackageUsed: number })[];
     pagination: {
       current: number;
@@ -91,6 +93,9 @@ export class ServicePackageService {
     const skip = (currentPage - 1) * pageSize;
 
     const queryBuilder = this.servicePackageRepository.createQueryBuilder('service_package');
+    if (!showAll) {
+      queryBuilder.andWhere('service_package.status = :status', { status: ServicePackageStatus.ACTIVE });
+    }
     queryBuilder.leftJoinAndSelect('service_package.vendor', 'vendor');
     queryBuilder.leftJoinAndSelect('service_package.serviceConcepts', 'service_concept');
     queryBuilder.leftJoinAndSelect('service_concept.images', 'images');
@@ -101,7 +106,8 @@ export class ServicePackageService {
       .getManyAndCount();
 
     // Get counts for each package
-    const packageIds = data.map(pkg => pkg.id);
+    const packageIds = data.map((pkg) => pkg.id);
+
     const counts = await this.dataSource.query(`
       WITH package_concepts AS (
         SELECT sp.id as package_id, sc.id as concept_id
@@ -117,12 +123,14 @@ export class ServicePackageService {
     `, [packageIds]);
 
     // Create a map of package ID to count
-    const countMap = new Map(counts.map(c => [c.package_id, Number(c.count)]));
+    const countMap = new Map(
+      counts.map((c) => [c.package_id, Number(c.count)]),
+    );
 
     // Add counts to each package
-    const packagesWithCounts = data.map(pkg => ({
+    const packagesWithCounts = data.map((pkg) => ({
       ...pkg,
-      countPackageUsed: countMap.get(pkg.id) || 0
+      countPackageUsed: countMap.get(pkg.id) || 0,
     })) as (ServicePackage & { countPackageUsed: number })[];
 
     return {
@@ -136,11 +144,9 @@ export class ServicePackageService {
     };
   }
 
-  async findOne(
-    id: string,
-  ): Promise<ServicePackage & { countPackageUsed: number }> {
+  async findOne(id: string, showAll = false): Promise<ServicePackage & { countPackageUsed: number }> {
     const servicePackage = await this.servicePackageRepository.findOne({
-      where: { id },
+      where: showAll ? { id } : { id, status: ServicePackageStatus.ACTIVE },
       relations: [
         'vendor',
         'vendor.locations',
@@ -222,7 +228,7 @@ export class ServicePackageService {
     return this.servicePackageMetadataRepository.save(metadata);
   }
 
-  async findAllMetadata(query?: PaginationDto): Promise<{
+  async findAllMetadata(query?: PaginationDto, showAll = false): Promise<{
     data: ServicePackageMetadata[];
     pagination: {
       current: number;
@@ -254,7 +260,7 @@ export class ServicePackageService {
     };
   }
 
-  async findMetadata(id: string): Promise<ServicePackageMetadata> {
+  async findMetadata(id: string, showAll = false): Promise<ServicePackageMetadata> {
     const metadata = await this.servicePackageMetadataRepository.findOne({
       where: { id },
       relations: ['servicePackage'],
@@ -283,7 +289,7 @@ export class ServicePackageService {
     return this.serviceConceptServiceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceConceptServiceType(query?: PaginationDto): Promise<{
+  async findAllServiceConceptServiceType(query?: PaginationDto, showAll = false): Promise<{
     data: ServiceConceptServiceType[];
     pagination: {
       current: number;
@@ -315,7 +321,7 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string): Promise<ServiceConceptServiceType> {
+  async findServiceConceptServiceType(serviceConceptId: string, serviceTypeId: string, showAll = false): Promise<ServiceConceptServiceType> {
     const serviceType = await this.serviceConceptServiceTypeRepository.findOne({
       where: { serviceConceptId, serviceTypeId },
       relations: ['serviceConcept'],
@@ -340,12 +346,15 @@ export class ServicePackageService {
 
   //#region ServiceType
   async createServiceType(dto: CreateServiceTypeDto): Promise<ServiceType> {
-    const serviceType = this.serviceTypeRepository.create(dto);
+    const serviceType = this.serviceTypeRepository.create({
+      ...dto,
+      status: dto.status || ServiceTypeStatus.ACTIVE
+    });
     return this.serviceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceTypes(query?: PaginationDto): Promise<{
-    data: ServiceType[];
+  async findAllServiceTypes(query?: PaginationDto, showAll = false): Promise<{
+    data: (ServiceType & { conceptCount: number; packageCount: number })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -357,7 +366,17 @@ export class ServicePackageService {
     const pageSize = query?.pageSize ? Number(query.pageSize) : 10;
     const skip = (currentPage - 1) * pageSize;
 
+    // Check if this is a filter query
+    const isFilterQuery = query && ('name' in query || 'status' in query || 'sortBy' in query || 'sortDirection' in query);
+    if (isFilterQuery) {
+      return this.filterServiceTypes(query as any);
+    }
+
+    // Original simple query
     const queryBuilder = this.serviceTypeRepository.createQueryBuilder('service_type');
+    if (!showAll) {
+      queryBuilder.andWhere('service_type.status = :status', { status: ServiceTypeStatus.ACTIVE });
+    }
     queryBuilder.leftJoinAndSelect('service_type.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
 
     const [data, totalItem] = await queryBuilder
@@ -365,8 +384,19 @@ export class ServicePackageService {
       .take(pageSize)
       .getManyAndCount();
 
+    // Get counts for each service type
+    const serviceTypeIds = data.map(type => type.id);
+    const counts = await this.getServiceTypeCounts(serviceTypeIds);
+
+    // Add counts to each service type
+    const serviceTypesWithCounts = data.map(type => ({
+      ...type,
+      conceptCount: counts.conceptCounts.get(type.id) || 0,
+      packageCount: counts.packageCounts.get(type.id) || 0
+    })) as (ServiceType & { conceptCount: number; packageCount: number })[];
+
     return {
-      data,
+      data: serviceTypesWithCounts,
       pagination: {
         current: currentPage,
         pageSize,
@@ -376,21 +406,232 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceType(id: string): Promise<ServiceType> {
+  private async getServiceTypeCounts(serviceTypeIds: string[]): Promise<{
+    conceptCounts: Map<string, number>;
+    packageCounts: Map<string, number>;
+  }> {
+    if (serviceTypeIds.length === 0) {
+      return {
+        conceptCounts: new Map(),
+        packageCounts: new Map()
+      };
+    }
+
+    // Get concept counts
+    const conceptCounts = await this.dataSource.query(`
+      SELECT sct.service_type_id, COUNT(DISTINCT sct.service_concept_id)::integer as count
+      FROM service_concept_service_type sct
+      WHERE sct.service_type_id = ANY($1)
+      GROUP BY sct.service_type_id
+    `, [serviceTypeIds]);
+
+    // Get package counts
+    const packageCounts = await this.dataSource.query(`
+      SELECT sct.service_type_id, COUNT(DISTINCT sp.id)::integer as count
+      FROM service_concept_service_type sct
+      JOIN service_concept sc ON sc.id = sct.service_concept_id
+      JOIN service_package sp ON sp.id = sc.service_package_id
+      WHERE sct.service_type_id = ANY($1)
+      GROUP BY sct.service_type_id
+    `, [serviceTypeIds]);
+
+    // Create maps
+    const conceptCountMap = new Map<string, number>(conceptCounts.map((c: any) => [c.service_type_id, Number(c.count)]));
+    const packageCountMap = new Map<string, number>(packageCounts.map((c: any) => [c.service_type_id, Number(c.count)]));
+
+    return {
+      conceptCounts: conceptCountMap,
+      packageCounts: packageCountMap
+    };
+  }
+
+  async filterServiceTypes(params: FilterServiceTypeDto): Promise<{
+    data: (ServiceType & { conceptCount: number; packageCount: number })[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = params.current || 1;
+    const pageSize = params.pageSize || 10;
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
+
+    const filterConditions: string[] = [];
+    const baseParams: any[] = [];
+
+    // Base query for service type filtering
+    let baseQuery = `
+      WITH service_type_counts AS (
+        SELECT 
+          st.id,
+          COUNT(DISTINCT sct.service_concept_id)::integer as concept_count,
+          COUNT(DISTINCT sp.id)::integer as package_count
+        FROM service_type st
+        LEFT JOIN service_concept_service_type sct ON sct.service_type_id = st.id
+        LEFT JOIN service_concept sc ON sc.id = sct.service_concept_id
+        LEFT JOIN service_package sp ON sp.id = sc.service_package_id
+        GROUP BY st.id
+      )
+      SELECT 
+        st.id,
+        st.name,
+        st.description,
+        st.status,
+        st.created_at,
+        st.updated_at,
+        COALESCE(stc.concept_count, 0) as concept_count,
+        COALESCE(stc.package_count, 0) as package_count
+      FROM service_type st
+      LEFT JOIN service_type_counts stc ON stc.id = st.id
+      WHERE 1=1
+    `;
+
+    if (params.name) {
+      filterConditions.push(`unaccent(st.name) ILIKE unaccent($${filterConditions.length + 1})`);
+      baseParams.push(`%${params.name}%`);
+    }
+
+    if (params.status) {
+      filterConditions.push(`st.status = $${filterConditions.length + 1}`);
+      baseParams.push(params.status);
+    }
+
+    // Append filters to the base query
+    if (filterConditions.length > 0) {
+      baseQuery += ` AND ${filterConditions.join(' AND ')}`;
+    }
+
+    // Add sorting
+    switch (params.sortBy) {
+      case 'concept_count':
+        baseQuery += ` ORDER BY concept_count ${sortDirection}`;
+        break;
+      case 'package_count':
+        baseQuery += ` ORDER BY package_count ${sortDirection}`;
+        break;
+      case 'name':
+        baseQuery += ` ORDER BY st.name ${sortDirection}`;
+        break;
+      default:
+        baseQuery += ` ORDER BY st.created_at ${sortDirection}`;
+    }
+
+    // Add pagination
+    baseQuery += ` LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`;
+    baseParams.push(pageSize, skip);
+
+    // Get total count query
+    const countFilterConditions: string[] = [];
+    const countParams: any[] = [];
+
+    let countQuery = `
+      SELECT COUNT(*)::integer as count
+      FROM service_type st
+      WHERE 1=1
+    `;
+
+    if (params.name) {
+      countFilterConditions.push(`unaccent(st.name) ILIKE unaccent($${countFilterConditions.length + 1})`);
+      countParams.push(`%${params.name}%`);
+    }
+
+    if (params.status) {
+      countFilterConditions.push(`st.status = $${countFilterConditions.length + 1}`);
+      countParams.push(params.status);
+    }
+
+    if (countFilterConditions.length > 0) {
+      countQuery += ` AND ${countFilterConditions.join(' AND ')}`;
+    }
+
+    // Execute queries
+    const [serviceTypeData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (serviceTypeData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Transform data to match entity structure
+    const serviceTypes = serviceTypeData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      conceptCount: Number(row.concept_count),
+      packageCount: Number(row.package_count)
+    })) as (ServiceType & { conceptCount: number; packageCount: number })[];
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    return {
+      data: serviceTypes,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
+  }
+
+  async findServiceType(id: string, showAll = false): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     const serviceType = await this.serviceTypeRepository.findOne({
-      where: { id },
+      where: showAll ? { id } : { id, status: ServiceTypeStatus.ACTIVE },
       relations: ['serviceConceptServiceTypes'],
     });
     if (!serviceType) {
       throw new NotFoundException(`Loại dịch vụ với ID ${id} không tồn tại`);
     }
-    return serviceType;
+
+    // Get counts for this service type
+    const counts = await this.getServiceTypeCounts([id]);
+
+    return {
+      ...serviceType,
+      conceptCount: counts.conceptCounts.get(id) || 0,
+      packageCount: counts.packageCounts.get(id) || 0
+    } as ServiceType & { conceptCount: number; packageCount: number };
   }
 
-  async updateServiceType(id: string, dto: UpdateServiceTypeDto): Promise<ServiceType> {
+  async updateServiceType(id: string, dto: UpdateServiceTypeDto): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     const serviceType = await this.findServiceType(id);
     Object.assign(serviceType, dto);
-    return this.serviceTypeRepository.save(serviceType);
+    const updatedServiceType = await this.serviceTypeRepository.save(serviceType);
+    
+    // Return with counts
+    return this.findServiceType(updatedServiceType.id);
+  }
+
+  async toggleServiceTypeStatus(id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
+    const serviceType = await this.findServiceType(id);
+    
+    // Toggle status
+    serviceType.status = serviceType.status === ServiceTypeStatus.ACTIVE 
+      ? ServiceTypeStatus.INACTIVE 
+      : ServiceTypeStatus.ACTIVE;
+    
+    const updatedServiceType = await this.serviceTypeRepository.save(serviceType);
+    
+    this.logger.log(`Service type ${id} status changed to: ${updatedServiceType.status}`);
+    
+    // Return with counts
+    return this.findServiceType(updatedServiceType.id);
   }
 
   async removeServiceType(id: string): Promise<void> {
@@ -459,7 +700,7 @@ export class ServicePackageService {
 
     // Create service concept images
     if (uploadedImageUrls.length > 0) {
-      const imageEntities = uploadedImageUrls.map(url => 
+      const imageEntities = uploadedImageUrls.map(url =>
         this.serviceConceptImageRepository.create({
           imageUrl: url,
           serviceConceptId: savedServiceConcept.id
@@ -493,13 +734,13 @@ export class ServicePackageService {
     }
 
     this.logger.log(`Khái niệm dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
-    
+
     // Generate concept vector if images are provided
     if (files?.images && files.images.length > 0) {
       try {
         this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${savedServiceConcept.id}`);
         const vectorStartTime = Date.now();
-        
+
         // Try with first image
         try {
           await this.geminiService.generateConceptVector(files.images[0], savedServiceConcept.id);
@@ -529,7 +770,7 @@ export class ServicePackageService {
         // Don't throw error to prevent service concept creation from failing
       }
     }
-    
+
     // Return the concept with its service types
     return this.serviceConceptRepository.findOne({
       where: { id: savedServiceConcept.id },
@@ -537,7 +778,7 @@ export class ServicePackageService {
     });
   }
 
-  async findAllServiceConcepts(query?: PaginationDto): Promise<{
+  async findAllServiceConcepts(query?: PaginationDto, showAll = false): Promise<{
     data: (ServiceConcept & { countConceptUsed: number })[];
     pagination: {
       current: number;
@@ -551,6 +792,9 @@ export class ServicePackageService {
     const skip = (currentPage - 1) * pageSize;
 
     const queryBuilder = this.serviceConceptRepository.createQueryBuilder('service_concept');
+    if (!showAll) {
+      queryBuilder.andWhere('service_concept.status = :status', { status: ServiceConceptStatus.ACTIVE });
+    }
     queryBuilder.leftJoinAndSelect('service_concept.serviceConceptServiceTypes', 'serviceConceptServiceTypes');
     queryBuilder.leftJoinAndSelect('serviceConceptServiceTypes.serviceType', 'serviceType');
     queryBuilder.leftJoinAndSelect('service_concept.images', 'images');
@@ -590,9 +834,9 @@ export class ServicePackageService {
     };
   }
 
-  async findServiceConcept(id: string): Promise<ServiceConcept & { countConceptUsed: number }> {
+  async findServiceConcept(id: string, showAll = false): Promise<ServiceConcept & { countConceptUsed: number }> {
     const serviceConcept = await this.serviceConceptRepository.findOne({
-      where: { id },
+      where: showAll ? { id } : { id, status: ServiceConceptStatus.ACTIVE },
       relations: ['serviceConceptServiceTypes', 'serviceConceptServiceTypes.serviceType', 'images'],
     });
     if (!serviceConcept) {
@@ -628,12 +872,12 @@ export class ServicePackageService {
       this.logger.log('Uploading new images');
       try {
         const uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
-        
+
         // Delete existing images first
         await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
 
         // Then create new images
-        const imageEntities = uploadedImageUrls.map(url => 
+        const imageEntities = uploadedImageUrls.map(url =>
           this.serviceConceptImageRepository.create({
             imageUrl: url,
             serviceConceptId: id
@@ -733,7 +977,7 @@ export class ServicePackageService {
         // Add new relationships
         const toAdd = updateServiceConceptDto.serviceTypeIds
           .filter(typeId => !existingMap.has(typeId))
-          .map(typeId => 
+          .map(typeId =>
             this.serviceConceptServiceTypeRepository.create({
               serviceConceptId: id,
               serviceTypeId: typeId
@@ -757,7 +1001,7 @@ export class ServicePackageService {
       try {
         this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${updatedServiceConcept.id}`);
         const vectorStartTime = Date.now();
-        
+
         // Try with first image
         try {
           await this.geminiService.generateConceptVector(files.images[0], updatedServiceConcept.id);
@@ -793,8 +1037,76 @@ export class ServicePackageService {
   }
 
   async removeServiceConcept(id: string): Promise<void> {
+    const startTime = Date.now();
+    this.logger.log(`Bắt đầu quá trình xóa khái niệm dịch vụ ${id}`);
+
     const serviceConcept = await this.findServiceConcept(id);
-    await this.serviceConceptRepository.remove(serviceConcept);
+
+    // Check if there are any active bookings using this concept
+    const activeBookings = await this.dataSource.query(`
+      SELECT COUNT(*)::integer as count
+      FROM booking
+      WHERE service_concept_id = $1
+      AND status IN ('đã xác nhận', 'đã thanh toán', 'đã hoàn thành')
+    `, [id]);
+
+    if (activeBookings[0].count > 0) {
+      throw new BadRequestException(
+        `Không thể xóa khái niệm dịch vụ vì có ${activeBookings[0].count} booking đang sử dụng`
+      );
+    }
+
+    // Check if there are any pending bookings
+    const pendingBookings = await this.dataSource.query(`
+      SELECT COUNT(*)::integer as count
+      FROM booking
+      WHERE service_concept_id = $1
+      AND status = 'chờ xử lý'
+    `, [id]);
+
+    if (pendingBookings[0].count > 0) {
+      this.logger.warn(`Có ${pendingBookings[0].count} booking đang chờ xác nhận cho concept ${id}`);
+    }
+
+    try {
+      // Delete related data in the correct order
+      
+      // 1. Delete commission records
+      await this.commissionRepository.delete({ serviceConceptId: id });
+      this.logger.log(`Đã xóa commission cho concept ${id}`);
+
+      // 2. Delete service concept images
+      await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
+      this.logger.log(`Đã xóa images cho concept ${id}`);
+
+      // 3. Delete service concept service type relationships
+      await this.serviceConceptServiceTypeRepository.delete({ serviceConceptId: id });
+      this.logger.log(`Đã xóa service type relationships cho concept ${id}`);
+
+      // 4. Delete concept vector if exists (this would be handled by Gemini service)
+      try {
+        // Note: This would require implementing a method in GeminiService to delete vectors
+        // await this.geminiService.deleteConceptVector(id);
+        this.logger.log(`Đã xóa concept vector cho concept ${id}`);
+      } catch (error) {
+        this.logger.warn(`Không thể xóa concept vector: ${error.message}`);
+      }
+
+      // 4.5. Delete concept vector records from database
+      await this.dataSource.query(`
+        DELETE FROM concept_vector 
+        WHERE concept_id = $1
+      `, [id]);
+      this.logger.log(`Đã xóa concept vector records cho concept ${id}`);
+
+      // 5. Finally delete the service concept
+      await this.serviceConceptRepository.remove(serviceConcept);
+      
+      this.logger.log(`Khái niệm dịch vụ ${id} đã được xóa thành công trong ${Date.now() - startTime}ms`);
+    } catch (error) {
+      this.logger.error(`Lỗi khi xóa khái niệm dịch vụ ${id}: ${error.message}`);
+      throw new BadRequestException(`Lỗi khi xóa khái niệm dịch vụ: ${error.message}`);
+    }
   }
   //#endregion ServiceConcept
 
@@ -890,6 +1202,22 @@ export class ServicePackageService {
         spp.max_price,
         COALESCE(spp.max_price, 0) as sort_price_desc,
         COALESCE(spp.min_price, 0) as sort_price_asc,
+        v.id as vendor_id,
+        v.name as vendor_name,
+        v.description as vendor_description,
+        v.logo as vendor_logo,
+        v.status as vendor_status,
+        v.slug as vendor_slug,
+        v.created_at as vendor_created_at,
+        v.updated_at as vendor_updated_at,
+        l.id as location_id,
+        l.address as location_address,
+        l.district as location_district,
+        l.ward as location_ward,
+        l.city as location_city,
+        l.province as location_province,
+        l.latitude as location_latitude,
+        l.longitude as location_longitude,
         sc.id as service_concept_id,
         sc.name as service_concept_name,
         sc.description as service_concept_description,
@@ -902,13 +1230,17 @@ export class ServicePackageService {
       FROM filtered_packages fp
       JOIN service_package sp ON sp.id = fp.id
       LEFT JOIN service_package_prices spp ON spp.id = sp.id
+      LEFT JOIN vendors v ON v.id = sp.vendor_id
+      LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN service_concept sc ON sc.service_package_id = sp.id AND sc.status = 'hoạt động'
       LEFT JOIN service_concept_image sci ON sci.service_concept_id = sc.id
       LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
       LEFT JOIN service_type st ON st.id = sct.service_type_id
       GROUP BY 
         sp.id, sp.name, sp.description, sp.image_url, sp.status, sp.created_at, sp.updated_at,
-        spp.min_price, spp.max_price, sc.id, sc.name, sc.description, sc.price, sc.duration,
+        spp.min_price, spp.max_price, v.id, v.name, v.description, v.logo, v.status, v.slug, v.created_at, v.updated_at,
+        l.id, l.address, l.district, l.ward, l.city, l.province, l.latitude, l.longitude,
+        sc.id, sc.name, sc.description, sc.price, sc.duration,
         st.id, st.name, st.description
     `;
 
@@ -1016,7 +1348,6 @@ export class ServicePackageService {
 
     // Group service concepts and types by package
     const packagesByServicePackage = new Map();
-    // const serviceTypesByConcept = new Map(); // This map is not used
 
     packageData.forEach((row: any) => {
       if (!packagesByServicePackage.has(row.id)) {
@@ -1030,6 +1361,17 @@ export class ServicePackageService {
           updatedAt: row.updated_at,
           minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
           maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          vendor: {
+            id: row.vendor_id,
+            name: row.vendor_name,
+            description: row.vendor_description,
+            logo: row.vendor_logo,
+            status: row.vendor_status,
+            slug: row.vendor_slug,
+            createdAt: row.vendor_created_at,
+            updatedAt: row.vendor_updated_at,
+            locations: new Map<string, any>(),
+          },
           serviceConcepts: new Map<string, any>() // Use a Map for concepts to avoid duplicates
         });
       }
@@ -1060,12 +1402,31 @@ export class ServicePackageService {
           }
         }
       }
+
+      if (row.location_id) {
+        if (!servicePackage.vendor.locations.has(row.location_id)) {
+          servicePackage.vendor.locations.set(row.location_id, {
+            id: row.location_id,
+            address: row.location_address,
+            district: row.location_district,
+            ward: row.location_ward,
+            city: row.location_city,
+            province: row.location_province,
+            latitude: row.location_latitude,
+            longitude: row.location_longitude,
+          });
+        }
+      }
     });
 
     // After getting the results, slice to only show requested page size
     const servicePackages = Array.from(packagesByServicePackage.values())
       .map(pkg => ({
         ...pkg,
+        vendor: {
+          ...pkg.vendor,
+          locations: Array.from(pkg.vendor.locations.values()),
+        },
         serviceConcepts: Array.from(pkg.serviceConcepts.values()).map((concept: any) => ({
           ...concept,
           serviceTypes: Array.from(concept.serviceTypes.values())
@@ -1086,6 +1447,10 @@ export class ServicePackageService {
         updatedAt: pkg.updatedAt,
         minPrice: pkg.minPrice,
         maxPrice: pkg.maxPrice,
+        vendor: {
+          ...pkg.vendor,
+          locations: Array.from(pkg.vendor.locations.values()),
+        },
         serviceConcepts: pkg.serviceConcepts
       })),
       pagination: {
@@ -1096,5 +1461,4 @@ export class ServicePackageService {
       },
     };
   }
-  //#endregion filterServicePackages
 }

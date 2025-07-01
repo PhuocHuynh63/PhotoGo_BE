@@ -1,5 +1,5 @@
 import { Invoice } from 'src/modules/invoices/entities/invoice.entity';
-import { Column, Entity, CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import { Column, Entity, CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn, OneToMany, OneToOne } from 'typeorm';
 import { VoucherStatusEnum, VoucherTypePoint } from '../../../constants/voucher.enum';
 import { CampaignVoucher } from 'src/modules/campaign/entities/campaign-voucher.entity';
 
@@ -55,4 +55,7 @@ export class Voucher {
 
   @OneToMany(() => CampaignVoucher, campaignVoucher => campaignVoucher.voucher)
   campaignVouchers: CampaignVoucher[];
+
+  @OneToOne(() => Invoice, invoice => invoice.voucher)
+  invoice: Invoice;
 }

@@ -65,17 +65,13 @@ export class InvoiceService {
         throw new NotFoundException(`Voucher với ID ${voucherId} không tồn tại`);
       }
 
-      // 1. Check if voucher is from a campaign and user joined
-      const isCampaignVoucher = await this.voucherService.isVoucherFromCampaignAndUserJoined(voucherId, booking.userId);
-      // 2. Check if user has been assigned the voucher (voucher-user)
+      // Check if user has been assigned the voucher (voucher-user) with status "có sẵn"
       const voucherUser = await this.voucherUserRepository.findOne({
         where: { user_id: booking.userId, voucher_id: voucherId },
       });
-      const isAssignedVoucher = voucherUser && voucherUser.status === VoucherUserStatusEnum.AVAILABLE;
-
-      // If neither condition is satisfied, throw error
-      if (!isCampaignVoucher && !isAssignedVoucher) {
-        throw new BadRequestException('Bạn không có quyền sử dụng voucher này (không thuộc campaign đã tham gia hoặc chưa được assign voucher)');
+      
+      if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
+        throw new BadRequestException('Bạn không có quyền sử dụng voucher này hoặc voucher đã được sử dụng');
       }
 
       const now = new Date();
@@ -87,11 +83,6 @@ export class InvoiceService {
 
       if (originalPrice < voucher.minPrice) {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
-      }
-
-      // If assigned voucher, must check status
-      if (isAssignedVoucher === false && voucherUser) {
-        throw new BadRequestException(`Bạn đã sử dụng voucher này hoặc voucher không khả dụng`);
       }
 
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
@@ -109,10 +100,15 @@ export class InvoiceService {
     }
 
     let discountedPrice = originalPrice - discountAmount;
-    const commission = await this.commissionRepository.findOne({
-      where: { serviceConceptId: serviceConcept.id }
-    });
-    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.05;
+    
+    // Calculate tax amount by reverse engineering from originalPrice
+    // originalPrice = basePrice * (1 + 30/100) + basePrice * 0.05
+    // originalPrice = basePrice * 1.35
+    // basePrice = originalPrice / 1.35
+    // taxAmount = basePrice * 0.05
+    const basePrice = originalPrice / 1.35;
+    const taxAmount = Math.round(basePrice * 0.05);
+    
     const feeAmount = 0;
     const payablePrice = discountedPrice + feeAmount;
 
@@ -139,6 +135,7 @@ export class InvoiceService {
     const invoice = this.invoiceRepository.create({
       ...createInvoiceDto,
       bookingId: booking.id,
+      voucherId: voucher?.id || null,
       originalPrice,
       discountAmount,
       discountedPrice,
@@ -150,10 +147,6 @@ export class InvoiceService {
       paidAmount: 0,
       status: InvoiceStatus.PENDING,
     });
-
-    if (voucher) {
-      await this.voucherService.useVoucher(voucher.id, booking.userId);
-    }
 
     return this.invoiceRepository.save(invoice);
   }
@@ -208,7 +201,7 @@ export class InvoiceService {
 
     const [invoices, total] = await this.invoiceRepository.findAndCount({
       where: { booking: { userId } },
-      relations: ['booking', 'payments', 'refunds'],
+      relations: ['booking', 'payments'],
       skip,
       take: pageSizeNum,
       order: {
@@ -254,7 +247,7 @@ export class InvoiceService {
 
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['booking', 'payments', 'refunds', 'booking.serviceConcept', 'booking.location', 'booking.location.vendor', 'booking.serviceConcept.servicePackage'],
+      relations: ['booking', 'payments', 'booking.serviceConcept', 'booking.location', 'booking.location.vendor', 'booking.serviceConcept.servicePackage'],
     });
 
     if (!invoice) {

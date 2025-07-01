@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 
@@ -34,4 +34,8 @@ export class PaginationDto {
   @IsOptional()
   @IsString()
   sortDirection?: string;
+
+  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+  @IsOptional()
+  showAll?: string;
 }

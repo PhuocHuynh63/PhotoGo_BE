@@ -1,5 +1,5 @@
 import { IsOptional, IsString, IsNumber, Min, IsBoolean, IsDateString, ValidateIf, Matches } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class FindAllDto {
@@ -61,5 +61,9 @@ export class FindAllDto {
     @IsString()
     @IsOptional()
     sortDirection?: string;
+
+    @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+    @IsOptional()
+    showAll?: string;
 }
 

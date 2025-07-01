@@ -1,7 +1,7 @@
 import { Column, Entity, ManyToOne, JoinColumn, PrimaryColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Voucher } from '../../vouchers/entities/voucher.entity';
-import { VoucherUserStatusEnum } from '../../../constants/voucher.enum';
+import { VoucherUserFromEnum, VoucherUserStatusEnum } from '../../../constants/voucher.enum';
 
 @Entity('voucher_user')
 export class VoucherUser {
@@ -21,6 +21,9 @@ export class VoucherUser {
 
   @Column({ type: 'varchar', length: 20, default: 'available' })
   status: VoucherUserStatusEnum;
+
+  @Column({ type: 'enum', enum: VoucherUserFromEnum, nullable: true })
+  from: VoucherUserFromEnum;
 
   @Column({ type: 'timestamptz', default: () => 'NOW()' })
   assigned_at: Date;
