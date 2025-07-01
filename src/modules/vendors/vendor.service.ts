@@ -18,7 +18,7 @@ import { VendorSortField } from 'src/constants/vendor.enum';
 import { User } from '../users/entities/user.entity';
 import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
-import { GeocodingService } from 'src/3rdService/google/geocoding.service';
+import { GoongService } from 'src/3rdService/goong/goong.service';
 
 
 @Injectable()
@@ -39,7 +39,7 @@ export class VendorService {
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
-    private readonly geocodingService: GeocodingService,
+    private readonly goongService: GoongService,
   ) { }
 
   //#region CreateVendor
@@ -71,7 +71,7 @@ export class VendorService {
       this.logger.error(`User ${createVendorDto.user_id} đã có nhà cung cấp`);
       throw new BadRequestException('User đã có nhà cung cấp, không thể tạo thêm');
     }
-    
+
     // Upload file trước khi bắt đầu transaction
     const vendorData: Partial<Vendor> = {
       name: createVendorDto.name,
@@ -139,10 +139,10 @@ export class VendorService {
           if (!createVendorDto.location.address) {
             throw new BadRequestException('Địa chỉ là bắt buộc cho vị trí');
           }
-          
+
           // Process location with geocoding
           const processedLocation = await this.processLocationWithGeocoding(createVendorDto.location);
-          
+
           const location = locationRepo.create({
             address: processedLocation.address,
             district: processedLocation.district,
@@ -216,13 +216,13 @@ export class VendorService {
   //#region getvendorResponse
   async getVendorResponse(id: string, reviewService: ReviewService): Promise<VendorResponseDto> {
     const vendor = await this.findOne(id);
-  
+
     const totalPrice = vendor.servicePackages.reduce(
       (acc, pkg) => acc + Number(pkg.serviceConcepts.reduce((acc, concept) => acc + Number(concept.price), 0)), 0,
     );
-  
+
     const averageRating = await reviewService.getAverageRatingByVendorId(id);
-  
+
     const response = new VendorResponseDto();
     response.id = vendor.id;
     response.name = vendor.name;
@@ -268,7 +268,7 @@ export class VendorService {
     }));
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
-  
+
     return response;
   }
   //#endregion getvendorResponse  
@@ -503,7 +503,7 @@ export class VendorService {
         // Update location if provided
         if (updateVendorDto.location) {
           this.logger.log('Processing location with geocoding');
-          
+
           // Remove existing locations
           await locationRepo.delete({
             vendor: { id: updatedVendor.id }
@@ -538,7 +538,7 @@ export class VendorService {
         throw error;
       }
     });
-  }  
+  }
   //#endregion update
 
   //#region remove
@@ -653,11 +653,11 @@ export class VendorService {
       return locationDto;
     }
 
-    // Try to get coordinates from Google Maps
+    // Try to get coordinates from GoongAPI using complete address function
     try {
-      this.logger.log(`Attempting to geocode address: ${locationDto.address}`);
-      
-      const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+      this.logger.log(`Attempting to get complete address: ${locationDto.address}`);
+
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
         locationDto.address,
         locationDto.district,
         locationDto.ward,
@@ -665,19 +665,19 @@ export class VendorService {
         locationDto.province
       );
 
-      if (geocodingResult) {
-        this.logger.log(`Successfully geocoded: ${geocodingResult.latitude}, ${geocodingResult.longitude}`);
+      if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+        this.logger.log(`Successfully got coordinates: ${completeAddressResult.latitude}, ${completeAddressResult.longitude}`);
         return {
           ...locationDto,
-          latitude: geocodingResult.latitude,
-          longitude: geocodingResult.longitude,
+          latitude: completeAddressResult.latitude,
+          longitude: completeAddressResult.longitude,
         };
       } else {
-        this.logger.warn(`Failed to geocode address: ${locationDto.address}. Using provided coordinates or null.`);
+        this.logger.warn(`Failed to get coordinates for address: ${locationDto.address}. Using provided coordinates or null.`);
         return locationDto;
       }
     } catch (error) {
-      this.logger.error(`Error during geocoding: ${error.message}`);
+      this.logger.error(`Error during complete address lookup: ${error.message}`);
       return locationDto;
     }
   }
@@ -701,11 +701,11 @@ export class VendorService {
       return locationDto;
     }
 
-    // Try to get coordinates from Google Maps
+    // Try to get coordinates from GoongAPI using complete address function
     try {
-      this.logger.log(`Attempting to geocode address: ${locationDto.address}`);
-      
-      const geocodingResult = await this.geocodingService.validateAndGetCoordinates(
+      this.logger.log(`Attempting to get complete address: ${locationDto.address}`);
+
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
         locationDto.address,
         locationDto.district,
         locationDto.ward,
@@ -713,24 +713,24 @@ export class VendorService {
         locationDto.province
       );
 
-      if (geocodingResult) {
-        this.logger.log(`Successfully geocoded: ${geocodingResult.latitude}, ${geocodingResult.longitude}`);
+      if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+        this.logger.log(`Successfully got coordinates: ${completeAddressResult.latitude}, ${completeAddressResult.longitude}`);
         return {
           ...locationDto,
-          latitude: geocodingResult.latitude,
-          longitude: geocodingResult.longitude,
+          latitude: completeAddressResult.latitude,
+          longitude: completeAddressResult.longitude,
         };
       } else {
-        this.logger.warn(`Failed to geocode address: ${locationDto.address}. Using provided coordinates or null.`);
+        this.logger.warn(`Failed to get coordinates for address: ${locationDto.address}. Using provided coordinates or null.`);
         return locationDto;
       }
     } catch (error) {
-      this.logger.error(`Error during geocoding: ${error.message}`);
+      this.logger.error(`Error during complete address lookup: ${error.message}`);
       return locationDto;
     }
   }
   //#endregion Utility
-  
+
   //#region getConceptImage
   async getConceptImage(
     vendorId: string,
@@ -961,7 +961,7 @@ export class VendorService {
       LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
-    
+
 
     // Add parameters in the correct order
     if (params.name) {
@@ -1121,7 +1121,7 @@ export class VendorService {
       countParams.push(params.minPrice);
       countParamIndex++;
     }
-    
+
     if (params.maxPrice !== undefined) {
       countQuery += ` AND vp.max_price <= $${countParamIndex}`;
       countParams.push(params.maxPrice);
@@ -1134,7 +1134,7 @@ export class VendorService {
       countParams.push(params.minRating);
       countParamIndex++;
     }
-    
+
     if (params.maxRating !== undefined) {
       countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
       countParams.push(params.maxRating);
@@ -1185,17 +1185,17 @@ export class VendorService {
         ORDER BY created_at DESC
       `, [vendorIds])
     ]);
-  
+
     // Group service packages and reviews by vendor
     const servicePackagesByVendor = new Map();
     const reviewsByVendor = new Map();
-  
+
     servicePackages.forEach((row: any) => {
       if (!servicePackagesByVendor.has(row.vendor_id)) {
         servicePackagesByVendor.set(row.vendor_id, new Map());
       }
       const vendorPackages = servicePackagesByVendor.get(row.vendor_id);
-      
+
       if (!vendorPackages.has(row.id)) {
         vendorPackages.set(row.id, {
           id: row.id,
@@ -1205,7 +1205,7 @@ export class VendorService {
           serviceConcepts: []
         });
       }
-  
+
       if (row.service_concept_id) {
         const pkg = vendorPackages.get(row.id);
         pkg.serviceConcepts.push({
@@ -1218,7 +1218,7 @@ export class VendorService {
         });
       }
     });
-  
+
     reviews.forEach((review: any) => {
       if (!reviewsByVendor.has(review.vendor_id)) {
         reviewsByVendor.set(review.vendor_id, []);
@@ -1230,7 +1230,7 @@ export class VendorService {
         created_at: review.created_at
       });
     });
-  
+
     // Group locations by vendor ID before mapping
     const locationsByVendor = new Map();
     vendorData.forEach((row: any) => {
@@ -1250,7 +1250,7 @@ export class VendorService {
         });
       }
     });
-  
+
     // Map vendors without filtering duplicates
     const vendorMap = new Map();
 
@@ -1298,9 +1298,9 @@ export class VendorService {
     });
 
     const vendors = Array.from(vendorMap.values());
-  
+
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
-  
+
     return {
       data: vendors,
       pagination: {
@@ -1439,6 +1439,7 @@ export class VendorService {
         u.email as contact_email
       FROM filtered_vendors fv
       JOIN vendors v ON v.id = fv.id
+      LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN vendor_packages vp ON vp.id = v.id
       LEFT JOIN vendor_branches vb ON vb.id = v.id
@@ -1530,7 +1531,7 @@ export class VendorService {
 
     // Add sorting
     let sortField = 'v.created_at'; // default sort field
-    
+
     // Map DTO sortBy values to SQL field names
     switch (params.sortBy) {
       case 'createdAt':
@@ -1560,7 +1561,7 @@ export class VendorService {
       default:
         sortField = 'v.created_at';
     }
-    
+
     baseQuery += ` ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
 
     // Add pagination

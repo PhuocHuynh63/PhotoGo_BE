@@ -198,7 +198,7 @@ export class LocationController {
   }
 
   @Put(':id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Cập nhật địa điểm theo ID',
     description: 'Cập nhật thông tin địa điểm. Tọa độ sẽ được tự động cập nhật từ Google Maps nếu thay đổi địa chỉ và không cung cấp tọa độ mới.'
   })
@@ -244,5 +244,22 @@ export class LocationController {
     }
   }
 
-
+  // Test endpoint để kiểm tra GoongAPI
+  @Get('test-goong')
+  async testGoongAPI() {
+    try {
+      const result = await this.locationService.testGoongAPI();
+      return {
+        success: true,
+        message: 'GoongAPI test completed',
+        data: result
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'GoongAPI test failed',
+        error: error.message
+      };
+    }
+  }
 }
