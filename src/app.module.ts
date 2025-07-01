@@ -50,6 +50,7 @@ import { CheckoutSessionModule } from './modules/checkout-session/checkout-sessi
 import { AttendanceModule } from './modules/attendances/attendance/attendance.module';
 import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
 import { CampaignModule } from './modules/campaign/campaign.module';
+import { GoongModule } from './3rdService/goong/goong.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -182,6 +183,7 @@ if (!fs.existsSync(templateDir)) {
     WishlistModule,
     SupportTicketsModule,
     NotificationModule,
+    GoongModule
 
   ],
   controllers: [AppController],

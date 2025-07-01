@@ -12,7 +12,7 @@ import { VendorStatus } from 'src/constants/vendor.enum';
 import { DataSource } from 'typeorm';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
-import { GeocodingWrapperService } from 'src/3rdService/goong';
+import { GoongService } from 'src/3rdService/goong/goong.service';
 
 @Injectable()
 export class LocationService {
@@ -22,7 +22,7 @@ export class LocationService {
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
     private readonly dataSource: DataSource,
-    private readonly geocodingWrapperService: GeocodingWrapperService,
+    private readonly goongService: GoongService,
   ) { }
 
   //#region create
@@ -69,9 +69,9 @@ export class LocationService {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
       }
     } else if (createLocationDto.autoGeocode !== false) {
-      // Try to get coordinates from GoongAPI (with Google Maps fallback)
+      // Try to get coordinates from GoongAPI using complete address function
       try {
-        const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
+        const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
           createLocationDto.address,
           createLocationDto.district,
           createLocationDto.ward,
@@ -79,13 +79,13 @@ export class LocationService {
           createLocationDto.province
         );
 
-        if (geocodingResult) {
-          processedLocation.latitude = geocodingResult.latitude;
-          processedLocation.longitude = geocodingResult.longitude;
+        if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+          processedLocation.latitude = completeAddressResult.latitude;
+          processedLocation.longitude = completeAddressResult.longitude;
         }
       } catch (error) {
         // If geocoding fails, continue without coordinates
-        console.warn(`Failed to geocode address: ${createLocationDto.address}. Error: ${error.message}`);
+        console.warn(`Failed to get complete address: ${createLocationDto.address}. Error: ${error.message}`);
       }
     }
 
@@ -192,9 +192,9 @@ export class LocationService {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
       }
     } else if (updateLocationDto.autoGeocode !== false && (updateLocationDto.address || updateLocationDto.district || updateLocationDto.ward || updateLocationDto.city || updateLocationDto.province)) {
-      // Try to get coordinates from GoongAPI (with Google Maps fallback) if address components are being updated
+      // Try to get coordinates from GoongAPI using complete address function if address components are being updated
       try {
-        const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
+        const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
           updateLocationDto.address || location.address,
           updateLocationDto.district || location.district,
           updateLocationDto.ward || location.ward,
@@ -202,13 +202,13 @@ export class LocationService {
           updateLocationDto.province || location.province
         );
 
-        if (geocodingResult) {
-          processedLocation.latitude = geocodingResult.latitude;
-          processedLocation.longitude = geocodingResult.longitude;
+        if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+          processedLocation.latitude = completeAddressResult.latitude;
+          processedLocation.longitude = completeAddressResult.longitude;
         }
       } catch (error) {
         // If geocoding fails, continue without coordinates
-        console.warn(`Failed to geocode address: ${updateLocationDto.address || location.address}. Error: ${error.message}`);
+        console.warn(`Failed to get complete address: ${updateLocationDto.address || location.address}. Error: ${error.message}`);
       }
     }
 
@@ -504,11 +504,11 @@ export class LocationService {
   //#region testGoongAPI
   async testGoongAPI() {
     try {
-      // Test 1: Provider Status
-      const status = await this.geocodingWrapperService.checkProvidersStatus();
+      // Test 1: API Key Validation
+      const isValid = await this.goongService.validateApiKey();
 
-      // Test 2: Geocoding
-      const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
+      // Test 2: Complete Address from Input
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
         '123 Đường ABC',
         'Quận 1',
         'Phường Bến Nghé',
@@ -516,22 +516,20 @@ export class LocationService {
         'Việt Nam'
       );
 
-      // Test 3: Reverse Geocoding
-      const reverseResult = await this.geocodingWrapperService.getAddressFromCoordinates(
+      // Test 3: Complete Address from Coordinates
+      const reverseResult = await this.goongService.getCompleteAddressFromCoordinates(
         10.762622,
         106.660172
       );
 
-      // Test 4: Provider Comparison
-      const comparison = await this.geocodingWrapperService.compareProviders(
-        '123 Đường ABC, Quận 1, TP. Hồ Chí Minh'
-      );
+      // Test 4: Demo Complete Address
+      await this.goongService.demoCompleteAddress();
 
       return {
-        providerStatus: status,
-        geocoding: geocodingResult,
-        reverseGeocoding: reverseResult,
-        comparison: comparison
+        apiKeyValid: isValid,
+        completeAddressFromInput: completeAddressResult,
+        completeAddressFromCoordinates: reverseResult,
+        message: 'All tests completed. Check logs for demo details.'
       };
     } catch (error) {
       throw new Error(`GoongAPI test failed: ${error.message}`);

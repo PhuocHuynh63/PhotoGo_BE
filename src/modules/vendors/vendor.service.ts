@@ -18,7 +18,7 @@ import { VendorSortField } from 'src/constants/vendor.enum';
 import { User } from '../users/entities/user.entity';
 import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
-import { GeocodingWrapperService } from 'src/3rdService/goong';
+import { GoongService } from 'src/3rdService/goong/goong.service';
 
 
 @Injectable()
@@ -39,7 +39,7 @@ export class VendorService {
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
-    private readonly geocodingWrapperService: GeocodingWrapperService,
+    private readonly goongService: GoongService,
   ) { }
 
   //#region CreateVendor
@@ -653,11 +653,11 @@ export class VendorService {
       return locationDto;
     }
 
-    // Try to get coordinates from GoongAPI (with Google Maps fallback)
+    // Try to get coordinates from GoongAPI using complete address function
     try {
-      this.logger.log(`Attempting to geocode address: ${locationDto.address}`);
+      this.logger.log(`Attempting to get complete address: ${locationDto.address}`);
 
-      const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
         locationDto.address,
         locationDto.district,
         locationDto.ward,
@@ -665,19 +665,19 @@ export class VendorService {
         locationDto.province
       );
 
-      if (geocodingResult) {
-        this.logger.log(`Successfully geocoded: ${geocodingResult.latitude}, ${geocodingResult.longitude}`);
+      if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+        this.logger.log(`Successfully got coordinates: ${completeAddressResult.latitude}, ${completeAddressResult.longitude}`);
         return {
           ...locationDto,
-          latitude: geocodingResult.latitude,
-          longitude: geocodingResult.longitude,
+          latitude: completeAddressResult.latitude,
+          longitude: completeAddressResult.longitude,
         };
       } else {
-        this.logger.warn(`Failed to geocode address: ${locationDto.address}. Using provided coordinates or null.`);
+        this.logger.warn(`Failed to get coordinates for address: ${locationDto.address}. Using provided coordinates or null.`);
         return locationDto;
       }
     } catch (error) {
-      this.logger.error(`Error during geocoding: ${error.message}`);
+      this.logger.error(`Error during complete address lookup: ${error.message}`);
       return locationDto;
     }
   }
@@ -701,11 +701,11 @@ export class VendorService {
       return locationDto;
     }
 
-    // Try to get coordinates from GoongAPI (with Google Maps fallback)
+    // Try to get coordinates from GoongAPI using complete address function
     try {
-      this.logger.log(`Attempting to geocode address: ${locationDto.address}`);
+      this.logger.log(`Attempting to get complete address: ${locationDto.address}`);
 
-      const geocodingResult = await this.geocodingWrapperService.getCoordinatesFromAddress(
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
         locationDto.address,
         locationDto.district,
         locationDto.ward,
@@ -713,19 +713,19 @@ export class VendorService {
         locationDto.province
       );
 
-      if (geocodingResult) {
-        this.logger.log(`Successfully geocoded: ${geocodingResult.latitude}, ${geocodingResult.longitude}`);
+      if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+        this.logger.log(`Successfully got coordinates: ${completeAddressResult.latitude}, ${completeAddressResult.longitude}`);
         return {
           ...locationDto,
-          latitude: geocodingResult.latitude,
-          longitude: geocodingResult.longitude,
+          latitude: completeAddressResult.latitude,
+          longitude: completeAddressResult.longitude,
         };
       } else {
-        this.logger.warn(`Failed to geocode address: ${locationDto.address}. Using provided coordinates or null.`);
+        this.logger.warn(`Failed to get coordinates for address: ${locationDto.address}. Using provided coordinates or null.`);
         return locationDto;
       }
     } catch (error) {
-      this.logger.error(`Error during geocoding: ${error.message}`);
+      this.logger.error(`Error during complete address lookup: ${error.message}`);
       return locationDto;
     }
   }
@@ -1439,6 +1439,7 @@ export class VendorService {
         u.email as contact_email
       FROM filtered_vendors fv
       JOIN vendors v ON v.id = fv.id
+      LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN vendor_packages vp ON vp.id = v.id
       LEFT JOIN vendor_branches vb ON vb.id = v.id
