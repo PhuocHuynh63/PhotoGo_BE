@@ -57,7 +57,7 @@ export class BookingService {
     private mailService: MailService,
     private readonly subscriptionService: SubscriptionService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
-  ) {}
+  ) { }
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
   private convertDateFormat(dateStr: string): string {
@@ -313,7 +313,7 @@ export class BookingService {
     try {
       // Use the existing locationAvailabilityService to get availability info
       const availability = await this.locationAvailabilityService.findByDate(date, { current: '1', pageSize: '1' });
-      
+
       if (!availability.data.length) {
         return {
           isAvailable: false,
@@ -325,7 +325,7 @@ export class BookingService {
 
       const slotTimes = availability.data[0].slotTimes;
       const bookingTimeMinutes = this.timeToMinutes(time);
-      
+
       // Find matching slot time
       const matchingSlot = slotTimes.find(slot => {
         const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
@@ -963,7 +963,7 @@ export class BookingService {
     userId: string,
     serviceConceptId: string,
     getDiscountAmountDto: GetDiscountAmountDto
-  ): Promise<{discount: number, depositAmount: number, remainingAmount: number}> {
+  ): Promise<{ discount: number, depositAmount: number, remainingAmount: number }> {
     // 1. Find the service concept
     const serviceConcept = await this.serviceConceptRepository.findOne({ where: { id: serviceConceptId } });
     if (!serviceConcept) {
@@ -971,7 +971,7 @@ export class BookingService {
     }
     const price = Number(serviceConcept.price);
     const depositAmount = getDiscountAmountDto.depositAmount;
-    const deposite = (depositAmount * price / 100).toFixed(0);
+    let deposite = (depositAmount * price / 100).toFixed(0);
 
     // Nếu không có voucherId thì trả về giá gốc, discount = 0
     if (!getDiscountAmountDto.voucherId) {
@@ -1001,7 +1001,11 @@ export class BookingService {
     // 6. Calculate discount
     let discount = 0;
     if (getDiscountAmountDto.depositType === BookingDepositType.PERCENTAGE) {
-      discount = price * depositAmount * (Number(voucher.discount_value) / 100);
+      console.log(`Calculating discount for percentage deposit: ${price} * ${depositAmount} * (${voucher.discount_value} / 100)`);
+
+      discount = price * (Number(voucher.discount_value) / 100);
+
+      console.log(`Calculated discount: ${discount}`);
     } else {
       discount = price - voucher.discount_value;
     }
@@ -1009,7 +1013,12 @@ export class BookingService {
     if (discount > voucher.maxPrice) {
       discount = voucher.maxPrice;
     }
-    let remainingAmount = price - discount - Number(deposite);
+    // 8. Calculate remaining amount after discount
+    let priceAfterAplyVoucher = price - discount;
+    deposite = (depositAmount * priceAfterAplyVoucher / 100).toFixed(0);
+
+    // 9. Calculate remaining amount after deposit
+    const remainingAmount = priceAfterAplyVoucher - Number(deposite);
     return {
       discount: Number(discount.toFixed(0)),
       depositAmount: Number(deposite),
@@ -1080,14 +1089,14 @@ export class BookingService {
 
       // Get all active subscription plans
       const allPlans = await this.subscriptionPlanService.findAll({ isActive: true });
-      
+
       if (allPlans.length === 0) {
         return 0;
       }
 
       // Calculate total price of all plans
       const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.price), 0);
-      
+
       if (totalPlanPrice === 0) {
         return 0;
       }
@@ -1095,10 +1104,10 @@ export class BookingService {
       // Get the user's subscription plan price
       const userSubscription = subscriptions.data[0]; // One-to-one relationship
       const userPlanPrice = Number(userSubscription.plan.price);
-      
+
       // Calculate subscription score: (user plan price / total plan price) * 100
       const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
-      
+
       return subscriptionScore;
     } catch (error) {
       console.error('Error calculating subscription score:', error);
@@ -1143,7 +1152,7 @@ export class BookingService {
     }
 
     const priorityScore = await this.calculatePriorityScore(booking, invoice);
-    
+
     booking.priorityScore = priorityScore;
     await this.bookingRepository.save(booking);
   }
