@@ -972,13 +972,14 @@ export class BookingService {
     const price = Number(serviceConcept.price);
     const depositAmount = getDiscountAmountDto.depositAmount;
     let deposite = (depositAmount * price / 100).toFixed(0);
+    let remainingAmount = price - Number(deposite);
 
     // Nếu không có voucherId thì trả về giá gốc, discount = 0
     if (!getDiscountAmountDto.voucherId) {
       return {
         discount: 0,
         depositAmount: Number(deposite),
-        remainingAmount: price
+        remainingAmount: Number(remainingAmount.toFixed(0))
       };
     }
 
@@ -1001,11 +1002,7 @@ export class BookingService {
     // 6. Calculate discount
     let discount = 0;
     if (getDiscountAmountDto.depositType === BookingDepositType.PERCENTAGE) {
-      console.log(`Calculating discount for percentage deposit: ${price} * ${depositAmount} * (${voucher.discount_value} / 100)`);
-
       discount = price * (Number(voucher.discount_value) / 100);
-
-      console.log(`Calculated discount: ${discount}`);
     } else {
       discount = price - voucher.discount_value;
     }
@@ -1018,7 +1015,7 @@ export class BookingService {
     deposite = (depositAmount * priceAfterAplyVoucher / 100).toFixed(0);
 
     // 9. Calculate remaining amount after deposit
-    const remainingAmount = priceAfterAplyVoucher - Number(deposite);
+    remainingAmount = priceAfterAplyVoucher - Number(deposite);
     return {
       discount: Number(discount.toFixed(0)),
       depositAmount: Number(deposite),
