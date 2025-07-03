@@ -11,9 +11,11 @@ import { ReviewModule } from '../reviews/reviews.module';
 import { Location } from '../locations/entities/location.entity';
 import { User } from '../users/entities/user.entity';
 import { GoongModule } from '../../3rdService/goong';
+import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
+import { Campaign } from '../campaign/entities/campaign.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, ServicePackage, Location, User]), UploadModule, ReviewModule, GoongModule],
+  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, ServicePackage, Location, User, CampaignVendor, Campaign]), UploadModule, ReviewModule, GoongModule],
   providers: [VendorService],
   controllers: [VendorController],
   exports: [VendorService],

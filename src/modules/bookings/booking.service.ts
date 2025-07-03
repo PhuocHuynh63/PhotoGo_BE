@@ -26,6 +26,7 @@ import { UserRank } from '../../constants/user.enum';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
 import { SubscriptionStatus } from '../../constants/subscription.enum';
+import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
 
 @Injectable()
 export class BookingService {
@@ -376,6 +377,26 @@ export class BookingService {
     if (!serviceConcept) {
       throw new NotFoundException(`Khái niệm dịch vụ với ID ${serviceConceptId} không tìm thấy`);
     }
+
+    // --- BẮT ĐẦU KIỂM TRA VOUCHER VÀ CAMPAIGN-VENDOR ---
+    if (createBookingDto.voucherId) {
+      const voucher = await this.voucherRepository.findOne({ where: { id: createBookingDto.voucherId } });
+      if (!voucher) {
+        throw new NotFoundException(`Voucher với ID ${createBookingDto.voucherId} không tìm thấy`);
+      }
+      const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
+      if (campaignVoucher) {
+        const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
+        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+        if (campaignVendor) {
+          const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
+          if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
+            throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
+          }
+        }
+      }
+    }
+    // --- KẾT THÚC KIỂM TRA VOUCHER VÀ CAMPAIGN-VENDOR ---
 
     // Validate required fields
     if (!createBookingDto.date) {
@@ -965,7 +986,7 @@ export class BookingService {
     getDiscountAmountDto: GetDiscountAmountDto
   ): Promise<{ discount: number, depositAmount: number, remainingAmount: number }> {
     // 1. Find the service concept
-    const serviceConcept = await this.serviceConceptRepository.findOne({ where: { id: serviceConceptId } });
+    const serviceConcept = await this.serviceConceptRepository.findOne({ where: { id: serviceConceptId }, relations: ['servicePackage', 'servicePackage.vendor'] });
     if (!serviceConcept) {
       throw new NotFoundException(`Service Concept với ID ${serviceConceptId} không tìm thấy`);
     }
@@ -989,12 +1010,28 @@ export class BookingService {
       throw new NotFoundException(`Voucher với ID ${getDiscountAmountDto.voucherId} không tìm thấy`);
     }
     // 3. Check if voucher is in campaign
-    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true } });
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
     // 4. Check if voucher is assigned to user
     const voucherUser = await this.voucherUserRepository.findOne({ where: { voucher_id: voucher.id, user_id: userId } });
     if (!campaignVoucher && !voucherUser) {
       throw new NotFoundException('Voucher không thuộc campaign hoặc không thuộc user');
     }
+
+    // --- BẮT ĐẦU LOGIC KIỂM TRA VENDOR CỦA CAMPAIGN ---
+    if (campaignVoucher) {
+      // Lấy campaign-vendor
+      const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
+      const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+      if (campaignVendor) {
+        // Lấy vendorId của concept
+        const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
+        if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
+          throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
+        }
+      }
+    }
+    // --- KẾT THÚC LOGIC KIỂM TRA VENDOR CỦA CAMPAIGN ---
+
     // 5. Check minPrice
     if (price < voucher.minPrice) {
       throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice}`);

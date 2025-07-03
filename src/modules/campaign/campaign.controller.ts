@@ -1,10 +1,10 @@
-import { Controller, Get, Post, Body, Query, Param, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Patch, Delete } from '@nestjs/common';
 import { CampaignService } from './campaign.service';
 import { Campaign } from './entities/campaign.entity';
 import { CampaignVoucher } from './entities/campaign-voucher.entity';
 import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiParam, ApiBody } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { Public } from 'src/decorator/custom';
 import { FindAllDto } from './dto/find-all.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
@@ -16,6 +16,7 @@ import { PaginationDto } from './dto/pagination.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { JoinWelcomeCampaignDto } from './dto/join-welcome-campaign.dto';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { CampaignVendor } from './entities/campaign-vendor.entity';
 
 @Controller('campaigns')
 @ApiTags('Campaigns')
@@ -58,6 +59,31 @@ export class CampaignController {
   async findAll(@Query() query: FindAllDto, @Query('showAll') showAll?: string) {
     return this.campaignService.findAllCampaigns({ ...query, showAll });
   }
+
+  @Get('vendor/:id')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin campaign-vendor theo id' })
+  @ApiParam({ name: 'id', description: 'ID của campaign-vendor' })
+  @ApiResponse({ status: 200, description: 'Thông tin campaign-vendor', type: CampaignVendor })
+  async getCampaignVendorById(@Param('id') id: string): Promise<CampaignVendor> {
+    return this.campaignService.getCampaignVendorById(id);
+  }
+
+   // API nhập vendorId để list campaign vendor đã tham gia hoặc tự tạo
+   @Get('by-vendor')
+   @Public()
+   @ApiOperation({ summary: 'Lấy danh sách campaign mà vendor đã tham gia hoặc tự tạo' })
+   @ApiQuery({ name: 'vendorId', description: 'ID của vendor', required: true })
+   @ApiQuery({ name: 'current', description: 'Trang hiện tại', required: false, type: Number, example: 1 })
+   @ApiQuery({ name: 'pageSize', description: 'Số lượng mỗi trang', required: false, type: Number, example: 10 })
+   @ApiResponse({ status: 200, description: 'Danh sách campaign', type: [Campaign] })
+   async findCampaignsByVendorId(
+     @Query('vendorId') vendorId: string,
+     @Query('current') current?: number,
+     @Query('pageSize') pageSize?: number
+   ) {
+     return this.campaignService.findCampaignsByVendorId(vendorId, Number(current) || 1, Number(pageSize) || 10);
+   }
 
   @Post()
   @ApiOperation({ summary: 'Tạo campaign mới' })
@@ -326,5 +352,34 @@ export class CampaignController {
       joinWelcomeCampaignDto.userId,
       joinWelcomeCampaignDto.note
     );
+  }
+
+  // CRUD cho campaign-vendor
+  @Post('vendor')
+  @ApiOperation({ summary: 'Tạo campaign-vendor (gán vendor cho campaign)' })
+  @ApiQuery({ name: 'campaignId', description: 'ID của campaign', required: true })
+  @ApiQuery({ name: 'vendorId', description: 'ID của vendor', required: true })
+  @ApiResponse({ status: 201, description: 'Tạo campaign-vendor thành công', type: CampaignVendor })
+  async createCampaignVendor(@Query('campaignId') campaignId: string, @Query('vendorId') vendorId: string): Promise<CampaignVendor> {
+    return this.campaignService.createCampaignVendor(campaignId, vendorId);
+  }
+
+  
+  @Patch('vendor/:id')
+  @ApiOperation({ summary: 'Cập nhật vendor cho campaign-vendor' })
+  @ApiParam({ name: 'id', description: 'ID của campaign-vendor' })
+  @ApiQuery({ name: 'vendorId', description: 'ID của vendor', required: true })
+  @ApiQuery({ name: 'isAvailable', description: 'Trạng thái của campaign-vendor', required: true })
+  @ApiResponse({ status: 200, description: 'Cập nhật campaign-vendor thành công', type: CampaignVendor })
+  async updateCampaignVendor(@Param('id') id: string, @Query('vendorId') vendorId: string, @Query('isAvailable') isAvailable: boolean): Promise<CampaignVendor> {
+    return this.campaignService.updateCampaignVendor(id, vendorId, isAvailable);
+  }
+
+  @Delete('vendor/:id/delete')
+  @ApiOperation({ summary: 'Xóa campaign-vendor' })
+  @ApiParam({ name: 'id', description: 'ID của campaign-vendor' })
+  @ApiResponse({ status: 200, description: 'Xóa campaign-vendor thành công', schema: { properties: { message: { type: 'string' } } } })
+  async deleteCampaignVendor(@Param('id') id: string): Promise<{ message: string }> {
+    return this.campaignService.deleteCampaignVendor(id);
   }
 } 

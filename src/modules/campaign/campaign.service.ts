@@ -16,6 +16,8 @@ import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
+import { CampaignVendor } from './entities/campaign-vendor.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
 
 @Injectable()
 export class CampaignService {
@@ -48,6 +50,10 @@ export class CampaignService {
     private userRepository: Repository<User>,
     @InjectRepository(VoucherUser)
     private voucherUserRepository: Repository<VoucherUser>,
+    @InjectRepository(CampaignVendor)
+    private campaignVendorRepository: Repository<CampaignVendor>,
+    @InjectRepository(Vendor)
+    private vendorRepository: Repository<Vendor>,
   ) {}
 
   // Campaign endpoints
@@ -937,4 +943,56 @@ export class CampaignService {
     };
   }
   
+  // CRUD cho campaign-vendor
+  async createCampaignVendor(campaignId: string, vendorId: string) {
+    const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
+    if (!vendor) throw new NotFoundException('Vendor không tồn tại');
+    // Check đã có chưa
+    const existed = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId } } });
+    if (existed) throw new BadRequestException('Campaign đã có vendor');
+    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
+    return this.campaignVendorRepository.save(campaignVendor);
+  }
+
+  async getCampaignVendorById(id: string) {
+    const campaignVendor = await this.campaignVendorRepository.findOne({ where: { id }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) throw new NotFoundException('CampaignVendor không tồn tại');
+    return campaignVendor;
+  }
+
+  async updateCampaignVendor(id: string, vendorId: string, isAvailable: boolean) {
+    const campaignVendor = await this.campaignVendorRepository.findOne({ where: { id } });
+    if (!campaignVendor) throw new NotFoundException('CampaignVendor không tồn tại');
+    const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
+    if (!vendor) throw new NotFoundException('Vendor không tồn tại');
+    campaignVendor.vendor = vendor;
+    if (typeof isAvailable === 'boolean') campaignVendor.isAvailable = isAvailable;
+    return this.campaignVendorRepository.save(campaignVendor);
+  }
+
+  async deleteCampaignVendor(id: string) {
+    const campaignVendor = await this.campaignVendorRepository.findOne({ where: { id } });
+    if (!campaignVendor) throw new NotFoundException('CampaignVendor không tồn tại');
+    await this.campaignVendorRepository.remove(campaignVendor);
+    return { message: 'Đã xóa campaign-vendor' };
+  }
+
+  // List campaign mà vendor đã tham gia hoặc tự tạo
+  async findCampaignsByVendorId(vendorId: string, current = 1, pageSize = 10) {
+    const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
+    if (!vendor) throw new NotFoundException('Vendor không tồn tại');
+    const [campaignVendors, total] = await this.campaignVendorRepository.findAndCount({ where: { vendor: { id: vendorId } }, relations: ['campaign'], skip: (current - 1) * pageSize, take: pageSize });
+    const data = campaignVendors.map(cv => cv.campaign);
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total,
+      }
+    };
+  }
 } 

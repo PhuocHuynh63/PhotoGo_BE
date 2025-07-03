@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, OneToOne } from 'typeorm';
 import { CampaignVoucher } from './campaign-voucher.entity';
 import { UserCampaign } from './user-campaign.entity';
+import { CampaignVendor } from './campaign-vendor.entity';
 
 @Entity('campaign')
 export class Campaign {
@@ -33,4 +34,7 @@ export class Campaign {
 
   @OneToMany(() => UserCampaign, userCampaign => userCampaign.campaign)
   userCampaigns: UserCampaign[];
+
+  @OneToOne(() => CampaignVendor, (campaignVendor) => campaignVendor.campaign)
+  campaignVendor: CampaignVendor;
 } 

@@ -19,6 +19,8 @@ import { User } from '../users/entities/user.entity';
 import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
 import { GoongService } from 'src/3rdService/goong/goong.service';
+import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
+import { Campaign } from '../campaign/entities/campaign.entity';
 
 
 @Injectable()
@@ -36,6 +38,10 @@ export class VendorService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(CampaignVendor)
+    private readonly campaignVendorRepository: Repository<CampaignVendor>,
+    @InjectRepository(Campaign)
+    private readonly campaignRepository: Repository<Campaign>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
@@ -111,6 +117,8 @@ export class VendorService {
         const categoryRepo = manager.getRepository(Category);
         const vendorRepo = manager.getRepository(Vendor);
         const locationRepo = manager.getRepository(Location);
+        const campaignVendorRepo = manager.getRepository(CampaignVendor);
+        const campaignRepo = manager.getRepository(Campaign);
 
         this.logger.log('Fetching category');
         const category = await categoryRepo.findOne({
@@ -167,6 +175,21 @@ export class VendorService {
         });
 
         this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
+
+        // Gán campaign chào bạn mới tự động khi tạo vendor mới
+        const campaign = await campaignRepo.findOne({ where: { name: 'Chào bạn mới' } });
+        if (campaign) {
+          let campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaign.id } }, relations: ['vendor'] });
+          if (campaignVendor) {
+            campaignVendor.vendor = savedVendor;
+            campaignVendor.isAvailable = true;
+            await campaignVendorRepo.save(campaignVendor);
+          } else {
+            campaignVendor = campaignVendorRepo.create({ campaign, vendor: savedVendor, isAvailable: true });
+            await campaignVendorRepo.save(campaignVendor);
+          }
+        }
+
         return result;
       } catch (error) {
         this.logger.error(`Giao dịch thất bại: ${error.message}`);
