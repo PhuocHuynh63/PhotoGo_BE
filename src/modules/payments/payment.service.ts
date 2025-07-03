@@ -523,7 +523,12 @@ export class PaymentService {
     const paymentAmount = Math.round(Number(payment.amount));
     invoice.paidAmount += paymentAmount;
     if (payment.type === PaymentType.DEPOSIT) {
-      invoice.status = InvoiceStatus.PARTIALLY_PAID;
+      // Nếu thanh toán đặt cọc 100% thì status là PAID, còn lại là PARTIALLY_PAID
+      if (paymentAmount == 100) {
+        invoice.status = InvoiceStatus.PAID;
+      } else {
+        invoice.status = InvoiceStatus.PARTIALLY_PAID;
+      }
     } else if (payment.type === PaymentType.REMAINING) {
       invoice.status = InvoiceStatus.PAID;
     }
@@ -578,11 +583,13 @@ export class PaymentService {
 
     // Send invoice to user's email if payment handled successfully
     if (invoice.booking?.email) {
+      // Format issuedAt to VN time (Asia/Ho_Chi_Minh)
+      const issuedAtVN = new Date(invoice.issuedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
       await this.mailService.sendMail(
         invoice.booking?.email,
         'Hóa đơn thanh toán của bạn',
         'invoice', // template name
-        { invoice: invoice }
+        { invoice: { ...invoice, issuedAt: issuedAtVN } }
       );
     }
 
