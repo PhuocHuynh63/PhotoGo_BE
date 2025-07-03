@@ -257,7 +257,7 @@ export class PaymentService {
     const serviceConcept = invoice.booking?.serviceConcept;
     const timestamp = Date.now();
     const orderCode = parseInt(`${timestamp}${paymentType === PaymentType.DEPOSIT ? '1' : '2'}`);
-    const description = `PG#${orderCode} - ${paymentType === PaymentType.DEPOSIT ? 'Đặt cọc' : 'Thanh toán còn lại'}`;
+    const description = `PG#${orderCode}`;
   
     const now = Math.floor(Date.now() / 1000);
     const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
@@ -410,16 +410,16 @@ export class PaymentService {
         await this.bookingService['handlePaymentPriority'](booking.id);
       }
 
-      // Unlock the slot since payment is successful
+      // Block the slot since payment is successful
       if (payment.type === PaymentType.DEPOSIT) {
         try {
-          await this.locationAvailabilityService.unlockSlot(
+          await this.locationAvailabilityService.lockSlotForBooking(
             this.formatDate(booking.date),
             booking.time,
             booking.locationId
           );
         } catch (error) {
-          console.error('Error unlocking slot after successful payment:', error);
+          console.error('Error locking slot after successful payment:', error);
         }
       }
       
@@ -604,11 +604,17 @@ export class PaymentService {
       await this.voucherService.useVoucher(voucher.id, booking.userId);
     }
 
-    // Calculate and update priority score for the booking
-    try {
-      await this.bookingService.updatePriorityScore(booking.id);
-    } catch (error) {
-      console.error('Error updating priority score:', error);
+    // Block the slot since payment is successful
+    if (payment.type === PaymentType.DEPOSIT) {
+      try {
+        await this.locationAvailabilityService.lockSlotForBooking(
+          this.formatDate(booking.date),
+          booking.time,
+          booking.locationId
+        );
+      } catch (error) {
+        console.error('Error locking slot after successful payment:', error);
+      }
     }
 
     return {
