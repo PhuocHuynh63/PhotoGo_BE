@@ -392,7 +392,7 @@ export class PaymentService {
 
       // Update booking status
       if (payment.type === PaymentType.DEPOSIT) {
-        booking.status = BookingStatus.CONFIRMED;
+        booking.status = BookingStatus.PAID;
       } else if (payment.type === PaymentType.REMAINING) {
         booking.status = BookingStatus.COMPLETED;
       }
@@ -531,7 +531,7 @@ export class PaymentService {
 
     // Update booking status
     if (payment.type === PaymentType.DEPOSIT) {
-      booking.status = BookingStatus.CONFIRMED;
+      booking.status = BookingStatus.PAID;
     } else if (payment.type === PaymentType.REMAINING) {
       booking.status = BookingStatus.COMPLETED;
     }
