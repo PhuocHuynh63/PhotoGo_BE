@@ -15,7 +15,7 @@ export class ServiceConceptImage {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @ManyToOne(() => ServiceConcept, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ServiceConcept, (serviceConcept) => serviceConcept.images, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'service_concept_id' })
   serviceConcept: ServiceConcept;
 }

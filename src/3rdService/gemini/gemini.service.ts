@@ -6,6 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConceptVector } from '../../modules/service-package/entities/concept-vector.entity';
 import { GeminiModel } from './dto/gemini.enums';
+import { ServiceConcept } from '../../modules/service-package/entities/service-concept.entity';
 
 @Injectable()
 export class GeminiService {
@@ -126,7 +127,7 @@ export class GeminiService {
         const analysis = await this.parseImageAnalysis(result.response.text());
 
         // 2. Concept vector search (reuse searchConcepts logic, but inline for efficiency)
-        let concepts: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number })[] = [];
+        let concepts: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number; name: string | null; price: number | null; imageUrl: string | null })[] = [];
         try {
             const keywords = await this.generateKeywordsFromImage(file);
             const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
@@ -156,19 +157,47 @@ export class GeminiService {
                 .limit(5);
             const results = await queryBuilder.getRawAndEntities();
 
-            const response ={};
-            concepts = results.entities.map((entity, index) => {
+            // For each concept, fetch name, price, and first imageUrl
+            concepts = await Promise.all(results.entities.map(async (entity, index) => {
                 // Remove embedding from the returned object
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { embedding, ...rest } = entity;
+                const { embedding, conceptId, ...rest } = entity;
+
+                // Fetch concept info and first image
+                let name: string | null = null;
+                let price: number | null = null;
+                let imageUrl: string | null = null;
+                if (conceptId) {
+                    try {
+                        // Sử dụng repository với relations để tránh lỗi joinColumns
+                        const conceptWithImage = await this.conceptVectorRepository.manager.getRepository(ServiceConcept).findOne({
+                            where: { id: conceptId },
+                            relations: ['images'],
+                            order: { images: { createdAt: 'ASC' } }
+                        });
+                        if (conceptWithImage) {
+                            name = conceptWithImage.name ?? null;
+                            price = conceptWithImage.price ?? null;
+                            if (Array.isArray(conceptWithImage.images) && conceptWithImage.images.length > 0 && conceptWithImage.images[0]?.imageUrl) {
+                                imageUrl = conceptWithImage.images[0].imageUrl;
+                            }
+                        }
+                    } catch (err) {
+                        this.logger.error(`Lỗi lấy ServiceConcept cho conceptId ${conceptId}: ${err.message}\n${err.stack}`);
+                    }
+                }
                 return {
                     ...rest,
+                    conceptId,
+                    name,
+                    price,
+                    imageUrl,
                     relevanceScore: parseFloat(results.raw[index].relevance_score),
                     distance: parseFloat(results.raw[index].distance)
                 };
-            });
+            }));
         } catch (error) {
-            this.logger.error(`Error searching concepts in analyzeImageWithConcepts: ${error.message}`);
+            this.logger.error(`Error searching concepts in analyzeImageWithConcepts: ${error.message}\n${error.stack}`);
         }
 
         return {
