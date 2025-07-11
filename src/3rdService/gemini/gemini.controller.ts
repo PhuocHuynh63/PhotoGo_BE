@@ -15,62 +15,35 @@ export class GeminiController {
 
     constructor(private readonly geminiService: GeminiService) { }
 
-    @Post('generate-text')
+    @Post('analyze')
     @Public()
-    @ApiOperation({ summary: 'Generate text using Gemini AI' })
-    @ApiResponse({
-        status: 200,
-        type: TextAnalysisResponse,
-        description: 'Text generated successfully'
-    })
-    async generateText(
-        @Query() dto: GenerateTextDto
-    ): Promise<IGeminiResponse<TextAnalysisResponse['data']>> {
-        try {
-            return await this.geminiService.generateText(dto.prompt, dto.modelName);
-        } catch (error) {
-            this.logger.error(error);
-            throw new HttpException(
-                error.message,
-                HttpStatus.INTERNAL_SERVER_ERROR
-            );
-        }
-    }
-
-    @Post('analyze-image')
-    @Public()
-    @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileInterceptor('file'))
-    @ApiOperation({ summary: 'Analyze image using Gemini AI' })
-    @ApiResponse({
-        status: 200,
-        type: ImageAnalysisResponse,
-        description: 'Image analyzed successfully'
-    })
+    @ApiConsumes('multipart/form-data')
+    @ApiOperation({ summary: 'Analyze text or image using Gemini AI' })
     @ApiBody({
-        description: 'Upload file ảnh để phân tích',
+        description: 'Gửi text (prompt) hoặc file ảnh (file) hoặc cả hai',
         schema: {
             type: 'object',
             properties: {
-                file: {
-                    type: 'string',
-                    format: 'binary', // Định nghĩa kiểu file
-                },
-            },
-        },
-    })
-    async analyzeImage(
-        @UploadedFile() file: Express.Multer.File,
-        @Query() dto: GenerateImageDescriptionDto
-    ): Promise<IGeminiResponse<ImageAnalysisResponse['data']>> {
-        try {
-            if (!file) {
-                throw new HttpException(
-                    'No image file provided',
-                    HttpStatus.BAD_REQUEST
-                );
+                file: { type: 'string', format: 'binary', description: 'Image file (optional)' },
+                prompt: { type: 'string', description: 'Text prompt (optional)' },
             }
-            return await this.geminiService.processImage(file, dto.prompt, dto.modelName);
+        }
+    })
+    async analyze(
+        @UploadedFile() file: Express.Multer.File,
+        @Body('prompt') prompt?: string,
+    ): Promise<any> {
+        try {
+            if (file) {
+                // Nếu có file, gọi processImage, truyền thêm prompt nếu có
+                return await this.geminiService.analyzeImageWithConcepts(file, prompt);
+            } else if (prompt) {
+                // Nếu chỉ có prompt, gọi generateText
+                return await this.geminiService.generateText(prompt);
+            } else {
+                throw new HttpException('No input provided', HttpStatus.BAD_REQUEST);
+            }
         } catch (error) {
             this.logger.error(error);
             throw new HttpException(
@@ -126,4 +99,6 @@ export class GeminiController {
     async searchConcepts(@UploadedFile() image: Express.Multer.File) {
         return await this.geminiService.searchConcepts(image);
     }
+
+
 }

@@ -6,3 +6,5 @@ export enum GeminiModel {
     GEMINI_2_0_FLASH_LITE_001 = 'models/gemini-2.0-flash-lite-001',
     GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION = 'models/gemini-2.0-flash-exp-image-generation',
 }
+
+

@@ -44,7 +44,6 @@ export class ImageAnalysisResponse {
             colors: string[];
         };
         suggestions: string[];
-        hashtags: string[];
     };
 
     @ApiProperty()
