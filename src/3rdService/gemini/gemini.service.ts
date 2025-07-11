@@ -99,7 +99,7 @@ export class GeminiService {
     //#region Concept Vector Generation
     async analyzeImageWithConcepts(file: Express.Multer.File, prompt?: string): Promise<IGeminiResponse<{
         analysis: ImageAnalysisResponse['data'];
-        concepts: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number })[];
+        concepts_same: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number })[];
     }>> {
         const startTime = Date.now();
         // 1. Image analysis (reuse processImage logic, but inline for efficiency)
@@ -127,7 +127,7 @@ export class GeminiService {
         const analysis = await this.parseImageAnalysis(result.response.text());
 
         // 2. Concept vector search (reuse searchConcepts logic, but inline for efficiency)
-        let concepts: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number; name: string | null; price: number | null; imageUrl: string | null })[] = [];
+        let concepts_same: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number; name: string | null; price: number | null; imageUrl: string | null })[] = [];
         try {
             const keywords = await this.generateKeywordsFromImage(file);
             const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
@@ -158,7 +158,7 @@ export class GeminiService {
             const results = await queryBuilder.getRawAndEntities();
 
             // For each concept, fetch name, price, and first imageUrl
-            concepts = await Promise.all(results.entities.map(async (entity, index) => {
+            concepts_same = await Promise.all(results.entities.map(async (entity, index) => {
                 // Remove embedding from the returned object
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { embedding, conceptId, ...rest } = entity;
@@ -204,7 +204,7 @@ export class GeminiService {
             success: true,
             data: {
                 analysis,
-                concepts
+                concepts_same
             },
             metadata: {
                 filename: file.originalname,

@@ -34,22 +34,14 @@ export class GeminiController {
         @UploadedFile() file: Express.Multer.File,
         @Body('prompt') prompt?: string,
     ): Promise<any> {
-        try {
-            if (file) {
-                // Nếu có file, gọi processImage, truyền thêm prompt nếu có
-                return await this.geminiService.analyzeImageWithConcepts(file, prompt);
-            } else if (prompt) {
-                // Nếu chỉ có prompt, gọi generateText
-                return await this.geminiService.generateText(prompt);
-            } else {
-                throw new HttpException('No input provided', HttpStatus.BAD_REQUEST);
-            }
-        } catch (error) {
-            this.logger.error(error);
-            throw new HttpException(
-                error.message,
-                HttpStatus.INTERNAL_SERVER_ERROR
-            );
+        if (file) {
+            // Nếu có file, gọi processImage, truyền thêm prompt nếu có
+            return await this.geminiService.analyzeImageWithConcepts(file, prompt);
+        } else if (prompt) {
+            // Nếu chỉ có prompt, gọi generateText
+            return await this.geminiService.generateText(prompt);
+        } else {
+            throw new HttpException('No input provided', HttpStatus.BAD_REQUEST);
         }
     }
 
