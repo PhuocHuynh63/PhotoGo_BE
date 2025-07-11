@@ -51,6 +51,7 @@ import { AttendanceModule } from './modules/attendances/attendance/attendance.mo
 import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
 import { CampaignModule } from './modules/campaign/campaign.module';
 import { GoongModule } from './3rdService/goong/goong.module';
+import { AttendanceLogModule } from './modules/attendances/attendance-log/attendance-log.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -168,6 +169,7 @@ if (!fs.existsSync(templateDir)) {
     PaymentModule,
     ReviewModule,
     AttendanceModule,
+    AttendanceLogModule,
     CategoryModule,
     LocationModule,
     LocationAvailabilityModule,
