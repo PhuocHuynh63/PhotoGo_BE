@@ -219,7 +219,47 @@ export class ServicePackageService {
 
   async remove(id: string): Promise<void> {
     const servicePackage = await this.findOne(id);
+    // Xoá các concept liên quan và các bảng phụ liên quan trước khi xoá package
+    if (servicePackage.serviceConcepts && servicePackage.serviceConcepts.length > 0) {
+      for (const concept of servicePackage.serviceConcepts) {
+        this.logger.log(`Đang xoá concept ${concept.id} thuộc package ${id}`);
+        // Lấy tất cả booking id liên quan đến concept này
+        const bookings = await this.dataSource.query(`SELECT id FROM booking WHERE service_concept_id = $1`, [concept.id]);
+        const bookingIds = bookings.map((b: any) => b.id);
+        if (bookingIds.length > 0) {
+          // Lấy tất cả invoice id liên quan đến các booking này
+          const invoices = await this.dataSource.query(`SELECT id FROM invoice WHERE booking_id = ANY($1)`, [bookingIds]);
+          const invoiceIds = invoices.map((inv: any) => inv.id);
+          if (invoiceIds.length > 0) {
+            // Xoá tất cả payment liên quan trước
+            await this.dataSource.query(`DELETE FROM payment WHERE invoice_id = ANY($1)`, [invoiceIds]);
+          }
+          // Xoá tất cả invoice liên quan trước
+          await this.dataSource.query(`DELETE FROM invoice WHERE id = ANY($1)`, [invoiceIds]);
+          // Xoá tất cả booking_history liên quan trước
+          await this.dataSource.query(`DELETE FROM booking_history WHERE booking_id = ANY($1)`, [bookingIds]);
+          // Xoá tất cả booking liên quan đến concept này
+          await this.dataSource.query(`DELETE FROM booking WHERE id = ANY($1)`, [bookingIds]);
+        }
+        // Xoá cart_item liên quan trước
+        await this.dataSource.query(`DELETE FROM cart_item WHERE service_concept_id = $1`, [concept.id]);
+        // Xoá wishlist_item liên quan trước
+        await this.dataSource.query(`DELETE FROM wishlist_item WHERE service_concept_id = $1`, [concept.id]);
+        // Xoá concept vector trước để tránh lỗi khoá ngoại
+        await this.dataSource.query(`DELETE FROM concept_vector WHERE concept_id = $1`, [concept.id]);
+        // Xoá images
+        await this.serviceConceptImageRepository.delete({ serviceConceptId: concept.id });
+        // Xoá serviceConceptServiceType
+        await this.serviceConceptServiceTypeRepository.delete({ serviceConceptId: concept.id });
+        // Xoá commission
+        await this.commissionRepository.delete({ serviceConceptId: concept.id });
+        // Xoá concept
+        await this.serviceConceptRepository.delete(concept.id);
+        this.logger.log(`Đã xoá concept ${concept.id}`);
+      }
+    }
     await this.servicePackageRepository.remove(servicePackage);
+    this.logger.log(`Đã xoá service package ${id} và toàn bộ dữ liệu liên quan.`);
   }
 
   //#region ServicePackageMetadata
@@ -613,23 +653,23 @@ export class ServicePackageService {
     const serviceType = await this.findServiceType(id);
     Object.assign(serviceType, dto);
     const updatedServiceType = await this.serviceTypeRepository.save(serviceType);
-    
+
     // Return with counts
     return this.findServiceType(updatedServiceType.id);
   }
 
   async toggleServiceTypeStatus(id: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
     const serviceType = await this.findServiceType(id);
-    
+
     // Toggle status
-    serviceType.status = serviceType.status === ServiceTypeStatus.ACTIVE 
-      ? ServiceTypeStatus.INACTIVE 
+    serviceType.status = serviceType.status === ServiceTypeStatus.ACTIVE
+      ? ServiceTypeStatus.INACTIVE
       : ServiceTypeStatus.ACTIVE;
-    
+
     const updatedServiceType = await this.serviceTypeRepository.save(serviceType);
-    
+
     this.logger.log(`Service type ${id} status changed to: ${updatedServiceType.status}`);
-    
+
     // Return with counts
     return this.findServiceType(updatedServiceType.id);
   }
@@ -699,6 +739,7 @@ export class ServicePackageService {
     await this.serviceConceptRepository.save(savedServiceConcept);
 
     // Create service concept images
+    let savedImageEntities: ServiceConceptImage[] = [];
     if (uploadedImageUrls.length > 0) {
       const imageEntities = uploadedImageUrls.map(url =>
         this.serviceConceptImageRepository.create({
@@ -706,7 +747,7 @@ export class ServicePackageService {
           serviceConceptId: savedServiceConcept.id
         })
       );
-      await this.serviceConceptImageRepository.save(imageEntities);
+      savedImageEntities = await this.serviceConceptImageRepository.save(imageEntities);
     }
 
     // If service type IDs are provided, link them to the concept
@@ -735,39 +776,13 @@ export class ServicePackageService {
 
     this.logger.log(`Khái niệm dịch vụ đã được tạo thành công trong ${Date.now() - startTime}ms`);
 
-    // Generate concept vector if images are provided
-    if (files?.images && files.images.length > 0) {
-      try {
-        this.logger.log(`Bắt đầu tạo concept vector cho khái niệm dịch vụ ${savedServiceConcept.id}`);
-        const vectorStartTime = Date.now();
-
-        // Try with first image
-        try {
-          await this.geminiService.generateConceptVector(files.images[0], savedServiceConcept.id);
-          this.logger.log(`Concept vector đã được tạo thành công trong ${Date.now() - vectorStartTime}ms`);
-        } catch (error) {
-          // If first image fails due to safety filter, try with other images
-          if (error.message?.includes('Response was blocked') && files.images.length > 1) {
-            this.logger.warn(`Ảnh đầu tiên bị chặn bởi bộ lọc an toàn, đang thử với ảnh khác...`);
-            for (let i = 1; i < files.images.length; i++) {
-              try {
-                await this.geminiService.generateConceptVector(files.images[i], savedServiceConcept.id);
-                this.logger.log(`Concept vector đã được tạo thành công với ảnh thứ ${i + 1} trong ${Date.now() - vectorStartTime}ms`);
-                break;
-              } catch (retryError) {
-                if (i === files.images.length - 1) {
-                  throw retryError; // Re-throw if all images fail
-                }
-                this.logger.warn(`Ảnh thứ ${i + 1} cũng bị chặn, đang thử ảnh tiếp theo...`);
-              }
-            }
-          } else {
-            throw error; // Re-throw if it's not a safety filter issue
-          }
-        }
-      } catch (error) {
-        this.logger.error(`Lỗi khi tạo concept vector: ${error.message}`);
-        // Don't throw error to prevent service concept creation from failing
+    // Generate concept vector for each image using its service_concept_image.id
+    if (files?.images && files.images.length > 0 && savedImageEntities.length === files.images.length) {
+      this.logger.log(`Bắt đầu tạo concept vector cho tất cả ảnh của khái niệm dịch vụ ${savedServiceConcept.id}`);
+      const vectorStartTime = Date.now();
+      for (let i = 0; i < files.images.length; i++) {
+        await this.geminiService.generateConceptVector(files.images[i], savedImageEntities[i].id);
+        this.logger.log(`Concept vector đã được tạo thành công với ảnh thứ ${i + 1} (service_concept_image_id: ${savedImageEntities[i].id}) trong ${Date.now() - vectorStartTime}ms`);
       }
     }
 
@@ -1070,7 +1085,7 @@ export class ServicePackageService {
 
     try {
       // Delete related data in the correct order
-      
+
       // 1. Delete commission records
       await this.commissionRepository.delete({ serviceConceptId: id });
       this.logger.log(`Đã xóa commission cho concept ${id}`);
@@ -1101,7 +1116,7 @@ export class ServicePackageService {
 
       // 5. Finally delete the service concept
       await this.serviceConceptRepository.remove(serviceConcept);
-      
+
       this.logger.log(`Khái niệm dịch vụ ${id} đã được xóa thành công trong ${Date.now() - startTime}ms`);
     } catch (error) {
       this.logger.error(`Lỗi khi xóa khái niệm dịch vụ ${id}: ${error.message}`);
