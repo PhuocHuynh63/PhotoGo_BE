@@ -286,18 +286,17 @@ export class GeminiService {
         concepts_same = await Promise.all(results.entities.map(async (entity, index) => {
             // Remove embedding from the returned object
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { embedding, conceptId, keywords: conceptKeywords, ...rest } = entity;
+            const { embedding, concept_image_id, keywords: conceptKeywords, ...rest } = entity;
 
             // Fetch concept info and first image
             let name: string | null = null;
             let price: number | null = null;
             let imageUrl: string | null = null;
             let keywords: string[] = Array.isArray(conceptKeywords) ? conceptKeywords.map((k: any) => String(k).toLowerCase()) : [];
-            if (conceptId) {
-                try {
+            if (concept_image_id) {
                     // Sử dụng repository với relations để tránh lỗi joinColumns
                     const conceptWithImage = await this.conceptVectorRepository.manager.getRepository(ServiceConcept).findOne({
-                        where: { id: conceptId },
+                        where: { id: concept_image_id },
                         relations: ['images'],
                         order: { images: { createdAt: 'ASC' } }
                     });
@@ -309,13 +308,10 @@ export class GeminiService {
                         }
                         // Nếu ServiceConcept có keywords riêng, có thể lấy thêm ở đây nếu cần
                     }
-                } catch (err) {
-                    this.logger.error(`Lỗi lấy ServiceConcept cho conceptId ${conceptId}: ${err.message}\n${err.stack}`);
-                }
             }
             return {
                 ...rest,
-                conceptId,
+                concept_image_id,
                 name,
                 price,
                 imageUrl,
@@ -438,7 +434,7 @@ export class GeminiService {
             negativeCount > positiveCount ? 'negative' : 'neutral';
     }
 
-    async generateConceptVector(image: Express.Multer.File, conceptId: string): Promise<ConceptVector> {
+    async generateConceptVector(image: Express.Multer.File, concept_image_id: string): Promise<ConceptVector> {
         // Generate keywords from image
         const keywords = await this.generateKeywordsFromImage(image);
         this.logger.log(`Generated keywords: ${keywords.join(', ')}`);
@@ -454,10 +450,10 @@ export class GeminiService {
         }
 
         // Create or update concept vector
-        let conceptVector = await this.conceptVectorRepository.findOne({ where: { conceptId } });
+        let conceptVector = await this.conceptVectorRepository.findOne({ where: { concept_image_id } });
         if (!conceptVector) {
             conceptVector = this.conceptVectorRepository.create({
-                conceptId,
+                concept_image_id,
                 keywords,
                 embedding,
             });
