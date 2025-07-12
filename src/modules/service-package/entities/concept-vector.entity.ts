@@ -24,8 +24,8 @@ export class ConceptVector {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ name: 'concept_id', type: 'uuid' })
-    conceptId: string;
+    @Column({ name: 'concept_image_id', type: 'uuid' })
+    concept_image_id: string;
 
     @Column('text', { array: true, nullable: true })
     keywords: string[];
