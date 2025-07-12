@@ -35,7 +35,7 @@ export class PaginationDto {
   @IsString()
   sortDirection?: string;
 
-  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: Boolean, example: 'false', required: false })
   @IsOptional()
-  showAll?: string;
+  showAll?: boolean;
 }

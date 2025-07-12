@@ -12,8 +12,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
+import { BookingScheduleService } from './booking-schedule.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { CheckMultiDayAvailabilityDto, CheckMultiDayAvailabilityResponseDto } from './dto/check-multi-day-availability.dto';
 import { Booking } from './entities/booking.entity';
 import {
   ApiBearerAuth,
@@ -43,7 +45,10 @@ import { Role } from 'src/modules/roles/entities/role.entity';
 @ApiTags('Booking')
 @ApiBearerAuth('access-token')
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) { }
+  constructor(
+    private readonly bookingService: BookingService,
+    private readonly bookingScheduleService: BookingScheduleService,
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Tạo mới booking' })
@@ -230,6 +235,18 @@ export class BookingController {
     return this.bookingService.findOne(id);
   }
 
+  @Get(':id/with-schedules')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin booking với lịch trình' })
+  @ApiResponse({ status: 200, description: 'Lấy thông tin booking với lịch trình thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ResponseMessage('Lấy thông tin booking với lịch trình thành công')
+  async findOneWithSchedules(@Param('id') id: string): Promise<{ booking: Booking; schedules: any[] }> {
+    const booking = await this.bookingService.findOne(id);
+    const schedules = await this.bookingScheduleService.findAllByBooking(id);
+    return { booking, schedules };
+  }
+
   // @Get(':id/check-availability')
   // @ApiOperation({ summary: 'Kiểm tra slot thời gian còn khả dụng không trước khi thanh toán' })
   // @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
@@ -256,15 +273,67 @@ export class BookingController {
   }
 
   @Get('check-slot-availability')
-  @ApiOperation({ summary: 'Kiểm tra slot có khả dụng không trước khi tạo booking' })
-  @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
-  @ResponseMessage('Kiểm tra slot availability thành công')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Kiểm tra slot availability', type: Object })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy slot' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Kiểm tra slot availability cho single day booking' })
   async checkSlotAvailability(
     @Query('date') date: string,
     @Query('time') time: string,
     @Query('locationId') locationId: string,
   ) {
-    return await this.bookingService.checkSlotAvailabilityWithDetails(date, time, locationId);
+    try {
+      if (!date || !time || !locationId) {
+        throw new HttpException(
+          'Date, time và locationId là bắt buộc',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return await this.bookingService.checkSlotAvailabilityWithDetails(
+        date,
+        time,
+        locationId,
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi kiểm tra slot availability',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('check-multi-day-availability')
+  @Public()
+  @ApiBody({ type: CheckMultiDayAvailabilityDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Kiểm tra multi-day availability thành công', 
+    type: CheckMultiDayAvailabilityResponseDto 
+  })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Kiểm tra multi-day availability trước khi tạo booking' })
+  async checkMultiDayAvailability(
+    @Body() checkMultiDayAvailabilityDto: CheckMultiDayAvailabilityDto,
+  ): Promise<CheckMultiDayAvailabilityResponseDto> {
+    try {
+      // Get service concept to pass duration
+      const serviceConcept = await this.bookingService['serviceConceptRepository'].findOne({
+        where: { id: checkMultiDayAvailabilityDto.serviceConceptId }
+      });
+
+      return await this.bookingService.checkMultiDayAvailability(
+        checkMultiDayAvailabilityDto.schedules,
+        checkMultiDayAvailabilityDto.locationId,
+        serviceConcept
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi kiểm tra multi-day availability',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   @Patch(':id')

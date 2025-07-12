@@ -2,8 +2,11 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BookingService } from './booking.service';
 import { BookingController } from './booking.controller';
+import { BookingScheduleService } from './booking-schedule.service';
+import { BookingScheduleController } from './booking-schedule.controller';
 import { Booking } from './entities/booking.entity';
 import { BookingHistory } from './entities/booking-history.entity';
+import { BookingSchedule } from './entities/booking-schedule.entity';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { ServicePackageModule } from '../service-package/service-package.module';
@@ -27,6 +30,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     TypeOrmModule.forFeature([
       Booking,
       BookingHistory,
+      BookingSchedule,
       ServiceConcept,
       Voucher,
       Dispute,
@@ -46,8 +50,8 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     AuthModule,
     SubscriptionModule,
   ],
-  controllers: [BookingController],
-  providers: [BookingService],
-  exports: [BookingService],
+  controllers: [BookingController, BookingScheduleController],
+  providers: [BookingService, BookingScheduleService],
+  exports: [BookingService, BookingScheduleService],
 })
 export class BookingModule {}

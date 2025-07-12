@@ -50,7 +50,7 @@ export class FilterServicePackageDto {
   @IsString()
   sortDirection?: 'asc' | 'desc';
 
-  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: Boolean, example: 'false', required: false })
   @IsOptional()
-  showAll?: string;
+  showAll?: boolean;
 }

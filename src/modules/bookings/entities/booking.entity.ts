@@ -3,9 +3,10 @@ import { User } from '../../users/entities/user.entity';
 import { Location } from '../../locations/entities/location.entity';
 import { ServiceConcept } from '../../service-package/entities/service-concept.entity';
 import { BookingHistory } from './booking-history.entity';
+import { BookingSchedule } from './booking-schedule.entity';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { Dispute } from '../../disputes/entities/dispute.entity';
-import { BookingStatus, BookingSourceType, BookingDepositType } from '../../../constants/booking.enum';
+import { BookingStatus, BookingSourceType, BookingDepositType, BookingType } from '../../../constants/booking.enum';
 
 @Entity('booking')
 export class Booking {
@@ -72,6 +73,9 @@ export class Booking {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0, name: 'priority_score' })
   priorityScore: number;
 
+  @Column({ type: 'enum', enum: BookingType, default: BookingType.SINGLE_DAY, name: 'booking_type' })
+  bookingType: BookingType;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 
@@ -80,6 +84,9 @@ export class Booking {
 
   @OneToMany(() => BookingHistory, (history) => history.booking)
   histories: BookingHistory[];
+
+  @OneToMany(() => BookingSchedule, (schedule) => schedule.booking)
+  schedules: BookingSchedule[];
 
   @OneToMany(() => Invoice, (invoice) => invoice.booking)
   invoices: Invoice[];

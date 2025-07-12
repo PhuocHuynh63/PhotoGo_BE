@@ -16,10 +16,11 @@ import { BookingModule } from '../bookings/booking.module';
 import { RefundModule } from '../refunds/refund.module';
 import { LocationAvailabilityModule } from '../locations/location-availability.module';
 import { Voucher } from '../vouchers/entities/voucher.entity';
+import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction, Voucher]),
+    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction, Voucher, LocationWorkingDate]),
     VoucherModule,
     PayosModule,
     AuthModule,

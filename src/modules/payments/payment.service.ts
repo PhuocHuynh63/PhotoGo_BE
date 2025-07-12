@@ -24,6 +24,7 @@ import { BookingService } from '../bookings/booking.service';
 import { RefundService } from '../refunds/refund.service';
 import { LocationAvailabilityService } from '../locations/location-availability.service';
 import { Voucher } from '../vouchers/entities/voucher.entity';
+import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 
 @Injectable()
 export class PaymentService {
@@ -51,6 +52,8 @@ export class PaymentService {
     private readonly locationAvailabilityService: LocationAvailabilityService,
     @InjectRepository(Voucher)
     private readonly voucherRepository: Repository<Voucher>,
+    @InjectRepository(LocationWorkingDate)
+    private readonly locationWorkingDateRepository: Repository<LocationWorkingDate>,
   ) {}
 
   // Helper function to format date to DD/MM/YYYY
@@ -321,7 +324,8 @@ export class PaymentService {
         'invoice.booking.user', 
         'invoice.booking.user.voucherUsers', 
         'invoice.booking.user.voucherUsers.voucher',
-        'invoice.booking.histories'
+        'invoice.booking.histories',
+        'invoice.booking.schedules' // Add schedules relation
       ]
     });
 
@@ -410,8 +414,17 @@ export class PaymentService {
         await this.bookingService['handlePaymentPriority'](booking.id);
       }
 
-      // Block the slot since payment is successful
-      if (payment.type === PaymentType.DEPOSIT) {
+      // NEW: Handle multi-day booking - close all scheduled dates when payment is successful
+      if (payment.type === PaymentType.DEPOSIT && booking.schedules && booking.schedules.length > 0) {
+        try {
+          await this.closeAllScheduledDates(booking.schedules, booking.locationId);
+        } catch (error) {
+          console.error('Error closing scheduled dates after successful payment:', error);
+        }
+      }
+
+      // Block the slot since payment is successful (for single day booking)
+      if (payment.type === PaymentType.DEPOSIT && !booking.schedules) {
         try {
           await this.locationAvailabilityService.lockSlotForBooking(
             this.formatDate(booking.date),
@@ -447,12 +460,21 @@ export class PaymentService {
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);
 
-      // Unlock slot
-      await this.locationAvailabilityService.unlockSlot(
-        this.formatDate(booking.date),
-        booking.time,
-        booking.locationId
-      );
+      // NEW: Reopen scheduled dates for multi-day booking if payment failed
+      if (booking.schedules && booking.schedules.length > 0) {
+        try {
+          await this.reopenAllScheduledDates(booking.schedules, booking.locationId);
+        } catch (error) {
+          console.error('Error reopening scheduled dates after payment failure:', error);
+        }
+      } else {
+        // Unlock slot for single day booking
+        await this.locationAvailabilityService.unlockSlot(
+          this.formatDate(booking.date),
+          booking.time,
+          booking.locationId
+        );
+      }
       
       return {
         success: false,
@@ -480,6 +502,7 @@ export class PaymentService {
         'invoice.booking.location.vendor',
         'invoice.booking.serviceConcept',
         'invoice.booking.serviceConcept.servicePackage',
+        'invoice.booking.schedules', // Add schedules relation
       ]
     });
 
@@ -554,6 +577,15 @@ export class PaymentService {
       await this.bookingService['handlePaymentPriority'](booking.id);
     }
 
+    // NEW: Handle multi-day booking - close all scheduled dates when payment is successful
+    if (payment.type === PaymentType.DEPOSIT && booking.schedules && booking.schedules.length > 0) {
+      try {
+        await this.closeAllScheduledDates(booking.schedules, booking.locationId);
+      } catch (error) {
+        console.error('Error closing scheduled dates after successful payment:', error);
+      }
+    }
+
     // handle point
     const points = booking?.user?.points;
     if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
@@ -611,8 +643,8 @@ export class PaymentService {
       await this.voucherService.useVoucher(voucher.id, booking.userId);
     }
 
-    // Block the slot since payment is successful
-    if (payment.type === PaymentType.DEPOSIT) {
+    // Block the slot since payment is successful (for single day booking)
+    if (payment.type === PaymentType.DEPOSIT && !booking.schedules) {
       try {
         await this.locationAvailabilityService.lockSlotForBooking(
           this.formatDate(booking.date),
@@ -639,7 +671,8 @@ export class PaymentService {
       relations: [
         'invoice', 
         'invoice.booking', 
-        'invoice.booking.histories'
+        'invoice.booking.histories',
+        'invoice.booking.schedules' // Add schedules relation
       ]
     });
 
@@ -651,12 +684,23 @@ export class PaymentService {
     payment.status = PaymentStatus.FAILED;
     await this.paymentRepository.save(payment);
 
-    // Unlock slot nếu có booking
-    if (payment.invoice.booking) {
+    const booking = payment.invoice?.booking;
+
+    // NEW: Reopen scheduled dates for multi-day booking if payment failed
+    if (booking && booking.schedules && booking.schedules.length > 0) {
+      try {
+        await this.reopenAllScheduledDates(booking.schedules, booking.locationId);
+      } catch (error) {
+        console.error('Error reopening scheduled dates after payment failure:', error);
+      }
+    }
+
+    // Unlock slot nếu có booking (for single day booking)
+    if (booking && !booking.schedules) {
       await this.locationAvailabilityService.unlockSlot(
-        this.formatDate(payment.invoice.booking.date),
-        payment.invoice.booking.time,
-        payment.invoice.booking.locationId
+        this.formatDate(booking.date),
+        booking.time,
+        booking.locationId
       );
     }
 
@@ -668,7 +712,6 @@ export class PaymentService {
     }
 
     // Update booking status (nếu muốn)
-    const booking = invoice?.booking;
     if (booking) {
       booking.status = BookingStatus.CANCELLED;
       await this.bookingRepository.save(booking);
@@ -710,5 +753,71 @@ export class PaymentService {
     }
 
     return await this.bookingService['isSlotStillAvailable'](invoice.booking.id);
+  }
+
+  // NEW: Method to close all scheduled dates for multi-day booking
+  private async closeAllScheduledDates(schedules: any[], locationId: string): Promise<void> {
+    try {
+      for (const schedule of schedules) {
+        if (schedule.date) {
+          // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+          const [day, month, year] = schedule.date.split('/');
+          const convertedDate = `${year}-${month}-${day}`;
+          
+          // Find and close the working date
+          const workingDate = await this.locationWorkingDateRepository.findOne({
+            where: {
+              date: new Date(convertedDate),
+              locationAvailability: {
+                location: { id: locationId }
+              }
+            },
+            relations: ['locationAvailability', 'locationAvailability.location']
+          });
+
+          if (workingDate) {
+            workingDate.isAvailable = false;
+            await this.locationWorkingDateRepository.save(workingDate);
+            console.log(`Closed date ${schedule.date} for location ${locationId}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error closing scheduled dates:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Method to reopen all scheduled dates for multi-day booking
+  private async reopenAllScheduledDates(schedules: any[], locationId: string): Promise<void> {
+    try {
+      for (const schedule of schedules) {
+        if (schedule.date) {
+          // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+          const [day, month, year] = schedule.date.split('/');
+          const convertedDate = `${year}-${month}-${day}`;
+          
+          // Find and reopen the working date
+          const workingDate = await this.locationWorkingDateRepository.findOne({
+            where: {
+              date: new Date(convertedDate),
+              locationAvailability: {
+                location: { id: locationId }
+              }
+            },
+            relations: ['locationAvailability', 'locationAvailability.location']
+          });
+
+          if (workingDate) {
+            workingDate.isAvailable = true;
+            await this.locationWorkingDateRepository.save(workingDate);
+            console.log(`Reopened date ${schedule.date} for location ${locationId}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reopening scheduled dates:', error);
+      throw error;
+    }
   }
 }

@@ -2,8 +2,9 @@ import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
-import { BookingDepositType, BookingStatus, BookingSourceType } from '../../constants/booking.enum';
+import { BookingDepositType, BookingStatus, BookingSourceType, BookingScheduleStatus, BookingType } from '../../constants/booking.enum';
 import { BookingHistory } from './entities/booking-history.entity';
+import { BookingSchedule } from './entities/booking-schedule.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
@@ -35,6 +36,8 @@ export class BookingService {
     private bookingRepository: Repository<Booking>,
     @InjectRepository(BookingHistory)
     private bookingHistoryRepository: Repository<BookingHistory>,
+    @InjectRepository(BookingSchedule)
+    private bookingScheduleRepository: Repository<BookingSchedule>,
     @InjectRepository(ServiceConcept)
     private serviceConceptRepository: Repository<ServiceConcept>,
     @InjectRepository(Voucher)
@@ -96,6 +99,435 @@ export class BookingService {
   private timeToMinutes(timeStr: string): number {
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours * 60 + minutes;
+  }
+
+  // Create single day booking (old logic)
+  private async createSingleDayBooking(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    serviceConceptId: string,
+    serviceConcept: ServiceConcept,
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
+    // Validate required fields for single day booking
+    if (!createBookingDto.date) {
+      throw new BadRequestException('Ngày booking là bắt buộc cho booking 1 ngày');
+    }
+
+    if (!createBookingDto.time) {
+      throw new BadRequestException('Giờ booking là bắt buộc cho booking 1 ngày');
+    }
+
+    // Use the old validation logic for single day booking
+    await this.validateSingleDaySchedule(createBookingDto, serviceConcept);
+
+    // Continue with the old booking creation logic
+    return await this.createBookingWithOldLogic(createBookingDto, userId, serviceConceptId, serviceConcept);
+  }
+
+  // Create multi-day booking (new logic)
+  private async createMultiDayBooking(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    serviceConceptId: string,
+    serviceConcept: ServiceConcept,
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
+    // Validate schedules
+    if (!createBookingDto.schedules || createBookingDto.schedules.length === 0) {
+      throw new BadRequestException('Danh sách lịch booking là bắt buộc cho booking nhiều ngày');
+    }
+
+    // NEW: Check overall availability for all dates
+    const availabilityCheck = await this.checkMultiDayAvailability(
+      createBookingDto.schedules,
+      createBookingDto.locationId,
+      serviceConcept
+    );
+
+    if (!availabilityCheck.isAvailable) {
+      throw new BadRequestException(availabilityCheck.reason);
+    }
+
+    // Validate all schedules before creating booking
+    for (const schedule of createBookingDto.schedules) {
+      await this.validateMultiDaySchedule(schedule, serviceConcept, createBookingDto.locationId);
+    }
+
+    // Continue with the new booking creation logic
+    return await this.createBookingWithNewLogic(createBookingDto, userId, serviceConceptId, serviceConcept);
+  }
+
+  // Helper function to validate a single schedule for multi-day booking
+  private async validateMultiDaySchedule(
+    schedule: any,
+    serviceConcept: ServiceConcept,
+    locationId: string,
+  ): Promise<void> {
+    if (!schedule.date) {
+      throw new BadRequestException('Ngày booking là bắt buộc');
+    }
+
+    // check the date is available
+    const workingDate = await this.locationWorkingDateRepository.findOne({
+      where: {
+        date: new Date(this.convertDateFormat(schedule.date)),
+        isAvailable: true
+      }
+    });
+
+    if (!workingDate) {
+      throw new BadRequestException(`Ngày ${schedule.date} không làm việc`);
+    }
+
+    // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+    const convertedDate = this.convertDateFormat(schedule.date);
+    if (!convertedDate) {
+      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+    }
+
+    if (!schedule.time) {
+      throw new BadRequestException('Giờ booking là bắt buộc');
+    }
+
+    // Check location availability
+    const locationAvailability = await this.locationAvailabilityService.findByDate(
+      schedule.date,
+      { current: '1', pageSize: '1' }
+    );
+
+    if (!locationAvailability.data.length) {
+      throw new BadRequestException(`Chi nhánh không làm việc vào ngày ${schedule.date}`);
+    }
+
+    const availability = locationAvailability.data[0];
+    const slotTimes = availability.slotTimes;
+
+    // Find matching slot time
+    const bookingTimeMinutes = this.timeToMinutes(schedule.time);
+    const matchingSlot = slotTimes.find(slot => {
+      const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
+      const slotEndMinutes = this.timeToMinutes(slot.endSlotTime);
+      return bookingTimeMinutes >= slotStartMinutes && bookingTimeMinutes <= slotEndMinutes;
+    });
+
+    if (!matchingSlot) {
+      throw new BadRequestException(`Thời gian đặt lịch ${schedule.time} không nằm trong khung giờ làm việc`);
+    }
+
+    // NEW: Check if this date and time is already booked and paid successfully
+    const isDateAlreadyBooked = await this.isDateAlreadyBookedAndPaid(
+      schedule.date,
+      schedule.time,
+      locationId,
+      serviceConcept.duration
+    );
+
+    if (isDateAlreadyBooked) {
+      throw new BadRequestException(`Ngày ${schedule.date} vào lúc ${schedule.time} đã được đặt và thanh toán thành công bởi người khác. Vui lòng chọn ngày khác.`);
+    }
+
+    // Validate date and time
+    const bookingDate = new Date(convertedDate);
+    const currentDate = new Date();
+
+    // Get Vietnam time by adding 7 hours
+    const vietnamBookingDate = new Date(bookingDate.getTime() + (7 * 60 * 60 * 1000));
+    const vietnamCurrentDate = new Date(currentDate.getTime() + (7 * 60 * 60 * 1000));
+
+    // Reset time part for date comparison
+    const bookingDateOnly = new Date(vietnamBookingDate.getFullYear(), vietnamBookingDate.getMonth(), vietnamBookingDate.getDate());
+    const currentDateOnly = new Date(vietnamCurrentDate.getFullYear(), vietnamCurrentDate.getMonth(), vietnamCurrentDate.getDate());
+
+    if (bookingDateOnly < currentDateOnly) {
+      throw new BadRequestException(`Ngày booking ${schedule.date} không hợp lệ`);
+    }
+
+    // If same day, check time
+    if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
+      // Parse time string (HH:mm) to hours and minutes
+      const [bookingHours, bookingMinutes] = schedule.time.split(':').map(Number);
+      const currentHours = vietnamCurrentDate.getHours();
+      const currentMinutes = vietnamCurrentDate.getMinutes();
+
+      const currentTimeInMinutes = currentHours * 60 + currentMinutes;
+      const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
+
+      if (bookingTimeInMinutes <= currentTimeInMinutes) {
+        throw new BadRequestException(`Thời gian đặt lịch ${schedule.time} ngày ${schedule.date} không hợp lệ`);
+      }
+    }
+  }
+
+  // NEW: Check if a specific date and time is already booked and paid successfully
+  private async isDateAlreadyBookedAndPaid(
+    date: string,
+    time: string,
+    locationId: string,
+    duration: number
+  ): Promise<boolean> {
+    try {
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        return false;
+      }
+
+      // Find all paid bookings for this date and location
+      const paidBookings = await this.bookingRepository.find({
+        where: {
+          date: new Date(convertedDate),
+          locationId: locationId,
+          status: BookingStatus.PAID
+        },
+        relations: ['serviceConcept']
+      });
+
+      if (paidBookings.length === 0) {
+        return false;
+      }
+
+      // Check for overlapping time slots
+      const bookingTimeMinutes = this.timeToMinutes(time);
+      const bookingEndMinutes = bookingTimeMinutes + (duration || 60); // Default 60 minutes if duration is 0
+
+      for (const booking of paidBookings) {
+        const existingBookingTimeMinutes = this.timeToMinutes(booking.time);
+        const existingBookingDuration = booking.serviceConcept?.duration || 60;
+        const existingBookingEndMinutes = existingBookingTimeMinutes + existingBookingDuration;
+
+        // Check if there's any overlap
+        if (
+          (bookingTimeMinutes >= existingBookingTimeMinutes && bookingTimeMinutes < existingBookingEndMinutes) ||
+          (bookingEndMinutes > existingBookingTimeMinutes && bookingEndMinutes <= existingBookingEndMinutes) ||
+          (bookingTimeMinutes <= existingBookingTimeMinutes && bookingEndMinutes >= existingBookingEndMinutes)
+        ) {
+          return true; // There's an overlap with a paid booking
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error checking if date is already booked:', error);
+      return false;
+    }
+  }
+
+  // NEW: Check if all dates in a multi-day booking are available
+  async checkMultiDayAvailability(schedules: any[], locationId: string, serviceConcept?: ServiceConcept): Promise<{
+    isAvailable: boolean;
+    unavailableDates: string[];
+    reason?: string;
+  }> {
+    const unavailableDates: string[] = [];
+    const duration = serviceConcept?.duration || 60; // Default 60 minutes if duration is 0
+
+    for (const schedule of schedules) {
+      if (!schedule.date || !schedule.time) {
+        continue;
+      }
+
+      // Check if the working date is available
+      const workingDate = await this.locationWorkingDateRepository.findOne({
+        where: {
+          date: new Date(this.convertDateFormat(schedule.date)),
+          locationAvailability: {
+            location: { id: locationId }
+          },
+          isAvailable: true
+        },
+        relations: ['locationAvailability', 'locationAvailability.location']
+      });
+
+      if (!workingDate) {
+        unavailableDates.push(schedule.date);
+        continue;
+      }
+
+      // Check if this specific date and time is already booked and paid
+      const isAlreadyBooked = await this.isDateAlreadyBookedAndPaid(
+        schedule.date,
+        schedule.time,
+        locationId,
+        duration
+      );
+
+      if (isAlreadyBooked) {
+        unavailableDates.push(schedule.date);
+      }
+    }
+
+    return {
+      isAvailable: unavailableDates.length === 0,
+      unavailableDates,
+      reason: unavailableDates.length > 0 
+        ? `Các ngày sau đã được đặt hoặc không khả dụng: ${unavailableDates.join(', ')}`
+        : undefined
+    };
+  }
+
+  // NEW: Method to reopen all scheduled dates when booking is cancelled
+  async reopenScheduledDates(bookingId: string): Promise<void> {
+    try {
+      const booking = await this.bookingRepository.findOne({
+        where: { id: bookingId },
+        relations: ['schedules']
+      });
+
+      if (!booking || !booking.schedules || booking.schedules.length === 0) {
+        return; // Not a multi-day booking
+      }
+
+      for (const schedule of booking.schedules) {
+        if (schedule.date) {
+          // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+          const dateStr = typeof schedule.date === 'string' ? schedule.date : this.formatDate(schedule.date);
+          const [day, month, year] = dateStr.split('/');
+          const convertedDate = `${year}-${month}-${day}`;
+          
+          // Find and reopen the working date
+          const workingDate = await this.locationWorkingDateRepository.findOne({
+            where: {
+              date: new Date(convertedDate),
+              locationAvailability: {
+                location: { id: booking.locationId }
+              }
+            },
+            relations: ['locationAvailability', 'locationAvailability.location']
+          });
+
+          if (workingDate) {
+            workingDate.isAvailable = true;
+            await this.locationWorkingDateRepository.save(workingDate);
+            console.log(`Reopened date ${schedule.date} for location ${booking.locationId}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reopening scheduled dates:', error);
+      throw error;
+    }
+  }
+
+  // Helper function to validate single day booking (old logic)
+  private async validateSingleDaySchedule(
+    createBookingDto: CreateBookingDto,
+    serviceConcept: ServiceConcept,
+  ): Promise<void> {
+    // check the date is available
+    const workingDate = await this.locationWorkingDateRepository.findOne({
+      where: {
+        date: new Date(this.convertDateFormat(createBookingDto.date)),
+        isAvailable: true
+      }
+    });
+
+    if (!workingDate) {
+      throw new BadRequestException('Ngày này không làm việc');
+    }
+
+    // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+    const convertedDate = this.convertDateFormat(createBookingDto.date);
+    if (!convertedDate) {
+      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
+    }
+
+    // Check location availability
+    const locationAvailability = await this.locationAvailabilityService.findByDate(
+      createBookingDto.date,
+      { current: '1', pageSize: '1' }
+    );
+
+    if (!locationAvailability.data.length) {
+      throw new BadRequestException('Chi nhánh không làm việc vào ngày này');
+    }
+
+    const availability = locationAvailability.data[0];
+    const slotTimes = availability.slotTimes;
+
+    // Find matching slot time
+    const bookingTimeMinutes = this.timeToMinutes(createBookingDto.time);
+    const matchingSlot = slotTimes.find(slot => {
+      const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
+      const slotEndMinutes = this.timeToMinutes(slot.endSlotTime);
+      return bookingTimeMinutes >= slotStartMinutes && bookingTimeMinutes <= slotEndMinutes;
+    });
+
+    if (!matchingSlot) {
+      throw new BadRequestException('Thời gian đặt lịch không nằm trong khung giờ làm việc');
+    }
+
+    // Get slot time working date to check maxParallel
+    const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+      where: {
+        slotTimeId: matchingSlot.id,
+        workingDateId: availability.workingDates[0].id
+      }
+    });
+
+    if (!slotTimeWorkingDate) {
+      throw new BadRequestException('Không tìm thấy thông tin slot time cho ngày này');
+    }
+
+    // Check for overlapping bookings with maxParallelBookings
+    const overlappingCount = await this.countOverlappingBookings(
+      new Date(convertedDate),
+      createBookingDto.time,
+      serviceConcept.duration
+    );
+    if (overlappingCount >= slotTimeWorkingDate.maxParallelBookings) {
+      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này hoặc bị chồng lấn thời gian.`);
+    }
+
+    // Check if slot is available before creating booking (includes timeout check)
+    const isSlotAvailable = await this.locationAvailabilityService.isSlotAvailableForBooking(
+      createBookingDto.date,
+      createBookingDto.time,
+      createBookingDto.locationId
+    );
+
+    if (!isSlotAvailable) {
+      throw new BadRequestException('Slot thời gian này đã được đặt bởi người khác hoặc đang trong quá trình thanh toán. Vui lòng chọn thời gian khác.');
+    }
+
+    // Lock the slot for this booking process
+    const slotLocked = await this.locationAvailabilityService.lockSlotForBooking(
+      createBookingDto.date,
+      createBookingDto.time,
+      createBookingDto.locationId
+    );
+
+    if (!slotLocked) {
+      throw new BadRequestException('Không thể khóa slot thời gian. Vui lòng thử lại sau.');
+    }
+
+    // Validate date and time
+    const bookingDate = new Date(convertedDate);
+    const currentDate = new Date();
+
+    // Get Vietnam time by adding 7 hours
+    const vietnamBookingDate = new Date(bookingDate.getTime() + (7 * 60 * 60 * 1000));
+    const vietnamCurrentDate = new Date(currentDate.getTime() + (7 * 60 * 60 * 1000));
+
+    // Reset time part for date comparison
+    const bookingDateOnly = new Date(vietnamBookingDate.getFullYear(), vietnamBookingDate.getMonth(), vietnamBookingDate.getDate());
+    const currentDateOnly = new Date(vietnamCurrentDate.getFullYear(), vietnamCurrentDate.getMonth(), vietnamCurrentDate.getDate());
+
+    if (bookingDateOnly < currentDateOnly) {
+      throw new BadRequestException('Ngày booking không hợp lệ');
+    }
+
+    // If same day, check time
+    if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
+      // Parse time string (HH:mm) to hours and minutes
+      const [bookingHours, bookingMinutes] = createBookingDto.time.split(':').map(Number);
+      const currentHours = vietnamCurrentDate.getHours();
+      const currentMinutes = vietnamCurrentDate.getMinutes();
+
+      const currentTimeInMinutes = currentHours * 60 + currentMinutes;
+      const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
+
+      if (bookingTimeInMinutes <= currentTimeInMinutes) {
+        throw new BadRequestException('Giờ booking không hợp lệ');
+      }
+    }
   }
 
   // Helper function to check for overlapping bookings
@@ -378,6 +810,23 @@ export class BookingService {
       throw new NotFoundException(`Khái niệm dịch vụ với ID ${serviceConceptId} không tìm thấy`);
     }
 
+    // Handle different booking types
+    if (createBookingDto.bookingType === BookingType.SINGLE_DAY) {
+      return await this.createSingleDayBooking(createBookingDto, userId, serviceConceptId, serviceConcept);
+    } else if (createBookingDto.bookingType === BookingType.MULTI_DAY) {
+      return await this.createMultiDayBooking(createBookingDto, userId, serviceConceptId, serviceConcept);
+    } else {
+      throw new BadRequestException('Loại booking không hợp lệ');
+    }
+  }
+
+  // Create booking with old logic (single day)
+  private async createBookingWithOldLogic(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    serviceConceptId: string,
+    serviceConcept: ServiceConcept,
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
     // --- BẮT ĐẦU KIỂM TRA VOUCHER VÀ CAMPAIGN-VENDOR ---
     if (createBookingDto.voucherId) {
       const voucher = await this.voucherRepository.findOne({ where: { id: createBookingDto.voucherId } });
@@ -398,108 +847,7 @@ export class BookingService {
     }
     // --- KẾT THÚC KIỂM TRA VOUCHER VÀ CAMPAIGN-VENDOR ---
 
-    // Validate required fields
-    if (!createBookingDto.date) {
-      throw new BadRequestException('Ngày booking là bắt buộc');
-    }
-
-    // check the date is available
-    const workingDate = await this.locationWorkingDateRepository.findOne({
-      where: {
-        date: new Date(this.convertDateFormat(createBookingDto.date)),
-        isAvailable: true
-      }
-    });
-
-    if (!workingDate) {
-      throw new BadRequestException('Ngày này không làm việc');
-    }
-
-    // Convert date format from DD/MM/YYYY to YYYY-MM-DD
-    const convertedDate = this.convertDateFormat(createBookingDto.date);
-    if (!convertedDate) {
-      throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
-    }
-
-    if (!createBookingDto.time) {
-      throw new BadRequestException('Giờ booking là bắt buộc');
-    }
-
-    // Check location availability
-    const locationAvailability = await this.locationAvailabilityService.findByDate(
-      createBookingDto.date,
-      { current: '1', pageSize: '1' }
-    );
-
-    if (!locationAvailability.data.length) {
-      throw new BadRequestException('Chi nhánh không làm việc vào ngày này');
-    }
-
-    const availability = locationAvailability.data[0];
-    const slotTimes = availability.slotTimes;
-
-    // Find matching slot time
-    const bookingTimeMinutes = this.timeToMinutes(createBookingDto.time);
-    const matchingSlot = slotTimes.find(slot => {
-      const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
-      const slotEndMinutes = this.timeToMinutes(slot.endSlotTime);
-      return bookingTimeMinutes >= slotStartMinutes && bookingTimeMinutes <= slotEndMinutes;
-    });
-
-    if (!matchingSlot) {
-      throw new BadRequestException('Thời gian đặt lịch không nằm trong khung giờ làm việc');
-    }
-
-    // Get slot time working date to check maxParallel
-    const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
-      where: {
-        slotTimeId: matchingSlot.id,
-        workingDateId: availability.workingDates[0].id
-      }
-    });
-
-    if (!slotTimeWorkingDate) {
-      throw new BadRequestException('Không tìm thấy thông tin slot time cho ngày này');
-    }
-
-    // Check for overlapping bookings with maxParallelBookings
-    const overlappingCount = await this.countOverlappingBookings(
-      new Date(convertedDate),
-      createBookingDto.time,
-      serviceConcept.duration
-    );
-    if (overlappingCount >= slotTimeWorkingDate.maxParallelBookings) {
-      throw new BadRequestException(`Không thể đặt lịch vì đã đạt tối đa ${slotTimeWorkingDate.maxParallelBookings} người cho khung giờ này hoặc bị chồng lấn thời gian.`);
-    }
-
-    // Lấy locationId từ DTO
-    if (!createBookingDto.locationId) {
-      throw new BadRequestException('locationId là bắt buộc');
-    }
-    const locationId = createBookingDto.locationId;
-
-    // Check if slot is available before creating booking (includes timeout check)
-    const isSlotAvailable = await this.locationAvailabilityService.isSlotAvailableForBooking(
-      createBookingDto.date,
-      createBookingDto.time,
-      locationId
-    );
-
-    if (!isSlotAvailable) {
-      throw new BadRequestException('Slot thời gian này đã được đặt bởi người khác hoặc đang trong quá trình thanh toán. Vui lòng chọn thời gian khác.');
-    }
-
-    // Lock the slot for this booking process
-    const slotLocked = await this.locationAvailabilityService.lockSlotForBooking(
-      createBookingDto.date,
-      createBookingDto.time,
-      locationId
-    );
-
-    if (!slotLocked) {
-      throw new BadRequestException('Không thể khóa slot thời gian. Vui lòng thử lại sau.');
-    }
-
+    // Validate common fields
     if (!createBookingDto.fullName) {
       throw new BadRequestException('Họ tên là bắt buộc');
     }
@@ -522,48 +870,15 @@ export class BookingService {
       }
     }
 
-
     if (!createBookingDto.depositAmount) {
       throw new BadRequestException('Số tiền đặt cọc là bắt buộc');
     }
-
 
     if (createBookingDto.depositAmount < 30) {
       throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
     }
     if (createBookingDto.depositAmount > 100) {
       throw new BadRequestException('Tỷ lệ đặt cọc không được vượt quá 100%');
-    }
-
-    // Validate date and time
-    const bookingDate = new Date(convertedDate);
-    const currentDate = new Date();
-
-    // Get Vietnam time by adding 7 hours
-    const vietnamBookingDate = new Date(bookingDate.getTime() + (7 * 60 * 60 * 1000));
-    const vietnamCurrentDate = new Date(currentDate.getTime() + (7 * 60 * 60 * 1000));
-
-    // Reset time part for date comparison
-    const bookingDateOnly = new Date(vietnamBookingDate.getFullYear(), vietnamBookingDate.getMonth(), vietnamBookingDate.getDate());
-    const currentDateOnly = new Date(vietnamCurrentDate.getFullYear(), vietnamCurrentDate.getMonth(), vietnamCurrentDate.getDate());
-
-    if (bookingDateOnly < currentDateOnly) {
-      throw new BadRequestException('Ngày booking không hợp lệ');
-    }
-
-    // If same day, check time
-    if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
-      // Parse time string (HH:mm) to hours and minutes
-      const [bookingHours, bookingMinutes] = createBookingDto.time.split(':').map(Number);
-      const currentHours = vietnamCurrentDate.getHours();
-      const currentMinutes = vietnamCurrentDate.getMinutes();
-
-      const currentTimeInMinutes = currentHours * 60 + currentMinutes;
-      const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
-
-      if (bookingTimeInMinutes <= currentTimeInMinutes) {
-        throw new BadRequestException('Giờ booking không hợp lệ');
-      }
     }
 
     // Validate source type if provided
@@ -573,15 +888,20 @@ export class BookingService {
 
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+    const convertedDate = this.convertDateFormat(createBookingDto.date);
+    
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
       userId,
       serviceConceptId,
-      locationId,
+      locationId: createBookingDto.locationId,
       status: BookingStatus.PENDING,
       depositAmount: createBookingDto.depositAmount,
       depositType: BookingDepositType.PERCENTAGE,
+      bookingType: BookingType.SINGLE_DAY,
       code: randomCode
     });
 
@@ -626,7 +946,7 @@ export class BookingService {
           await this.locationAvailabilityService.unlockSlot(
             createBookingDto.date,
             createBookingDto.time,
-            locationId
+            createBookingDto.locationId
           );
 
           // Cancel the booking
@@ -664,7 +984,145 @@ export class BookingService {
     return {
       booking: this.formatBookingDates(savedBooking),
       paymentLink: paymentLinkData.checkoutUrl,
-      code: booking.code
+      code: randomCode,
+    };
+  }
+
+  // Create booking with new logic (multi-day)
+  private async createBookingWithNewLogic(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+    serviceConceptId: string,
+    serviceConcept: ServiceConcept,
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
+    // --- BẮT ĐẦU KIỂM TRA VOUCHER VÀ CAMPAIGN-VENDOR ---
+    if (createBookingDto.voucherId) {
+      const voucher = await this.voucherRepository.findOne({ where: { id: createBookingDto.voucherId } });
+      if (!voucher) {
+        throw new NotFoundException(`Voucher với ID ${createBookingDto.voucherId} không tìm thấy`);
+      }
+      const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
+      if (campaignVoucher) {
+        const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
+        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+        if (campaignVendor) {
+          const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
+          if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
+            throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
+          }
+        }
+      }
+    }
+    // --- KẾT THÚC KIỂM TRA VOUCHER VÀ CAMPAIGN-VENDOR ---
+
+    // Validate common fields
+    if (!createBookingDto.fullName) {
+      throw new BadRequestException('Họ tên là bắt buộc');
+    }
+
+    if (!createBookingDto.phone) {
+      throw new BadRequestException('Số điện thoại là bắt buộc');
+    }
+
+    // Validate phone number format (Vietnamese phone number)
+    const phoneRegex = /(84|0[3|5|7|8|9])+([0-9]{8})\b/;
+    if (!phoneRegex.test(createBookingDto.phone)) {
+      throw new BadRequestException('Số điện thoại không hợp lệ');
+    }
+
+    if (createBookingDto.email) {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(createBookingDto.email)) {
+        throw new BadRequestException('Email không hợp lệ');
+      }
+    }
+
+    if (!createBookingDto.depositAmount) {
+      throw new BadRequestException('Số tiền đặt cọc là bắt buộc');
+    }
+
+    if (createBookingDto.depositAmount < 30) {
+      throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
+    }
+    if (createBookingDto.depositAmount > 100) {
+      throw new BadRequestException('Tỷ lệ đặt cọc không được vượt quá 100%');
+    }
+
+    // Validate source type if provided
+    if (createBookingDto.sourceType && !Object.values(BookingSourceType).includes(createBookingDto.sourceType)) {
+      throw new BadRequestException('Loại nguồn booking không hợp lệ');
+    }
+
+    // Generate a random code for booking 6 characters uppercase
+    const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    // Use the first schedule for the main booking date/time
+    const firstSchedule = createBookingDto.schedules[0];
+    const convertedDate = this.convertDateFormat(firstSchedule.date);
+    
+    const booking = this.bookingRepository.create({
+      ...createBookingDto,
+      date: convertedDate,
+      time: firstSchedule.time,
+      userId,
+      serviceConceptId,
+      locationId: createBookingDto.locationId,
+      status: BookingStatus.PENDING,
+      depositAmount: createBookingDto.depositAmount,
+      depositType: BookingDepositType.PERCENTAGE,
+      bookingType: BookingType.MULTI_DAY,
+      code: randomCode
+    });
+
+    const savedBooking = await this.bookingRepository.save(booking);
+
+    // Create booking schedules for all dates
+    const scheduleEntities = createBookingDto.schedules.map(schedule => 
+      this.bookingScheduleRepository.create({
+        bookingId: savedBooking.id,
+        date: new Date(this.convertDateFormat(schedule.date)),
+        time: schedule.time,
+        notes: schedule.notes,
+        status: BookingScheduleStatus.SCHEDULED,
+      })
+    );
+
+    await this.bookingScheduleRepository.save(scheduleEntities);
+
+    // Find voucher if provided
+    let voucher = null;
+    if (createBookingDto.voucherId) {
+      voucher = await this.voucherRepository.findOne({
+        where: { id: createBookingDto.voucherId },
+      });
+    }
+
+    const history = this.bookingHistoryRepository.create({
+      bookingId: savedBooking.id,
+      status: BookingStatus.PENDING,
+    });
+    await this.bookingHistoryRepository.save(history);
+
+    // Create invoice using InvoiceService
+    const invoice = await this.invoiceService.create(
+      savedBooking.id,
+      voucher?.id,
+      {
+        issuedAt: new Date().toISOString(),
+      }
+    );
+
+    // Create payment link for deposit
+    const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
+
+    // For multi-day booking, we don't set timeout because we don't lock slots
+    // The entire day is closed when booking is created
+
+    return {
+      booking: this.formatBookingDates(savedBooking),
+      paymentLink: paymentLinkData.checkoutUrl,
+      code: randomCode,
     };
   }
   //#endregion
@@ -767,7 +1225,7 @@ export class BookingService {
   async findOne(id: string): Promise<Booking> {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes'],
+      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes', 'schedules'],
     });
     if (!booking) {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
@@ -901,8 +1359,21 @@ export class BookingService {
 
     // Update booking
     if (updateBookingDto.status) {
+      const oldStatus = booking.status;
       booking.status = updateBookingDto.status;
       const updatedBooking = await this.bookingRepository.save(booking);
+
+      // NEW: Reopen scheduled dates if booking is cancelled and it's a multi-day booking
+      if (updateBookingDto.status === BookingStatus.CANCELLED && 
+          oldStatus !== BookingStatus.CANCELLED &&
+          booking.schedules && 
+          booking.schedules.length > 0) {
+        try {
+          await this.reopenScheduledDates(id);
+        } catch (error) {
+          console.error('Error reopening scheduled dates when cancelling booking:', error);
+        }
+      }
 
       // Create a new history record
       const history = this.bookingHistoryRepository.create({
@@ -922,6 +1393,16 @@ export class BookingService {
 
   async remove(id: string): Promise<void> {
     const booking = await this.findOne(id);
+    
+    // NEW: Reopen scheduled dates if this is a multi-day booking
+    if (booking.schedules && booking.schedules.length > 0) {
+      try {
+        await this.reopenScheduledDates(id);
+      } catch (error) {
+        console.error('Error reopening scheduled dates when removing booking:', error);
+      }
+    }
+    
     await this.bookingRepository.remove(booking);
   }
 

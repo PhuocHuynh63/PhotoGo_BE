@@ -102,8 +102,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả gói dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách gói dịch vụ đã được lấy thành công', type: [ServicePackage] })
-  async findAll(@Query() query: PaginationDto, @Query('showAll') showAll?: string): Promise<{ data: ServicePackage[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAll(query, showAll === 'true');
+  async findAll(@Query() query: PaginationDto, @Query('showAll') showAll?: boolean): Promise<{ data: ServicePackage[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAll(query, showAll);
   }
 
   @Get('filter')
@@ -134,8 +134,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả metadata' })
   @ApiResponse({ status: 200, description: 'Danh sách metadata đã được lấy thành công', type: [ServicePackageMetadata] })
-  async findAllMetadata(@Query() query: PaginationDto, @Query('showAll') showAll?: string): Promise<{ data: ServicePackageMetadata[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllMetadata(query, showAll === 'true');
+  async findAllMetadata(@Query() query: PaginationDto, @Query('showAll') showAll?: boolean): Promise<{ data: ServicePackageMetadata[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllMetadata(query, showAll);
   }
 
   @Get('metadata/:id')
@@ -143,8 +143,8 @@ export class ServicePackageController {
   @ApiOperation({ summary: 'Lấy metadata theo ID' })
   @ApiResponse({ status: 200, description: 'Metadata đã được tìm thấy', type: ServicePackageMetadata })
   @ApiResponse({ status: 404, description: 'Không tìm thấy metadata' })
-  async findMetadata(@Param('id') id: string, @Query('showAll') showAll?: string): Promise<ServicePackageMetadata> {
-    return this.servicePackageService.findMetadata(id, showAll === 'true');
+  async findMetadata(@Param('id') id: string, @Query('showAll') showAll?: boolean): Promise<ServicePackageMetadata> {
+    return this.servicePackageService.findMetadata(id, showAll);
   }
 
   @Patch('metadata/:id')
@@ -181,8 +181,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách loại dịch vụ đã được lấy thành công', type: [ServiceType] })
-  async findAllServiceType(@Query() query: PaginationDto, @Query('showAll') showAll?: string): Promise<{ data: ServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllServiceTypes(query, showAll === 'true');
+  async findAllServiceType(@Query() query: PaginationDto, @Query('showAll') showAll?: boolean): Promise<{ data: ServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllServiceTypes(query, showAll);
   }
 
   @Get('service-type/filter')
@@ -204,8 +204,8 @@ export class ServicePackageController {
   @ApiOperation({ summary: 'Lấy loại dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Loại dịch vụ đã được tìm thấy', type: ServiceType })
   @ApiResponse({ status: 404, description: 'Không tìm thấy loại dịch vụ' })
-  async findServiceType(@Param('id') id: string, @Query('showAll') showAll?: string): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
-    return this.servicePackageService.findServiceType(id, showAll === 'true');
+  async findServiceType(@Param('id') id: string, @Query('showAll') showAll?: boolean): Promise<ServiceType & { conceptCount: number; packageCount: number }> {
+    return this.servicePackageService.findServiceType(id, showAll);
   }
 
   @Patch('service-type/:id')
@@ -337,8 +337,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả concept dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách concept dịch vụ đã được lấy thành công', type: [ServiceConcept] })
-  async findAllServiceConcepts(@Query() query: PaginationDto, @Query('showAll') showAll?: string): Promise<{ data: ServiceConcept[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllServiceConcepts(query, showAll === 'true');
+  async findAllServiceConcepts(@Query() query: PaginationDto, @Query('showAll') showAll?: boolean): Promise<{ data: ServiceConcept[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllServiceConcepts(query, showAll);
   }
 
   @Get('service-concept/:id')
@@ -346,8 +346,8 @@ export class ServicePackageController {
   @ApiOperation({ summary: 'Lấy concept dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Concept dịch vụ đã được tìm thấy', type: ServiceConcept })
   @ApiResponse({ status: 404, description: 'Không tìm thấy concept dịch vụ' })
-  async findServiceConcept(@Param('id') id: string, @Query('showAll') showAll?: string): Promise<ServiceConcept> {
-    return this.servicePackageService.findServiceConcept(id, showAll === 'true');
+  async findServiceConcept(@Param('id') id: string, @Query('showAll') showAll?: boolean): Promise<ServiceConcept> {
+    return this.servicePackageService.findServiceConcept(id, showAll);
   }
 
   @Patch('service-concept/:id')
@@ -485,8 +485,8 @@ export class ServicePackageController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả liên kết concept dịch vụ và loại dịch vụ' })
   @ApiResponse({ status: 200, description: 'Danh sách liên kết đã được lấy thành công', type: [ServiceConceptServiceType] })
-  async findAllServiceConceptServiceType(@Query() query: PaginationDto, @Query('showAll') showAll?: string): Promise<{ data: ServiceConceptServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
-    return this.servicePackageService.findAllServiceConceptServiceType(query, showAll === 'true');
+  async findAllServiceConceptServiceType(@Query() query: PaginationDto, @Query('showAll') showAll?: boolean): Promise<{ data: ServiceConceptServiceType[]; pagination: { current: number; pageSize: number; totalPage: number; totalItem: number } }> {
+    return this.servicePackageService.findAllServiceConceptServiceType(query, showAll);
   }
 
   @Get('service-concept-service-type/:serviceConceptId/:serviceTypeId')
@@ -497,9 +497,9 @@ export class ServicePackageController {
   async findServiceConceptServiceType(
     @Param('serviceConceptId') serviceConceptId: string,
     @Param('serviceTypeId') serviceTypeId: string,
-    @Query('showAll') showAll?: string,
+    @Query('showAll') showAll?: boolean,
   ): Promise<ServiceConceptServiceType> {
-    return this.servicePackageService.findServiceConceptServiceType(serviceConceptId, serviceTypeId, showAll === 'true');
+    return this.servicePackageService.findServiceConceptServiceType(serviceConceptId, serviceTypeId, showAll);
   }
 
   @Patch('service-concept-service-type/:serviceConceptId/:serviceTypeId')
@@ -535,8 +535,8 @@ export class ServicePackageController {
   @ApiOperation({ summary: 'Lấy gói dịch vụ theo ID' })
   @ApiResponse({ status: 200, description: 'Gói dịch vụ đã được tìm thấy', type: ServicePackage })
   @ApiResponse({ status: 404, description: 'Không tìm thấy gói dịch vụ' })
-  async findOne(@Param('id') id: string, @Query('showAll') showAll?: string): Promise<ServicePackage> {
-    return this.servicePackageService.findOne(id, showAll === 'true');
+  async findOne(@Param('id') id: string, @Query('showAll') showAll?: boolean): Promise<ServicePackage> {
+    return this.servicePackageService.findOne(id, showAll);
   }
 
   @Patch(':id')

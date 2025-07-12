@@ -353,7 +353,7 @@ export class ServicePackageService {
     return this.serviceTypeRepository.save(serviceType);
   }
 
-  async findAllServiceTypes(query?: PaginationDto, showAll = false): Promise<{
+  async findAllServiceTypes(query?: PaginationDto, showAll?: boolean): Promise<{
     data: (ServiceType & { conceptCount: number; packageCount: number })[];
     pagination: {
       current: number;
