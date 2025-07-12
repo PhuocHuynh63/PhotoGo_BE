@@ -294,9 +294,14 @@ export class GeminiService {
             let imageUrl: string | null = null;
             let keywords: string[] = Array.isArray(conceptKeywords) ? conceptKeywords.map((k: any) => String(k).toLowerCase()) : [];
             if (concept_image_id) {
-                    // Sử dụng repository với relations để tránh lỗi joinColumns
-                    const conceptWithImage = await this.conceptVectorRepository.manager.getRepository(ServiceConcept).findOne({
-                        where: { id: concept_image_id },
+                // Lấy ServiceConceptImage trước
+                const conceptImageRepo = this.conceptVectorRepository.manager.getRepository('service_concept_image');
+                const conceptImage: any = await conceptImageRepo.findOne({ where: { id: concept_image_id } });
+                if (conceptImage && conceptImage.serviceConceptId) {
+                    // Lấy ServiceConcept kèm images
+                    const conceptRepo = this.conceptVectorRepository.manager.getRepository(ServiceConcept);
+                    const conceptWithImage = await conceptRepo.findOne({
+                        where: { id: conceptImage.serviceConceptId },
                         relations: ['images'],
                         order: { images: { createdAt: 'ASC' } }
                     });
@@ -306,8 +311,8 @@ export class GeminiService {
                         if (Array.isArray(conceptWithImage.images) && conceptWithImage.images.length > 0 && conceptWithImage.images[0]?.imageUrl) {
                             imageUrl = conceptWithImage.images[0].imageUrl;
                         }
-                        // Nếu ServiceConcept có keywords riêng, có thể lấy thêm ở đây nếu cần
                     }
+                }
             }
             return {
                 ...rest,
@@ -321,16 +326,39 @@ export class GeminiService {
             };
         }));
 
-        // Nếu trong keywords có "nữ" và không có "trẻ em", chỉ trả về concept gần nhất thỏa mãn điều kiện này
-        const femaleNotChild = concepts_same.filter(c =>
-            Array.isArray(c.keywords) &&
-            c.keywords.includes('nữ') &&
-            !c.keywords.includes('trẻ em')
-        );
-        if (femaleNotChild.length > 0) {
-            // Sắp xếp theo relevanceScore giảm dần, distance tăng dần
-            femaleNotChild.sort((a, b) => b.relevanceScore - a.relevanceScore || a.distance - b.distance);
-            concepts_same = [femaleNotChild[0]];
+
+        // Lọc concept theo chủ thể chính
+        const landscapeKeywords = ['phong cảnh', 'landscape', 'cảnh vật', 'nature', 'outdoor', 'ngoài trời', 'thiên nhiên'];
+        const peopleKeywords = ['nữ', 'nam', 'trẻ em', 'người', 'portrait', 'chân dung', 'group', 'person', 'people', 'beauty shot'];
+
+        const isLandscape = keywords.some(k => landscapeKeywords.includes(k));
+        const hasPeopleKeyword = keywords.some(k => peopleKeywords.includes(k));
+
+        if (isLandscape) {
+            // Chỉ lấy concept có từ khóa phong cảnh, loại bỏ concept người
+            concepts_same = concepts_same.filter(c =>
+                Array.isArray(c.keywords) &&
+                c.keywords.some(k => landscapeKeywords.includes(k)) &&
+                !c.keywords.some(k => peopleKeywords.includes(k))
+            );
+        } else if (!hasPeopleKeyword) {
+            // Nếu ảnh không có từ khóa người, loại bỏ mọi concept có từ khóa người
+            concepts_same = concepts_same.filter(c =>
+                Array.isArray(c.keywords) &&
+                !c.keywords.some(k => peopleKeywords.includes(k))
+            );
+        } else {
+            // Nếu trong keywords có "nữ" và không có "trẻ em", chỉ trả về concept gần nhất thỏa mãn điều kiện này
+            const femaleNotChild = concepts_same.filter(c =>
+                Array.isArray(c.keywords) &&
+                c.keywords.includes('nữ') &&
+                !c.keywords.includes('trẻ em')
+            );
+            if (femaleNotChild.length > 0) {
+                // Sắp xếp theo relevanceScore giảm dần, distance tăng dần
+                femaleNotChild.sort((a, b) => b.relevanceScore - a.relevanceScore || a.distance - b.distance);
+                concepts_same = [femaleNotChild[0]];
+            }
         }
 
 
@@ -467,48 +495,40 @@ export class GeminiService {
     }
 
     private async generateKeywordsFromImage(image: Express.Multer.File): Promise<string[]> {
-        try {
-            const model = await this.initializeModel();
+        const model = await this.initializeModel();
 
-            // Convert image to base64
-            const imageData = {
-                inlineData: {
-                    data: image.buffer.toString('base64'),
-                    mimeType: image.mimetype
-                }
-            };
+        // Convert image to base64
+        const imageData = {
+            inlineData: {
+                data: image.buffer.toString('base64'),
+                mimeType: image.mimetype
+            }
+        };
 
-            const prompt = `Bạn là chuyên gia nhiếp ảnh và AI phân tích hình ảnh. Hãy phân tích thật kỹ bức ảnh này và liệt kê 5-10 từ khóa (keyword) chuyên ngành, ngắn gọn, chính xác, mô tả rõ ràng nhất về:
-1. Chủ thể (nếu là người: xác định rõ giới tính nam, nữ, trẻ em, người lớn, nhóm, hoặc cả hai; nếu là cảnh: mô tả loại cảnh vật, địa điểm, môi trường cụ thể)
+        const prompt = `Bạn là chuyên gia nhiếp ảnh và AI phân tích hình ảnh. Hãy phân tích thật kỹ bức ảnh này và liệt kê 5-10 từ khóa (keyword) chuyên ngành, ngắn gọn, chính xác, mô tả rõ ràng nhất về:
+1. Chủ thể chính (
+nếu là người: xác định rõ giới tính nam, nữ, trẻ em, người lớn, nhóm; 
+nếu là cảnh: mô tả loại cảnh vật, địa điểm, môi trường cụ thể)
 2. Thể loại ảnh (ví dụ: chân dung, phong cảnh, đời thường, nghệ thuật, sự kiện...)
 3. Phong cách, cảm xúc, ánh sáng, màu sắc nổi bật, bố cục, kỹ thuật đặc biệt nếu có
 4. Tuyệt đối không dùng từ chung chung như "ảnh", "hình", "photo", "picture", "nice", "beautiful"...
 5. Chỉ sử dụng các thuật ngữ chuyên ngành nhiếp ảnh, không thêm bất kỳ văn bản nào khác ngoài danh sách từ khóa, phân tách bằng dấu phẩy.`;
 
-            const result = await model.generateContent([prompt, imageData]);
-            const response = await result.response;
-            const text = response.text();
+        const result = await model.generateContent([prompt, imageData]);
+        const response = await result.response;
+        const text = response.text();
 
-            if (!text) {
-                throw new Error('No text response from Gemini API');
-            }
-
-            // Clean and parse the keywords
-            const keywords = text
-                .split(',')
-                .map(k => k.trim().toLowerCase())
-                .filter(k => k.length > 0);
-
-            return keywords;
-        } catch (error) {
-            if (error.message?.includes('Response was blocked')) {
-                this.logger.warn('Image was blocked by safety filters, returning default keywords');
-                // Return default keywords that are safe and relevant for photography
-                return ['photography', 'art', 'creative', 'visual', 'design', 'studio', 'portrait', 'professional', 'quality', 'composition'];
-            }
-            this.logger.error(`Error generating keywords: ${error.message}`);
-            throw error;
+        if (!text) {
+            throw new Error('No text response from Gemini API');
         }
+
+        // Clean and parse the keywords
+        const keywords = text
+            .split(',')
+            .map(k => k.trim().toLowerCase())
+            .filter(k => k.length > 0);
+
+        return keywords;
     }
 
     private async generateEmbedding(text: string): Promise<number[]> {
