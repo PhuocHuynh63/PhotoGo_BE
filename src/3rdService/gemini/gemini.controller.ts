@@ -45,52 +45,5 @@ export class GeminiController {
         }
     }
 
-    @Post('concept-vector/generate')
-    @Public()
-    @UseInterceptors(FileInterceptor('image'))
-    @ApiConsumes('multipart/form-data')
-    @ApiOperation({ summary: 'Generate concept vector from image' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                image: {
-                    type: 'string',
-                    format: 'binary',
-                },
-                conceptId: {
-                    type: 'string',
-                    description: 'ID of the service concept',
-                },
-            },
-        },
-    })
-    async generateConceptVector(
-        @UploadedFile() image: Express.Multer.File,
-        @Body('conceptId') conceptId: string,
-    ) {
-        return await this.geminiService.generateConceptVector(image, conceptId);
-    }
-
-    @Post('concept-vector/search')
-    @Public()
-    @UseInterceptors(FileInterceptor('image'))
-    @ApiConsumes('multipart/form-data')
-    @ApiOperation({ summary: 'Search concepts using image' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                image: {
-                    type: 'string',
-                    format: 'binary',
-                },
-            },
-        },
-    })
-    async searchConcepts(@UploadedFile() image: Express.Multer.File) {
-        return await this.geminiService.searchConcepts(image);
-    }
-
 
 }
