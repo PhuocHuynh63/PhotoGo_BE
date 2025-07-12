@@ -264,15 +264,15 @@ export class LocationController {
     }
   }
 
-  @Get(':locationId/slots-bookings')
+  @Get(':locationId/location-overview')
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách slot và booking theo slot cho 1 location trong khoảng ngày' })
   @ApiResponse({ status: 200, type: LocationSlotBookingsResponseDto })
-  async getSlotBookings(
+  async getLocationScheduleOverview(
     @Param('locationId') locationId: string,
     @Query('from') from: string,
     @Query('to') to: string,
   ): Promise<LocationSlotBookingsResponseDto> {
-    return this.locationService.getSlotBookings(locationId, from, to);
+    return this.locationService.getLocationScheduleOverview(locationId, from, to);
   }
 }

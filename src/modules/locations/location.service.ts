@@ -15,6 +15,7 @@ import { GetCitiesDto } from './dto/get-cities.dto';
 import { GoongService } from 'src/3rdService/goong/goong.service';
 import { LocationSlotBookingsResponseDto, SlotBookingsDto, SlotBookingDetailDto } from './dto/location-slot-bookings.dto';
 import { Booking } from '../bookings/entities/booking.entity';
+import { BookingStatus } from 'src/constants/booking.enum';
 
 @Injectable()
 export class LocationService {
@@ -541,7 +542,63 @@ export class LocationService {
   }
   //#endregion testGoongAPI
 
-  async getSlotBookings(locationId: string, from: string, to: string): Promise<LocationSlotBookingsResponseDto> {
+  // async getSlotBookings(locationId: string, from: string, to: string): Promise<LocationSlotBookingsResponseDto> {
+  //   function parseDDMMYYYY(dateStr: string): Date {
+  //     const [day, month, year] = dateStr.split('/');
+  //     return new Date(`${year}-${month}-${day}`);
+  //   }
+
+  //   const fromDate = parseDDMMYYYY(from);
+  //   const toDate = parseDDMMYYYY(to);
+
+  //   // Lấy tất cả booking của location này trong khoảng ngày
+  //   // (giả sử booking có trường date, time, status, user, serviceConcept, notes, phone, email)
+  //   const bookings = await this.bookingRepository.find({
+  //     where: {
+  //       locationId,
+  //       date: Between(fromDate, toDate),
+  //     },
+  //     relations: ['user', 'serviceConcept'],
+  //     order: { date: 'ASC', time: 'ASC' }
+  //   });
+
+  //   // Gom nhóm theo date + time (slot)
+  //   const slotMap = new Map<string, SlotBookingsDto>();
+  //   for (const booking of bookings) {
+  //     const slotKey = `${booking.date.toISOString().slice(0, 10)}_${booking.time}`;
+  //     if (!slotMap.has(slotKey)) {
+  //       slotMap.set(slotKey, {
+  //         date: booking.date.toISOString().slice(0, 10),
+  //         time: booking.time,
+  //         count: 0,
+  //         bookings: []
+  //       });
+  //     }
+  //     const slot = slotMap.get(slotKey)!;
+  //     slot.count++;
+  //     slot.bookings.push({
+  //       id: booking.id,
+  //       fullName: booking.user?.fullName || '',
+  //       status: booking.status,
+  //       service: booking.serviceConcept?.name || '',
+  //       notes: booking.userNote,
+  //       phone: booking.phone,
+  //       email: booking.email
+  //     });
+  //   }
+  //   return { slots: Array.from(slotMap.values()) };
+  // }
+
+  async getLocationScheduleOverview(locationId: string, from: string, to: string): Promise<{
+    slots: SlotBookingsDto[];
+    stats: {
+      total: number;
+      confirmed: number;
+      pending: number;
+      expectedRevenue: number;
+    };
+    todayBookings: SlotBookingDetailDto[];
+  }> {
     function parseDDMMYYYY(dateStr: string): Date {
       const [day, month, year] = dateStr.split('/');
       return new Date(`${year}-${month}-${day}`);
@@ -549,20 +606,27 @@ export class LocationService {
 
     const fromDate = parseDDMMYYYY(from);
     const toDate = parseDDMMYYYY(to);
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
 
     // Lấy tất cả booking của location này trong khoảng ngày
-    // (giả sử booking có trường date, time, status, user, serviceConcept, notes, phone, email)
     const bookings = await this.bookingRepository.find({
       where: {
         locationId,
         date: Between(fromDate, toDate),
       },
-      relations: ['user', 'serviceConcept'],
+      relations: ['user', 'serviceConcept', 'invoices'],
       order: { date: 'ASC', time: 'ASC' }
     });
 
     // Gom nhóm theo date + time (slot)
     const slotMap = new Map<string, SlotBookingsDto>();
+    let total = 0;
+    let confirmed = 0;
+    let pending = 0;
+    let expectedRevenue = 0;
+    const todayBookings: SlotBookingDetailDto[] = [];
+
     for (const booking of bookings) {
       const slotKey = `${booking.date.toISOString().slice(0, 10)}_${booking.time}`;
       if (!slotMap.has(slotKey)) {
@@ -575,7 +639,7 @@ export class LocationService {
       }
       const slot = slotMap.get(slotKey)!;
       slot.count++;
-      slot.bookings.push({
+      const bookingDetail: SlotBookingDetailDto = {
         id: booking.id,
         fullName: booking.user?.fullName || '',
         status: booking.status,
@@ -583,8 +647,29 @@ export class LocationService {
         notes: booking.userNote,
         phone: booking.phone,
         email: booking.email
-      });
+      };
+      slot.bookings.push(bookingDetail);
+
+      // Thống kê
+      total++;
+      if (booking.status === BookingStatus.CONFIRMED) confirmed++;
+      if (booking.status === BookingStatus.PENDING) pending++;
+      if (booking.invoices && booking.invoices.length > 0 && typeof booking.invoices[0].payablePrice === 'number') expectedRevenue += Number(booking.invoices[0].payablePrice);
+
+      // Lịch hôm nay
+      if (booking.date.toISOString().slice(0, 10) === todayStr) {
+        todayBookings.push(bookingDetail);
+      }
     }
-    return { slots: Array.from(slotMap.values()) };
+    return {
+      slots: Array.from(slotMap.values()),
+      stats: {
+        total,
+        confirmed,
+        pending,
+        expectedRevenue
+      },
+      todayBookings
+    };
   }
 }
