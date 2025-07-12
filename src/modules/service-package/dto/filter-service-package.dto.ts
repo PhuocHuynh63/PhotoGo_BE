@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumber, IsArray, IsEnum } from 'class-validator';
-import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { ServicePackageStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
 import { Transform } from 'class-transformer';
 
 export class FilterServicePackageDto {
@@ -24,6 +24,16 @@ export class FilterServicePackageDto {
   @IsArray()
   @Transform(({ value }) => Array.isArray(value) ? value : [value])
   serviceTypeIds?: string[];
+
+  @ApiPropertyOptional({ 
+    description: 'Loại phạm vi concept (1 ngày hoặc nhiều ngày)', 
+    enum: ConceptRangeType, 
+    example: ConceptRangeType.SINGLE_DAY,
+    required: false 
+  })
+  @IsOptional()
+  @IsEnum(ConceptRangeType)
+  conceptRangeType?: ConceptRangeType;
 
   @ApiPropertyOptional({ description: 'Trạng thái', enum: ServicePackageStatus, example: ServicePackageStatus.ACTIVE, default: ServicePackageStatus.ACTIVE })
   @IsOptional()

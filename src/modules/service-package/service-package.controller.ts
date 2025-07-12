@@ -21,7 +21,7 @@ import { ServiceType } from './entities/service-type.entity';
 import { ServiceConcept } from './entities/service-concept.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { ServicePackageStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
 import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 import { RolesGuard } from '../auth/passport/roles.guard';
@@ -286,10 +286,23 @@ export class ServicePackageController {
           example: 5000000,
           description: 'Giá của concept dịch vụ'
         },
+        conceptRangeType: { 
+          type: 'string', 
+          enum: Object.values(ConceptRangeType), 
+          example: ConceptRangeType.SINGLE_DAY,
+          nullable: true,
+          description: 'Loại phạm vi concept: single_day (1 ngày) hoặc multiple_days (nhiều ngày)'
+        },
         duration: { 
           type: 'number', 
           example: 120,
-          description: 'Thời gian thực hiện (phút)'
+          description: 'Thời gian thực hiện (phút). Phải > 0 cho SINGLE_DAY, phải = 0 cho MULTIPLE_DAYS'
+        },
+        numberOfDays: { 
+          type: 'number', 
+          example: 1,
+          nullable: true,
+          description: 'Số ngày thực hiện. Phải = 1 cho SINGLE_DAY, phải >= 2 cho MULTIPLE_DAYS'
         },
         servicePackageId: { 
           type: 'string', 
@@ -320,7 +333,7 @@ export class ServicePackageController {
           description: 'Danh sách ảnh của concept dịch vụ (tối đa 10 ảnh)'
         },
       },
-      required: ['name', 'price', 'duration', 'servicePackageId', 'serviceTypeIds'],
+      required: ['name', 'price', 'servicePackageId', 'serviceTypeIds'],
     },
   })
   async createServiceConcept(
@@ -382,11 +395,24 @@ export class ServicePackageController {
           nullable: true,
           description: 'Giá của concept dịch vụ'
         },
+        conceptRangeType: { 
+          type: 'string', 
+          enum: Object.values(ConceptRangeType), 
+          example: ConceptRangeType.SINGLE_DAY,
+          nullable: true,
+          description: 'Loại phạm vi concept: single_day (1 ngày) hoặc multiple_days (nhiều ngày)'
+        },
         duration: { 
           type: 'number', 
           example: 120,
           nullable: true,
-          description: 'Thời gian thực hiện (phút)'
+          description: 'Thời gian thực hiện (phút). Phải > 0 cho SINGLE_DAY, phải = 0 cho MULTIPLE_DAYS'
+        },
+        numberOfDays: { 
+          type: 'number', 
+          example: 1,
+          nullable: true,
+          description: 'Số ngày thực hiện. Phải = 1 cho SINGLE_DAY, phải >= 2 cho MULTIPLE_DAYS'
         },
         servicePackageId: { 
           type: 'string', 

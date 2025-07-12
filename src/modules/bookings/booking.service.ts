@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { BookingDepositType, BookingStatus, BookingSourceType, BookingScheduleStatus, BookingType } from '../../constants/booking.enum';
+import { ConceptRangeType } from '../../constants/servicePackage.enum';
 import { BookingHistory } from './entities/booking-history.entity';
 import { BookingSchedule } from './entities/booking-schedule.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -108,6 +109,11 @@ export class BookingService {
     serviceConceptId: string,
     serviceConcept: ServiceConcept,
   ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
+    // Validate concept range type
+    if (serviceConcept.conceptRangeType !== ConceptRangeType.SINGLE_DAY) {
+      throw new BadRequestException('Concept này không hỗ trợ booking 1 ngày');
+    }
+
     // Validate required fields for single day booking
     if (!createBookingDto.date) {
       throw new BadRequestException('Ngày booking là bắt buộc cho booking 1 ngày');
@@ -131,9 +137,19 @@ export class BookingService {
     serviceConceptId: string,
     serviceConcept: ServiceConcept,
   ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
+    // Validate concept range type
+    if (serviceConcept.conceptRangeType !== ConceptRangeType.MULTIPLE_DAYS) {
+      throw new BadRequestException('Concept này không hỗ trợ booking nhiều ngày');
+    }
+
     // Validate schedules
     if (!createBookingDto.schedules || createBookingDto.schedules.length === 0) {
       throw new BadRequestException('Danh sách lịch booking là bắt buộc cho booking nhiều ngày');
+    }
+
+    // Validate number of days matches concept configuration
+    if (createBookingDto.schedules.length !== serviceConcept.numberOfDays) {
+      throw new BadRequestException(`Concept này yêu cầu đặt lịch trong ${serviceConcept.numberOfDays} ngày, nhưng bạn đã chọn ${createBookingDto.schedules.length} ngày`);
     }
 
     // NEW: Check overall availability for all dates
@@ -810,13 +826,13 @@ export class BookingService {
       throw new NotFoundException(`Khái niệm dịch vụ với ID ${serviceConceptId} không tìm thấy`);
     }
 
-    // Handle different booking types
-    if (createBookingDto.bookingType === BookingType.SINGLE_DAY) {
+    // Route to appropriate booking logic based on concept range type
+    if (serviceConcept.conceptRangeType === ConceptRangeType.SINGLE_DAY) {
       return await this.createSingleDayBooking(createBookingDto, userId, serviceConceptId, serviceConcept);
-    } else if (createBookingDto.bookingType === BookingType.MULTI_DAY) {
+    } else if (serviceConcept.conceptRangeType === ConceptRangeType.MULTIPLE_DAYS) {
       return await this.createMultiDayBooking(createBookingDto, userId, serviceConceptId, serviceConcept);
     } else {
-      throw new BadRequestException('Loại booking không hợp lệ');
+      throw new BadRequestException('Loại concept không hợp lệ');
     }
   }
 

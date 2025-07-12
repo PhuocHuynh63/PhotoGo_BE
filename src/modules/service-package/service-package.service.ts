@@ -9,7 +9,7 @@ import { ServiceConcept } from './entities/service-concept.entity';
 import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServiceConceptServiceTypeDto, CreateServiceTypeDto, CreateServiceConceptDto } from './dto/create-service-package.dto';
 import { UpdateServicePackageDto, UpdateServicePackageMetadataDto, UpdateServiceConceptServiceTypeDto, UpdateServiceTypeDto, UpdateServiceConceptDto } from './dto/update-service-package.dto';
 import { UploadService } from 'src/3rdService/upload/upload.service';
-import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { ServicePackageStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
 import { ServiceConceptStatus } from 'src/constants/serviceConcept.enum';
 import { ServiceTypeStatus } from 'src/constants/serviceType.enum';
 import { DataSource } from 'typeorm';
@@ -711,11 +711,46 @@ export class ServicePackageService {
       }
     }
 
+    // Handle concept range type logic with strict validation
+    let finalDuration = createServiceConceptDto.duration;
+    let finalNumberOfDays = createServiceConceptDto.numberOfDays || 1;
+    let finalConceptRangeType = createServiceConceptDto.conceptRangeType;
+
+    // Auto-determine concept range type if not provided
+    if (!finalConceptRangeType) {
+      finalConceptRangeType = finalNumberOfDays > 1 ? ConceptRangeType.MULTIPLE_DAYS : ConceptRangeType.SINGLE_DAY;
+    }
+
+    // STRICT VALIDATION: Check concept range type consistency
+    if (finalConceptRangeType === ConceptRangeType.SINGLE_DAY) {
+      // For single day concepts:
+      // 1. numberOfDays MUST be 1
+      if (finalNumberOfDays !== 1) {
+        throw new BadRequestException('Concept 1 ngày chỉ được phép có numberOfDays = 1');
+      }
+      // 2. duration must be provided and > 0
+      if (!finalDuration || finalDuration <= 0) {
+        throw new BadRequestException('Concept 1 ngày phải có duration > 0');
+      }
+    } else if (finalConceptRangeType === ConceptRangeType.MULTIPLE_DAYS) {
+      // For multi-day concepts:
+      // 1. numberOfDays must be >= 2
+      if (finalNumberOfDays < 2) {
+        throw new BadRequestException('Concept nhiều ngày phải có numberOfDays >= 2');
+      }
+      // 2. duration MUST be 0
+      if (finalDuration !== 0) {
+        throw new BadRequestException('Concept nhiều ngày phải có duration = 0');
+      }
+    }
+
     const serviceConceptData: Partial<ServiceConcept> = {
       name: createServiceConceptDto.name,
       description: createServiceConceptDto.description,
       price: createServiceConceptDto.price,
-      duration: createServiceConceptDto.duration,
+      duration: finalDuration,
+      conceptRangeType: finalConceptRangeType,
+      numberOfDays: finalNumberOfDays,
       status: createServiceConceptDto.status || ServiceConceptStatus.ACTIVE,
       servicePackage: servicePackage,
     };
@@ -943,6 +978,49 @@ export class ServicePackageService {
     if (updateServiceConceptDto.duration !== undefined) {
       serviceConcept.duration = updateServiceConceptDto.duration;
     }
+
+    // Handle concept range type logic for updates with strict validation
+    if (updateServiceConceptDto.conceptRangeType !== undefined || 
+        updateServiceConceptDto.numberOfDays !== undefined ||
+        updateServiceConceptDto.duration !== undefined) {
+      
+      let finalDuration = updateServiceConceptDto.duration !== undefined ? updateServiceConceptDto.duration : serviceConcept.duration;
+      let finalNumberOfDays = updateServiceConceptDto.numberOfDays !== undefined ? updateServiceConceptDto.numberOfDays : serviceConcept.numberOfDays;
+      let finalConceptRangeType = updateServiceConceptDto.conceptRangeType !== undefined ? updateServiceConceptDto.conceptRangeType : serviceConcept.conceptRangeType;
+
+      // Auto-determine concept range type if not provided
+      if (!finalConceptRangeType) {
+        finalConceptRangeType = finalNumberOfDays > 1 ? ConceptRangeType.MULTIPLE_DAYS : ConceptRangeType.SINGLE_DAY;
+      }
+
+      // STRICT VALIDATION: Check concept range type consistency
+      if (finalConceptRangeType === ConceptRangeType.SINGLE_DAY) {
+        // For single day concepts:
+        // 1. numberOfDays MUST be 1
+        if (finalNumberOfDays !== 1) {
+          throw new BadRequestException('Concept 1 ngày chỉ được phép có numberOfDays = 1');
+        }
+        // 2. duration must be provided and > 0
+        if (!finalDuration || finalDuration <= 0) {
+          throw new BadRequestException('Concept 1 ngày phải có duration > 0');
+        }
+      } else if (finalConceptRangeType === ConceptRangeType.MULTIPLE_DAYS) {
+        // For multi-day concepts:
+        // 1. numberOfDays must be >= 2
+        if (finalNumberOfDays < 2) {
+          throw new BadRequestException('Concept nhiều ngày phải có numberOfDays >= 2');
+        }
+        // 2. duration MUST be 0
+        if (finalDuration !== 0) {
+          throw new BadRequestException('Concept nhiều ngày phải có duration = 0');
+        }
+      }
+
+      serviceConcept.duration = finalDuration;
+      serviceConcept.conceptRangeType = finalConceptRangeType;
+      serviceConcept.numberOfDays = finalNumberOfDays;
+    }
+
     if (updateServiceConceptDto.status !== undefined) {
       serviceConcept.status = updateServiceConceptDto.status;
     }
@@ -1131,6 +1209,7 @@ export class ServicePackageService {
     minPrice?: number;
     maxPrice?: number;
     serviceTypeIds?: string[];
+    conceptRangeType?: ConceptRangeType;
     status?: ServicePackageStatus;
     current?: number;
     pageSize?: number;
@@ -1188,6 +1267,12 @@ export class ServicePackageService {
     if (params.maxPrice !== undefined) {
       filterConditions.push(`spp.max_price <= $${filterConditions.length + 1}`);
       baseParams.push(params.maxPrice);
+    }
+
+    // Filter by concept range type
+    if (params.conceptRangeType) {
+      filterConditions.push(`sc.concept_range_type = $${filterConditions.length + 1}`);
+      baseParams.push(params.conceptRangeType);
     }
 
     // Special handling for serviceTypeIds: must match ALL ids
@@ -1324,6 +1409,12 @@ export class ServicePackageService {
     if (params.maxPrice !== undefined) {
       countFilterConditions.push(`spp.max_price <= $${countFilterConditions.length + 1}`);
       countParams.push(params.maxPrice);
+    }
+
+    // Filter by concept range type in count query
+    if (params.conceptRangeType) {
+      countFilterConditions.push(`sc.concept_range_type = $${countFilterConditions.length + 1}`);
+      countParams.push(params.conceptRangeType);
     }
 
     if (params.serviceTypeIds?.length) {

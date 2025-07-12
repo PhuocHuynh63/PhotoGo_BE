@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/swagger';
 import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServiceConceptServiceTypeDto, CreateServiceTypeDto, CreateServiceConceptDto } from './create-service-package.dto';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsUUID, IsArray, IsNumber } from 'class-validator';
-import { ServiceConceptStatus, ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { ServiceConceptStatus, ServicePackageStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
 import { Transform } from 'class-transformer';
 
 /**
@@ -99,7 +99,7 @@ export class UpdateServiceConceptDto{
   price?: number;
 
   @ApiProperty({
-    description: 'Thời gian thực hiện (phút)',
+    description: 'Thời gian thực hiện (phút). Phải > 0 cho concept 1 ngày, phải = 0 cho concept nhiều ngày',
     example: 120,
     required: false,
   })
@@ -110,6 +110,30 @@ export class UpdateServiceConceptDto{
     return Number(value);
   })
   duration?: number;
+
+  @ApiProperty({
+    description: 'Loại phạm vi của concept (1 ngày hoặc nhiều ngày)',
+    enum: ConceptRangeType,
+    example: ConceptRangeType.SINGLE_DAY,
+    required: false,
+  })
+  @IsEnum(ConceptRangeType, { message: 'Loại phạm vi concept không hợp lệ' })
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  conceptRangeType?: ConceptRangeType;
+
+  @ApiProperty({
+    description: 'Số ngày concept kéo dài. Phải = 1 cho concept 1 ngày, phải >= 2 cho concept nhiều ngày',
+    example: 1,
+    required: false,
+  })
+  @IsNumber({}, { message: 'Số ngày phải là số' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return Number(value);
+  })
+  numberOfDays?: number;
 
   @ApiProperty({
     description: 'Trạng thái của khái niệm dịch vụ',

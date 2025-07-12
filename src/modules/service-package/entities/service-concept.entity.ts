@@ -8,7 +8,7 @@ import {
     JoinColumn,
     OneToMany,
   } from 'typeorm';
-import { ServiceConceptStatus } from 'src/constants/servicePackage.enum';
+import { ServiceConceptStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
 import { ServicePackage } from './service-package.entity';
 import { ServiceConceptServiceType } from './service-concept-service-type.entity';
 import { ServiceConceptImage } from './service-concept-image.entity';
@@ -35,6 +35,12 @@ export class ServiceConcept {
 
   @Column({ type: 'int', nullable: false })
   duration: number;
+
+  @Column({ type: 'enum', enum: ConceptRangeType, default: ConceptRangeType.SINGLE_DAY })
+  conceptRangeType: ConceptRangeType;
+
+  @Column({ type: 'int', default: 1, nullable: false })
+  numberOfDays: number;
 
   @Column({ type: 'enum', enum: ServiceConceptStatus, default: ServiceConceptStatus.ACTIVE })
   status: ServiceConceptStatus;
