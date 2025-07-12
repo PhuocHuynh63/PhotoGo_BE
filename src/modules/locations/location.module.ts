@@ -11,6 +11,7 @@ import { LocationWorkingDate } from './entities/location-workingdate.entity';
 import { LocationSlotTime } from './entities/location-slot-time.entity';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
 import { GoongModule } from 'src/3rdService/goong';
+import { Booking } from '../bookings/entities/booking.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { GoongModule } from 'src/3rdService/goong';
       LocationWorkingDate,
       LocationSlotTime,
       LocationSlotTimeWorkingDate,
+      Booking,
     ]),
     GoongModule,
   ],

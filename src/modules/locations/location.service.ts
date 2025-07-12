@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository, ILike, Between } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
@@ -13,6 +13,8 @@ import { DataSource } from 'typeorm';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { GoongService } from 'src/3rdService/goong/goong.service';
+import { LocationSlotBookingsResponseDto, SlotBookingsDto, SlotBookingDetailDto } from './dto/location-slot-bookings.dto';
+import { Booking } from '../bookings/entities/booking.entity';
 
 @Injectable()
 export class LocationService {
@@ -21,6 +23,8 @@ export class LocationService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
     private readonly dataSource: DataSource,
     private readonly goongService: GoongService,
   ) { }
@@ -536,4 +540,51 @@ export class LocationService {
     }
   }
   //#endregion testGoongAPI
+
+  async getSlotBookings(locationId: string, from: string, to: string): Promise<LocationSlotBookingsResponseDto> {
+    function parseDDMMYYYY(dateStr: string): Date {
+      const [day, month, year] = dateStr.split('/');
+      return new Date(`${year}-${month}-${day}`);
+    }
+
+    const fromDate = parseDDMMYYYY(from);
+    const toDate = parseDDMMYYYY(to);
+
+    // Lấy tất cả booking của location này trong khoảng ngày
+    // (giả sử booking có trường date, time, status, user, serviceConcept, notes, phone, email)
+    const bookings = await this.bookingRepository.find({
+      where: {
+        locationId,
+        date: Between(fromDate, toDate),
+      },
+      relations: ['user', 'serviceConcept'],
+      order: { date: 'ASC', time: 'ASC' }
+    });
+
+    // Gom nhóm theo date + time (slot)
+    const slotMap = new Map<string, SlotBookingsDto>();
+    for (const booking of bookings) {
+      const slotKey = `${booking.date.toISOString().slice(0, 10)}_${booking.time}`;
+      if (!slotMap.has(slotKey)) {
+        slotMap.set(slotKey, {
+          date: booking.date.toISOString().slice(0, 10),
+          time: booking.time,
+          count: 0,
+          bookings: []
+        });
+      }
+      const slot = slotMap.get(slotKey)!;
+      slot.count++;
+      slot.bookings.push({
+        id: booking.id,
+        fullName: booking.user?.fullName || '',
+        status: booking.status,
+        service: booking.serviceConcept?.name || '',
+        notes: booking.userNote,
+        phone: booking.phone,
+        email: booking.email
+      });
+    }
+    return { slots: Array.from(slotMap.values()) };
+  }
 }

@@ -9,6 +9,7 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { SearchLocationDto } from './dto/search-location.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
+import { LocationSlotBookingsResponseDto } from './dto/location-slot-bookings.dto';
 @ApiTags('Locations')
 @Controller('locations')
 @ApiBearerAuth('access-token')
@@ -261,5 +262,17 @@ export class LocationController {
         error: error.message
       };
     }
+  }
+
+  @Get(':locationId/slots-bookings')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách slot và booking theo slot cho 1 location trong khoảng ngày' })
+  @ApiResponse({ status: 200, type: LocationSlotBookingsResponseDto })
+  async getSlotBookings(
+    @Param('locationId') locationId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ): Promise<LocationSlotBookingsResponseDto> {
+    return this.locationService.getSlotBookings(locationId, from, to);
   }
 }
