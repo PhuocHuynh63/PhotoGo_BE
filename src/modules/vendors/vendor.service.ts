@@ -21,6 +21,7 @@ import { CreateLocationDto } from '../locations/dto/create-location.dto';
 import { GoongService } from 'src/3rdService/goong/goong.service';
 import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
 import { Campaign } from '../campaign/entities/campaign.entity';
+import { ServicePackageService } from '../service-package/service-package.service';
 
 
 @Injectable()
@@ -46,6 +47,7 @@ export class VendorService {
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
     private readonly goongService: GoongService,
+    private readonly servicePackageService: ServicePackageService,
   ) { }
 
   //#region CreateVendor
@@ -240,9 +242,21 @@ export class VendorService {
   async getVendorResponse(id: string, reviewService: ReviewService): Promise<VendorResponseDto> {
     const vendor = await this.findOne(id);
 
-    const totalPrice = vendor.servicePackages.reduce(
-      (acc, pkg) => acc + Number(pkg.serviceConcepts.reduce((acc, concept) => acc + Number(concept.price), 0)), 0,
-    );
+    // Calculate total price using the new pricing logic
+    let totalPrice = 0;
+    for (const pkg of vendor.servicePackages) {
+      for (const concept of pkg.serviceConcepts) {
+        // Get the final price (what customer sees) using service package service
+        try {
+          const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(concept.id);
+          totalPrice += conceptWithFinalPrice.price; // This is already the final price
+        } catch (error) {
+          this.logger.warn(`Could not get final price for concept ${concept.id}: ${error.message}`);
+          // Fallback to original price if service fails
+          totalPrice += concept.price;
+        }
+      }
+    }
 
     const averageRating = await reviewService.getAverageRatingByVendorId(id);
 
@@ -266,29 +280,43 @@ export class VendorService {
       latitude: loc.latitude,
       longitude: loc.longitude,
     }));
-    response.servicePackages = vendor.servicePackages.map(pkg => ({
+    
+    // Map service packages with final prices
+    response.servicePackages = await Promise.all(vendor.servicePackages.map(async pkg => ({
       id: pkg.id,
       name: pkg.name,
       description: pkg.description,
       image: pkg.image,
       status: pkg.status,
       vendorId: pkg.vendorId,
-      serviceConcepts: pkg.serviceConcepts.map(concept => ({
-        id: concept.id,
-        name: concept.name,
-        description: concept.description,
-        images: concept.images.map(img => img.imageUrl),
-        price: concept.price,
-        duration: concept.duration,
-        serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
-          id: sct.serviceType.id,
-          name: sct.serviceType.name,
-          description: sct.serviceType.description
-        }))
+      serviceConcepts: await Promise.all(pkg.serviceConcepts.map(async concept => {
+        // Get the final price for each concept
+        let finalPrice = concept.price; // Fallback to original price
+        try {
+          const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(concept.id);
+          finalPrice = conceptWithFinalPrice.price; // This is the final price customer sees
+        } catch (error) {
+          this.logger.warn(`Could not get final price for concept ${concept.id}: ${error.message}`);
+        }
+        
+        return {
+          id: concept.id,
+          name: concept.name,
+          description: concept.description,
+          images: concept.images.map(img => img.imageUrl),
+          price: finalPrice, // Final price that customer sees
+          duration: concept.duration,
+          serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
+            id: sct.serviceType.id,
+            name: sct.serviceType.name,
+            description: sct.serviceType.description
+          }))
+        };
       })),
       created_at: pkg.created_at,
       updated_at: pkg.updated_at
-    }));
+    })));
+    
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
 
@@ -1209,11 +1237,30 @@ export class VendorService {
       `, [vendorIds])
     ]);
 
+    // Convert origin prices to final prices for service concepts
+    const servicePackagesWithFinalPrices = await Promise.all(
+      servicePackages.map(async (row: any) => {
+        if (row.service_concept_id) {
+          try {
+            const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(row.service_concept_id);
+            return {
+              ...row,
+              service_concept_price: conceptWithFinalPrice.price // Final price that customer sees
+            };
+          } catch (error) {
+            this.logger.warn(`Could not get final price for concept ${row.service_concept_id}: ${error.message}`);
+            return row; // Keep original price as fallback
+          }
+        }
+        return row;
+      })
+    );
+
     // Group service packages and reviews by vendor
     const servicePackagesByVendor = new Map();
     const reviewsByVendor = new Map();
 
-    servicePackages.forEach((row: any) => {
+    servicePackagesWithFinalPrices.forEach((row: any) => {
       if (!servicePackagesByVendor.has(row.vendor_id)) {
         servicePackagesByVendor.set(row.vendor_id, new Map());
       }
@@ -1291,8 +1338,8 @@ export class VendorService {
           updatedAt: row.updated_at,
           averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
           reviewCount: parseInt(row.review_count) || 0,
-          minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
-          maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          minPrice: row.min_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null,
+          maxPrice: row.max_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
           subscriptionCount: parseInt(row.subscription_count) || 0,
           isRemarkable: row.subscription_rank <= 3,
           distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
@@ -1803,5 +1850,12 @@ export class VendorService {
   // Helper function to convert degrees to radians
   private deg2rad(deg: number): number {
     return deg * (Math.PI / 180);
+  }
+
+  // Helper function to convert origin price to final price (for customer display)
+  private convertOriginPriceToFinalPrice(originPrice: number): number {
+    // Final price = Origin price * (1 + commission + tax)
+    // Commission = 30%, Tax = 5%
+    return originPrice * 1.35;
   }
 }
