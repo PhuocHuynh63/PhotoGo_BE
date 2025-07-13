@@ -51,7 +51,7 @@ export class BookingScheduleService {
   async findAllByBooking(bookingId: string): Promise<BookingSchedule[]> {
     return await this.bookingScheduleRepository.find({
       where: { bookingId },
-      order: { date: 'ASC', time: 'ASC' }
+      order: { date: 'ASC' }
     });
   }
 
@@ -85,7 +85,6 @@ export class BookingScheduleService {
     schedule.status = BookingScheduleStatus.POSTPONED;
     schedule.postponeReason = postponeDto.postponeReason;
     schedule.postponedToDate = new Date(postponeDto.postponedToDate);
-    schedule.postponedToTime = postponeDto.postponedToTime;
     schedule.notes = postponeDto.notes;
 
     return await this.bookingScheduleRepository.save(schedule);
@@ -98,13 +97,12 @@ export class BookingScheduleService {
       throw new BadRequestException('Chỉ có thể tiếp tục lịch đã bị hoãn');
     }
 
-    if (!schedule.postponedToDate || !schedule.postponedToTime) {
-      throw new BadRequestException('Lịch hoãn chưa có ngày giờ mới');
+    if (!schedule.postponedToDate) {
+      throw new BadRequestException('Lịch hoãn chưa có ngày mới');
     }
 
     schedule.status = BookingScheduleStatus.CONTINUED;
     schedule.date = schedule.postponedToDate;
-    schedule.time = schedule.postponedToTime;
     schedule.notes = continueDto.notes || schedule.notes;
 
     return await this.bookingScheduleRepository.save(schedule);

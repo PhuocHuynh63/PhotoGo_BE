@@ -11,13 +11,6 @@ export class ScheduleDto {
   date: string;
 
   @ApiProperty({
-    description: 'Thời gian booking (định dạng HH:mm)',
-    example: '09:00'
-  })
-  @IsString()
-  time: string;
-
-  @ApiProperty({
     description: 'Ghi chú cho ngày này (tùy chọn)',
     example: 'Chụp ảnh cưới',
     required: false
@@ -32,9 +25,9 @@ export class CheckMultiDayAvailabilityDto {
     description: 'Danh sách các ngày muốn kiểm tra',
     type: [ScheduleDto],
     example: [
-      { date: '13/12/2024', time: '09:00', notes: 'Chụp ảnh cưới' },
-      { date: '14/12/2024', time: '09:00', notes: 'Chụp ảnh cưới' },
-      { date: '15/12/2024', time: '09:00', notes: 'Chụp ảnh cưới' }
+      { date: '13/12/2024', notes: 'Chụp ảnh cưới' },
+      { date: '14/12/2024', notes: 'Chụp ảnh cưới' },
+      { date: '15/12/2024', notes: 'Chụp ảnh cưới' }
     ]
   })
   @IsArray()

@@ -17,9 +17,6 @@ export class BookingSchedule {
   @Column({ type: 'date' })
   date: Date;
 
-  @Column({ type: 'time' })
-  time: string;
-
   @Column({ type: 'enum', enum: BookingScheduleStatus, default: BookingScheduleStatus.SCHEDULED })
   status: BookingScheduleStatus;
 
@@ -28,9 +25,6 @@ export class BookingSchedule {
 
   @Column({ type: 'date', nullable: true, name: 'postponed_to_date' })
   postponedToDate: Date;
-
-  @Column({ type: 'time', nullable: true, name: 'postponed_to_time' })
-  postponedToTime: string;
 
   @Column({ type: 'text', nullable: true, name: 'notes' })
   notes: string;

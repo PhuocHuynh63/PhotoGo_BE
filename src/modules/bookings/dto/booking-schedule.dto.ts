@@ -5,10 +5,6 @@ export class CreateBookingScheduleDto {
   @IsDateString()
   date: string;
 
-  @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:mm format' })
-  time: string;
-
   @IsOptional()
   @IsString()
   notes?: string;
@@ -18,11 +14,6 @@ export class UpdateBookingScheduleDto {
   @IsOptional()
   @IsDateString()
   date?: string;
-
-  @IsOptional()
-  @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:mm format' })
-  time?: string;
 
   @IsOptional()
   @IsEnum(BookingScheduleStatus)
@@ -38,11 +29,6 @@ export class UpdateBookingScheduleDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:mm format' })
-  postponedToTime?: string;
-
-  @IsOptional()
-  @IsString()
   notes?: string;
 }
 
@@ -52,10 +38,6 @@ export class PostponeBookingScheduleDto {
 
   @IsDateString()
   postponedToDate: string;
-
-  @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:mm format' })
-  postponedToTime: string;
 
   @IsOptional()
   @IsString()
@@ -78,10 +60,6 @@ export class BookingScheduleResponseDto {
   @IsDateString()
   date: string;
 
-  @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:mm format' })
-  time: string;
-
   @IsEnum(BookingScheduleStatus)
   status: BookingScheduleStatus;
 
@@ -92,11 +70,6 @@ export class BookingScheduleResponseDto {
   @IsOptional()
   @IsDateString()
   postponedToDate?: string;
-
-  @IsOptional()
-  @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Time must be in HH:mm format' })
-  postponedToTime?: string;
 
   @IsOptional()
   @IsString()

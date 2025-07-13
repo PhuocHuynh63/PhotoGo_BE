@@ -155,6 +155,33 @@ export class LocationAvailabilityController {
     }
   }
 
+  @Get('location/:locationId/multi-day')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thời gian làm việc cho multi-day booking theo ID vị trí' })
+  @ApiResponse({ status: 200, description: 'Trả về thời gian làm việc cho multi-day booking, kiểm tra availability theo ngày (không theo slot time)' })
+  async findByLocationIdForMultiDay(@Param('locationId') locationId: string, @Query() query: FindLocationAvailabilityDto): Promise<{
+    data: LocationAvailability[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
+    try { 
+      if (!isUUID(locationId)) {
+        throw new HttpException('ID vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+      }
+      return await this.locationAvailabilityService.findByLocationIdForMultiDay(locationId, query);
+    } catch (error) {
+      this.logger.error(`Lỗi tìm kiếm thời gian làm việc: ${error.message}`);
+      if (error instanceof HttpException) { 
+        throw error;
+      }
+      throw new HttpException('Lỗi tìm kiếm thời gian làm việc', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Get('location/:locationId/date')
   @Public()
   @ApiOperation({ summary: 'Lấy thời gian làm việc theo ID vị trí và ngày' })

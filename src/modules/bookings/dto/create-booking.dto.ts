@@ -15,16 +15,6 @@ export class CreateBookingScheduleItemDto {
   date: string;
 
   @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'Giờ phải có định dạng HH:mm'
-  })
-  @ApiProperty({
-    description: 'Giờ booking (định dạng HH:mm)',
-    example: '13:00'
-  })
-  time: string;
-
-  @IsString()
   @IsOptional()
   @ApiProperty({
     description: 'Ghi chú cho ngày này',
@@ -80,12 +70,10 @@ export class CreateBookingDto {
     example: [
       {
         date: '04/06/2025',
-        time: '13:00',
         notes: 'Chụp ảnh ngoại cảnh'
       },
       {
         date: '05/06/2025',
-        time: '14:00',
         notes: 'Chụp ảnh studio'
       }
     ],

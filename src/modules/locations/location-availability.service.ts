@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { LocationAvailability } from './entities/location-availability.entity';
 import { Location } from './entities/location.entity';
 import { CreateLocationTimeScheduleDto } from './dto/create-location-time-schedule.dto';
@@ -13,11 +13,10 @@ import { CreateLocationSlotTimeDto } from './dto/create-location-slot-time.dto';
 import { UpdateLocationSlotTimeDto } from './dto/update-location-slot-time.dto';
 import { CreateLocationWorkingDateDto } from './dto/create-location-working-date.dto';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
-import { In } from 'typeorm';
 import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-saturday.dto';
 import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
 import { DataSource } from 'typeorm';
-import { BookingStatus } from 'src/constants/booking.enum';
+import { BookingStatus, BookingType } from 'src/constants/booking.enum';
 import { Booking } from 'src/modules/bookings/entities/booking.entity';
 import { ConceptRangeType } from 'src/constants/servicePackage.enum';
 
@@ -560,52 +559,174 @@ export class LocationAvailabilityService {
       .skip((Number(current) - 1) * actualPageSize)
       .take(actualPageSize)
       .getManyAndCount();
-
-    // Format dates and slot times in response
     const formattedData = await Promise.all(data.map(async availability => {
-      // For each workingDate, check if any slot is booked by a single-day booking
-      const workingDates = await Promise.all((availability.workingDates || []).map(async workingDate => {
-        let isAvailable = true;
-        for (const slotTime of (availability.slotTimes || [])) {
-          const bookings = await this.bookingRepository.find({
-            where: {
-              date: workingDate.date,
-              locationId: availability.location.id,
-              status: In([BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED])
-            },
-            relations: ['serviceConcept']
-          });
-          const hasBooking = bookings.some(booking => {
-            if (!booking.serviceConcept || booking.serviceConcept.conceptRangeType !== ConceptRangeType.SINGLE_DAY) return false;
-            // Check if booking.time is within slotTime
-            const [bHour, bMin] = booking.time.split(':').map(Number);
-            const [slotStartHour, slotStartMin] = slotTime.startSlotTime.split(':').map(Number);
-            const [slotEndHour, slotEndMin] = slotTime.endSlotTime.split(':').map(Number);
-            const bookingMinutes = bHour * 60 + bMin;
-            const slotStartMinutes = slotStartHour * 60 + slotStartMin;
-            const slotEndMinutes = slotEndHour * 60 + slotEndMin;
-            return bookingMinutes >= slotStartMinutes && bookingMinutes < slotEndMinutes;
-          });
-          if (hasBooking) {
-            isAvailable = false;
-            break;
-          }
-        }
+      // Get all slot time working dates for this availability
+      const slotTimeWorkingDates = await this.locationSlotTimeWorkingDateRepository.find({
+        where: {
+          slotTimeId: In(availability.slotTimes.map(st => st.id)),
+          workingDateId: In(availability.workingDates.map(wd => wd.id))
+        },
+        relations: ['slotTime', 'workingDate']
+      });
+
+      // For each slot time working date, check if it's available
+      const formattedSlotTimeWorkingDates = await Promise.all(slotTimeWorkingDates.map(async slotTimeWorkingDate => {
+        // Check for single-day bookings in this slot
+        const singleDayBookings = await this.bookingRepository.find({
+          where: {
+            date: slotTimeWorkingDate.workingDate.date,
+            locationId: availability.location.id,
+            status: In([BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED]),
+            bookingType: BookingType.SINGLE_DAY
+          },
+          relations: ['serviceConcept']
+        });
+        
+        const hasSingleDayBooking = singleDayBookings.some(booking => {
+          if (!booking.serviceConcept || booking.serviceConcept.conceptRangeType !== ConceptRangeType.SINGLE_DAY) return false;
+          // Check if booking.time is within slotTime
+          const [bHour, bMin] = booking.time.split(':').map(Number);
+          const [slotStartHour, slotStartMin] = slotTimeWorkingDate.slotTime.startSlotTime.split(':').map(Number);
+          const [slotEndHour, slotEndMin] = slotTimeWorkingDate.slotTime.endSlotTime.split(':').map(Number);
+          const bookingMinutes = bHour * 60 + bMin;
+          const slotStartMinutes = slotStartHour * 60 + slotStartMin;
+          const slotEndMinutes = slotEndHour * 60 + slotEndMin;
+          return bookingMinutes >= slotStartMinutes && bookingMinutes < slotEndMinutes;
+        });
+
+        // Check for multi-day bookings that include this date
+        const multiDayBookings = await this.bookingRepository
+          .createQueryBuilder('booking')
+          .innerJoin('booking.schedules', 'schedule')
+          .where('booking.locationId = :locationId', { locationId: availability.location.id })
+          .andWhere('booking.status IN (:...statuses)', { 
+            statuses: [BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED] 
+          })
+          .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.MULTI_DAY })
+          .andWhere('schedule.date = :date', { date: slotTimeWorkingDate.workingDate.date })
+          .getMany();
+
+        const hasMultiDayBooking = multiDayBookings.length > 0;
+
+        // If there's any booking (single-day or multi-day), block this slot
+        const isSlotAvailable = !hasSingleDayBooking && !hasMultiDayBooking && slotTimeWorkingDate.workingDate.isAvailable;
+
         return {
-          ...this.formatLocationWorkingDates(workingDate),
-          isAvailable
+          id: slotTimeWorkingDate.id,
+          date: this.formatDate(slotTimeWorkingDate.workingDate.date),
+          startSlotTime: slotTimeWorkingDate.slotTime.startSlotTime,
+          endSlotTime: slotTimeWorkingDate.slotTime.endSlotTime,
+          maxParallelBookings: slotTimeWorkingDate.maxParallelBookings || 1,
+          alreadyBooked: hasSingleDayBooking || hasMultiDayBooking ? 1 : 0,
+          isAvailable: isSlotAvailable,
+          blockReason: hasMultiDayBooking ? 'Ngày này đã được đặt bởi multi-day booking' : 
+                      hasSingleDayBooking ? 'Slot này đã được đặt bởi single-day booking' : null
         };
       }));
 
       return {
         ...availability,
-        workingDates,
+        workingDates: availability.workingDates?.map(workingDate => 
+          this.formatLocationWorkingDates(workingDate)
+        ),
         slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
-        slotTimeWorkingDates: []
+        slotTimeWorkingDates: formattedSlotTimeWorkingDates
+      };
+    }));
+    return {
+      data: formattedData,
+      pagination: {
+        current: Number(current),
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
+        totalItem: total,
+      }
+    };
+  }
+
+  async findByLocationIdForMultiDay(locationId: string, query: FindLocationAvailabilityDto): Promise<{
+    data: LocationAvailability[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
+    const { isAvailable, current, pageSize, sortBy, sortDirection } = query;
+    const actualPageSize = Number(pageSize);
+    const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
+      .leftJoinAndSelect('location_availability.location', 'location')
+      .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
+      .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
+      .andWhere('location_availability.location_id = :locationId', { locationId })
+      .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
+
+    if (isAvailable !== undefined) {
+      queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
+    }
+
+    if (sortBy) {
+      queryBuilder.orderBy(`location_availability.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
+    }
+
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
+
+    // Format dates and slot times in response
+    const formattedData = await Promise.all(data.map(async availability => {
+      // For each workingDate, check if the entire date is available for multi-day booking
+      const workingDates = await Promise.all((availability.workingDates || []).map(async workingDate => {
+        // Check if there are any paid bookings for this date (regardless of time)
+        const bookings = await this.bookingRepository.find({
+          where: {
+            date: workingDate.date,
+            locationId: availability.location.id,
+            status: In([BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED])
+          },
+          relations: ['serviceConcept']
+        });
+
+        // Check specifically for single-day bookings
+        const singleDayBookings = bookings.filter(booking => 
+          booking.bookingType === BookingType.SINGLE_DAY
+        );
+
+        // Check for multi-day bookings that include this date
+        const multiDayBookings = await this.bookingRepository
+          .createQueryBuilder('booking')
+          .innerJoin('booking.schedules', 'schedule')
+          .where('booking.locationId = :locationId', { locationId: availability.location.id })
+          .andWhere('booking.status IN (:...statuses)', { 
+            statuses: [BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED] 
+          })
+          .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.MULTI_DAY })
+          .andWhere('schedule.date = :date', { date: workingDate.date })
+          .getMany();
+
+        const hasSingleDayBooking = singleDayBookings.length > 0;
+        const hasMultiDayBooking = multiDayBookings.length > 0;
+        const hasAnyBooking = hasSingleDayBooking || hasMultiDayBooking;
+
+        return {
+          ...this.formatLocationWorkingDates(workingDate),
+          isAvailable: !hasAnyBooking && workingDate.isAvailable,
+          blockReason: hasSingleDayBooking ? 'Ngày này đã có single-day booking, vui lòng chọn ngày khác' :
+                      hasMultiDayBooking ? 'Ngày này đã được đặt bởi multi-day booking' : null
+        };
+      }));
+
+      return {
+        ...availability,
+        workingDates: workingDates,
+        // slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        // slotTimeWorkingDates: []
       };
     }));
 
-    return {
+    return {  
       data: formattedData,
       pagination: {
         current: Number(current),

@@ -200,10 +200,6 @@ export class BookingService {
       throw new BadRequestException('Định dạng ngày không hợp lệ. Vui lòng sử dụng định dạng DD/MM/YYYY');
     }
 
-    if (!schedule.time) {
-      throw new BadRequestException('Giờ booking là bắt buộc');
-    }
-
     // Check location availability
     const locationAvailability = await this.locationAvailabilityService.findByDate(
       schedule.date,
@@ -214,34 +210,17 @@ export class BookingService {
       throw new BadRequestException(`Chi nhánh không làm việc vào ngày ${schedule.date}`);
     }
 
-    const availability = locationAvailability.data[0];
-    const slotTimes = availability.slotTimes;
-
-    // Find matching slot time
-    const bookingTimeMinutes = this.timeToMinutes(schedule.time);
-    const matchingSlot = slotTimes.find(slot => {
-      const slotStartMinutes = this.timeToMinutes(slot.startSlotTime);
-      const slotEndMinutes = this.timeToMinutes(slot.endSlotTime);
-      return bookingTimeMinutes >= slotStartMinutes && bookingTimeMinutes <= slotEndMinutes;
-    });
-
-    if (!matchingSlot) {
-      throw new BadRequestException(`Thời gian đặt lịch ${schedule.time} không nằm trong khung giờ làm việc`);
-    }
-
-    // NEW: Check if this date and time is already booked and paid successfully
+    // NEW: Check if this date is already booked and paid successfully
     const isDateAlreadyBooked = await this.isDateAlreadyBookedAndPaid(
       schedule.date,
-      schedule.time,
-      locationId,
-      serviceConcept.duration
+      locationId
     );
 
     if (isDateAlreadyBooked) {
-      throw new BadRequestException(`Ngày ${schedule.date} vào lúc ${schedule.time} đã được đặt và thanh toán thành công bởi người khác. Vui lòng chọn ngày khác.`);
+      throw new BadRequestException(`Ngày ${schedule.date} đã được đặt và thanh toán thành công bởi người khác. Vui lòng chọn ngày khác.`);
     }
 
-    // Validate date and time
+    // Validate date
     const bookingDate = new Date(convertedDate);
     const currentDate = new Date();
 
@@ -256,29 +235,12 @@ export class BookingService {
     if (bookingDateOnly < currentDateOnly) {
       throw new BadRequestException(`Ngày booking ${schedule.date} không hợp lệ`);
     }
-
-    // If same day, check time
-    if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
-      // Parse time string (HH:mm) to hours and minutes
-      const [bookingHours, bookingMinutes] = schedule.time.split(':').map(Number);
-      const currentHours = vietnamCurrentDate.getHours();
-      const currentMinutes = vietnamCurrentDate.getMinutes();
-
-      const currentTimeInMinutes = currentHours * 60 + currentMinutes;
-      const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
-
-      if (bookingTimeInMinutes <= currentTimeInMinutes) {
-        throw new BadRequestException(`Thời gian đặt lịch ${schedule.time} ngày ${schedule.date} không hợp lệ`);
-      }
-    }
   }
 
-  // NEW: Check if a specific date and time is already booked and paid successfully
+  // NEW: Check if a specific date is already booked and paid successfully
   private async isDateAlreadyBookedAndPaid(
     date: string,
-    time: string,
-    locationId: string,
-    duration: number
+    locationId: string
   ): Promise<boolean> {
     try {
       const convertedDate = this.convertDateFormat(date);
@@ -292,34 +254,11 @@ export class BookingService {
           date: new Date(convertedDate),
           locationId: locationId,
           status: BookingStatus.PAID
-        },
-        relations: ['serviceConcept']
+        }
       });
 
-      if (paidBookings.length === 0) {
-        return false;
-      }
-
-      // Check for overlapping time slots
-      const bookingTimeMinutes = this.timeToMinutes(time);
-      const bookingEndMinutes = bookingTimeMinutes + (duration || 60); // Default 60 minutes if duration is 0
-
-      for (const booking of paidBookings) {
-        const existingBookingTimeMinutes = this.timeToMinutes(booking.time);
-        const existingBookingDuration = booking.serviceConcept?.duration || 60;
-        const existingBookingEndMinutes = existingBookingTimeMinutes + existingBookingDuration;
-
-        // Check if there's any overlap
-        if (
-          (bookingTimeMinutes >= existingBookingTimeMinutes && bookingTimeMinutes < existingBookingEndMinutes) ||
-          (bookingEndMinutes > existingBookingTimeMinutes && bookingEndMinutes <= existingBookingEndMinutes) ||
-          (bookingTimeMinutes <= existingBookingTimeMinutes && bookingEndMinutes >= existingBookingEndMinutes)
-        ) {
-          return true; // There's an overlap with a paid booking
-        }
-      }
-
-      return false;
+      // For multi-day bookings, if there's any paid booking on this date, the entire date is considered booked
+      return paidBookings.length > 0;
     } catch (error) {
       console.error('Error checking if date is already booked:', error);
       return false;
@@ -333,10 +272,9 @@ export class BookingService {
     reason?: string;
   }> {
     const unavailableDates: string[] = [];
-    const duration = serviceConcept?.duration || 60; // Default 60 minutes if duration is 0
 
     for (const schedule of schedules) {
-      if (!schedule.date || !schedule.time) {
+      if (!schedule.date) {
         continue;
       }
 
@@ -357,12 +295,10 @@ export class BookingService {
         continue;
       }
 
-      // Check if this specific date and time is already booked and paid
+      // Check if this specific date is already booked and paid
       const isAlreadyBooked = await this.isDateAlreadyBookedAndPaid(
         schedule.date,
-        schedule.time,
-        locationId,
-        duration
+        locationId
       );
 
       if (isAlreadyBooked) {
@@ -1073,14 +1009,13 @@ export class BookingService {
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    // Use the first schedule for the main booking date/time
+    // Use the first schedule for the main booking date
     const firstSchedule = createBookingDto.schedules[0];
     const convertedDate = this.convertDateFormat(firstSchedule.date);
     
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
-      time: firstSchedule.time,
       userId,
       serviceConceptId,
       locationId: createBookingDto.locationId,
@@ -1098,7 +1033,6 @@ export class BookingService {
       this.bookingScheduleRepository.create({
         bookingId: savedBooking.id,
         date: new Date(this.convertDateFormat(schedule.date)),
-        time: schedule.time,
         notes: schedule.notes,
         status: BookingScheduleStatus.SCHEDULED,
       })
