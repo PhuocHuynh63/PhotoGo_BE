@@ -24,7 +24,7 @@ import { FilterServiceTypeDto } from './dto/filter-service-type.dto';
 @Injectable()
 export class ServicePackageService {
   private readonly logger = new Logger(ServicePackageService.name);
-  
+
   // Constants for pricing calculation
   private readonly COMMISSION_RATE = 0.30; // 30%
   private readonly TAX_RATE = 0.05; // 5%
@@ -93,7 +93,7 @@ export class ServicePackageService {
     const originPrice = this.calculateOriginPrice(finalPrice);
     const commissionAmount = this.calculateCommissionAmount(originPrice);
     const taxAmount = this.calculateTaxAmount(originPrice);
-    
+
     return {
       originPrice,
       commissionAmount,
@@ -122,7 +122,7 @@ export class ServicePackageService {
     const commissionAmount = this.calculateCommissionAmount(originPrice);
     const taxAmount = this.calculateTaxAmount(originPrice);
     const finalPrice = this.calculateFinalPrice(originPrice);
-    
+
     return {
       originPrice,
       commissionAmount,
@@ -149,7 +149,7 @@ export class ServicePackageService {
       if (!concept) {
         throw new NotFoundException(`Service concept with ID ${serviceConceptId} not found`);
       }
-      
+
       // concept.price is the origin price stored in DB
       return this.getPricingBreakdownFromOrigin(concept.price);
     });
@@ -367,8 +367,14 @@ export class ServicePackageService {
         await this.dataSource.query(`DELETE FROM cart_item WHERE service_concept_id = $1`, [concept.id]);
         // Xoá wishlist_item liên quan trước
         await this.dataSource.query(`DELETE FROM wishlist_item WHERE service_concept_id = $1`, [concept.id]);
+
+        // Lấy tất cả concept_image_id là UUID string
+        const conceptImageRows = await this.dataSource.query(`SELECT id FROM service_concept_image WHERE service_concept_id = $1`, [concept.id]);
+        const conceptImageIds = conceptImageRows.map((img: any) => img.id);
         // Xoá concept vector trước để tránh lỗi khoá ngoại
-        await this.dataSource.query(`DELETE FROM concept_vector WHERE concept_id = $1`, [concept.id]);
+        if (conceptImageIds.length > 0) {
+          await this.dataSource.query(`DELETE FROM concept_vector WHERE concept_image_id = ANY($1)`, [conceptImageIds]);
+        }
         // Xoá images
         await this.serviceConceptImageRepository.delete({ serviceConceptId: concept.id });
         // Xoá serviceConceptServiceType
@@ -880,7 +886,7 @@ export class ServicePackageService {
     // Calculate pricing breakdown using reverse calculation
     // The input price is the final price that customers will see
     const pricingBreakdown = this.getPricingBreakdown(createServiceConceptDto.price);
-    
+
     this.logger.log(`Pricing breakdown for concept ${createServiceConceptDto.name}:`);
     this.logger.log(`- Final Price (Customer sees): ${pricingBreakdown.finalPrice}`);
     this.logger.log(`- Origin Price (Stored in DB): ${pricingBreakdown.originPrice}`);
@@ -889,7 +895,7 @@ export class ServicePackageService {
 
     // Store the origin price in the database (not the final price)
     serviceConceptData.price = pricingBreakdown.originPrice;
-    
+
     // Create the service concept first
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
     const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
@@ -1091,7 +1097,7 @@ export class ServicePackageService {
       // Calculate pricing breakdown using reverse calculation
       // The input price is the final price that customers will see
       const pricingBreakdown = this.getPricingBreakdown(updateServiceConceptDto.price);
-      
+
       this.logger.log(`Updated pricing breakdown for concept ${id}:`);
       this.logger.log(`- Final Price (Customer sees): ${pricingBreakdown.finalPrice}`);
       this.logger.log(`- Origin Price (Stored in DB): ${pricingBreakdown.originPrice}`);
@@ -1127,10 +1133,10 @@ export class ServicePackageService {
     }
 
     // Handle concept range type logic for updates with strict validation
-    if (updateServiceConceptDto.conceptRangeType !== undefined || 
-        updateServiceConceptDto.numberOfDays !== undefined ||
-        updateServiceConceptDto.duration !== undefined) {
-      
+    if (updateServiceConceptDto.conceptRangeType !== undefined ||
+      updateServiceConceptDto.numberOfDays !== undefined ||
+      updateServiceConceptDto.duration !== undefined) {
+
       let finalDuration = updateServiceConceptDto.duration !== undefined ? updateServiceConceptDto.duration : serviceConcept.duration;
       let finalNumberOfDays = updateServiceConceptDto.numberOfDays !== undefined ? updateServiceConceptDto.numberOfDays : serviceConcept.numberOfDays;
       let finalConceptRangeType = updateServiceConceptDto.conceptRangeType !== undefined ? updateServiceConceptDto.conceptRangeType : serviceConcept.conceptRangeType;
