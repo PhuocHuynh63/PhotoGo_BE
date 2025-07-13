@@ -24,6 +24,11 @@ import { FilterServiceTypeDto } from './dto/filter-service-type.dto';
 @Injectable()
 export class ServicePackageService {
   private readonly logger = new Logger(ServicePackageService.name);
+  
+  // Constants for pricing calculation
+  private readonly COMMISSION_RATE = 0.30; // 30%
+  private readonly TAX_RATE = 0.05; // 5%
+  private readonly TOTAL_MULTIPLIER = 1 + this.COMMISSION_RATE + this.TAX_RATE; // 1.35
 
   constructor(
     @InjectRepository(ServicePackage)
@@ -44,6 +49,111 @@ export class ServicePackageService {
     private readonly dataSource: DataSource,
     private readonly geminiService: GeminiService,
   ) { }
+
+  /**
+   * Calculate origin price from final price (reverse calculation)
+   * Final Price = Origin Price + Commission + Tax
+   * Origin Price = Final Price / (1 + Commission Rate + Tax Rate)
+   */
+  private calculateOriginPrice(finalPrice: number): number {
+    return Math.round(finalPrice / this.TOTAL_MULTIPLIER);
+  }
+
+  /**
+   * Calculate commission amount from origin price
+   */
+  private calculateCommissionAmount(originPrice: number): number {
+    return Math.round(originPrice * this.COMMISSION_RATE);
+  }
+
+  /**
+   * Calculate tax amount from origin price
+   */
+  private calculateTaxAmount(originPrice: number): number {
+    return Math.round(originPrice * this.TAX_RATE);
+  }
+
+  /**
+   * Calculate final price from origin price (forward calculation)
+   */
+  private calculateFinalPrice(originPrice: number): number {
+    return Math.round(originPrice * this.TOTAL_MULTIPLIER);
+  }
+
+  /**
+   * Get pricing breakdown for invoice
+   * Returns: { originPrice, commissionAmount, taxAmount, finalPrice }
+   */
+  private getPricingBreakdown(finalPrice: number): {
+    originPrice: number;
+    commissionAmount: number;
+    taxAmount: number;
+    finalPrice: number;
+  } {
+    const originPrice = this.calculateOriginPrice(finalPrice);
+    const commissionAmount = this.calculateCommissionAmount(originPrice);
+    const taxAmount = this.calculateTaxAmount(originPrice);
+    
+    return {
+      originPrice,
+      commissionAmount,
+      taxAmount,
+      finalPrice
+    };
+  }
+
+  /**
+   * Get final price (customer price) from origin price
+   */
+  private getFinalPrice(originPrice: number): number {
+    return this.calculateFinalPrice(originPrice);
+  }
+
+  /**
+   * Get pricing breakdown from origin price (for existing records)
+   * Returns: { originPrice, commissionAmount, taxAmount, finalPrice }
+   */
+  private getPricingBreakdownFromOrigin(originPrice: number): {
+    originPrice: number;
+    commissionAmount: number;
+    taxAmount: number;
+    finalPrice: number;
+  } {
+    const commissionAmount = this.calculateCommissionAmount(originPrice);
+    const taxAmount = this.calculateTaxAmount(originPrice);
+    const finalPrice = this.calculateFinalPrice(originPrice);
+    
+    return {
+      originPrice,
+      commissionAmount,
+      taxAmount,
+      finalPrice
+    };
+  }
+
+  /**
+   * Get pricing breakdown for invoice (public method)
+   * This method can be used by other services to get pricing breakdown for invoice generation
+   * Returns: { originPrice, commissionAmount, taxAmount, finalPrice }
+   */
+  public getInvoicePricingBreakdown(serviceConceptId: string): Promise<{
+    originPrice: number;
+    commissionAmount: number;
+    taxAmount: number;
+    finalPrice: number;
+  }> {
+    return this.serviceConceptRepository.findOne({
+      where: { id: serviceConceptId },
+      select: ['price'] // Only get the price field
+    }).then(concept => {
+      if (!concept) {
+        throw new NotFoundException(`Service concept with ID ${serviceConceptId} not found`);
+      }
+      
+      // concept.price is the origin price stored in DB
+      return this.getPricingBreakdownFromOrigin(concept.price);
+    });
+  }
 
   async create(
     createServicePackageDto: CreateServicePackageDto,
@@ -755,6 +865,19 @@ export class ServicePackageService {
       servicePackage: servicePackage,
     };
 
+    // Calculate pricing breakdown using reverse calculation
+    // The input price is the final price that customers will see
+    const pricingBreakdown = this.getPricingBreakdown(createServiceConceptDto.price);
+    
+    this.logger.log(`Pricing breakdown for concept ${createServiceConceptDto.name}:`);
+    this.logger.log(`- Final Price (Customer sees): ${pricingBreakdown.finalPrice}`);
+    this.logger.log(`- Origin Price (Stored in DB): ${pricingBreakdown.originPrice}`);
+    this.logger.log(`- Commission: ${pricingBreakdown.commissionAmount}`);
+    this.logger.log(`- Tax: ${pricingBreakdown.taxAmount}`);
+
+    // Store the origin price in the database (not the final price)
+    serviceConceptData.price = pricingBreakdown.originPrice;
+    
     // Create the service concept first
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
     const savedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
@@ -762,16 +885,12 @@ export class ServicePackageService {
     // Now create commission with the actual service concept ID
     const commissionData = this.commissionRepository.create({
       serviceConceptId: savedServiceConcept.id,
-      commissionRate: 30,
+      commissionRate: this.COMMISSION_RATE * 100, // Store as percentage (30)
       commissionType: CommissionType.PERCENTAGE,
-      commissionAmount: createServiceConceptDto.price * 0.3,
+      commissionAmount: pricingBreakdown.commissionAmount,
       status: CommissionStatus.ACTIVE,
     });
     await this.commissionRepository.save(commissionData);
-
-    // Update the service concept price to include commission and tax (10% tax)
-    savedServiceConcept.price = createServiceConceptDto.price * (1 + commissionData.commissionRate / 100) + createServiceConceptDto.price * 0.05;
-    await this.serviceConceptRepository.save(savedServiceConcept);
 
     // Create service concept images
     let savedImageEntities: ServiceConceptImage[] = [];
@@ -867,11 +986,15 @@ export class ServicePackageService {
     // Create a map of concept ID to count
     const countMap = new Map(counts.map(c => [c.service_concept_id, Number(c.count)]));
 
-    // Add counts to each concept
-    const conceptsWithCounts = data.map(concept => ({
-      ...concept,
-      countConceptUsed: countMap.get(concept.id) || 0
-    })) as (ServiceConcept & { countConceptUsed: number })[];
+    // Add counts to each concept and convert origin price to final price for customer display
+    const conceptsWithCounts = data.map(concept => {
+      const finalPrice = this.getFinalPrice(concept.price);
+      return {
+        ...concept,
+        price: finalPrice, // Show final price to customer
+        countConceptUsed: countMap.get(concept.id) || 0
+      };
+    }) as (ServiceConcept & { countConceptUsed: number })[];
 
     return {
       data: conceptsWithCounts,
@@ -901,8 +1024,10 @@ export class ServicePackageService {
       AND status = 'đã hoàn thành'
     `, [id]);
 
+    const finalPrice = this.getFinalPrice(serviceConcept.price);
     return {
       ...serviceConcept,
+      price: finalPrice, // Show final price to customer
       countConceptUsed: Number(countResult[0].count) || 0
     } as ServiceConcept & { countConceptUsed: number };
   }
@@ -951,29 +1076,39 @@ export class ServicePackageService {
       serviceConcept.description = updateServiceConceptDto.description;
     }
     if (updateServiceConceptDto.price !== undefined) {
+      // Calculate pricing breakdown using reverse calculation
+      // The input price is the final price that customers will see
+      const pricingBreakdown = this.getPricingBreakdown(updateServiceConceptDto.price);
+      
+      this.logger.log(`Updated pricing breakdown for concept ${id}:`);
+      this.logger.log(`- Final Price (Customer sees): ${pricingBreakdown.finalPrice}`);
+      this.logger.log(`- Origin Price (Stored in DB): ${pricingBreakdown.originPrice}`);
+      this.logger.log(`- Commission: ${pricingBreakdown.commissionAmount}`);
+      this.logger.log(`- Tax: ${pricingBreakdown.taxAmount}`);
+
       // Update commission if price changes
       const existingCommission = await this.commissionRepository.findOne({
         where: { serviceConceptId: id }
       });
 
       if (existingCommission) {
-        // Update commission amount based on new price
-        existingCommission.commissionAmount = updateServiceConceptDto.price * 0.3;
+        // Update commission amount based on new origin price
+        existingCommission.commissionAmount = pricingBreakdown.commissionAmount;
         await this.commissionRepository.save(existingCommission);
       } else {
         // Create new commission if doesn't exist
         const commissionData = this.commissionRepository.create({
           serviceConceptId: id,
-          commissionRate: 30,
+          commissionRate: this.COMMISSION_RATE * 100, // Store as percentage (30)
           commissionType: CommissionType.PERCENTAGE,
-          commissionAmount: updateServiceConceptDto.price * 0.3,
+          commissionAmount: pricingBreakdown.commissionAmount,
           status: CommissionStatus.ACTIVE,
         });
         await this.commissionRepository.save(commissionData);
       }
 
-      // Modify price to include commission and tax (10% tax)
-      serviceConcept.price = updateServiceConceptDto.price * (1 + 30 / 100) + updateServiceConceptDto.price * 0.05;
+      // Store the origin price in the database (not the final price)
+      serviceConcept.price = pricingBreakdown.originPrice;
     }
     if (updateServiceConceptDto.duration !== undefined) {
       serviceConcept.duration = updateServiceConceptDto.duration;
@@ -1260,13 +1395,17 @@ export class ServicePackageService {
     }
 
     if (params.minPrice !== undefined) {
+      // Convert final price to origin price for filtering
+      const minOriginPrice = this.calculateOriginPrice(params.minPrice);
       filterConditions.push(`spp.min_price >= $${filterConditions.length + 1}`);
-      baseParams.push(params.minPrice);
+      baseParams.push(minOriginPrice);
     }
 
     if (params.maxPrice !== undefined) {
+      // Convert final price to origin price for filtering
+      const maxOriginPrice = this.calculateOriginPrice(params.maxPrice);
       filterConditions.push(`spp.max_price <= $${filterConditions.length + 1}`);
-      baseParams.push(params.maxPrice);
+      baseParams.push(maxOriginPrice);
     }
 
     // Filter by concept range type
@@ -1402,13 +1541,17 @@ export class ServicePackageService {
     }
 
     if (params.minPrice !== undefined) {
+      // Convert final price to origin price for filtering
+      const minOriginPrice = this.calculateOriginPrice(params.minPrice);
       countFilterConditions.push(`spp.min_price >= $${countFilterConditions.length + 1}`);
-      countParams.push(params.minPrice);
+      countParams.push(minOriginPrice);
     }
 
     if (params.maxPrice !== undefined) {
+      // Convert final price to origin price for filtering
+      const maxOriginPrice = this.calculateOriginPrice(params.maxPrice);
       countFilterConditions.push(`spp.max_price <= $${countFilterConditions.length + 1}`);
-      countParams.push(params.maxPrice);
+      countParams.push(maxOriginPrice);
     }
 
     // Filter by concept range type in count query
@@ -1465,8 +1608,8 @@ export class ServicePackageService {
           status: row.status,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
-          minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
-          maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
+          minPrice: row.min_price ? this.getFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null,
+          maxPrice: row.max_price ? this.getFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
           vendor: {
             id: row.vendor_id,
             name: row.vendor_name,
@@ -1490,7 +1633,7 @@ export class ServicePackageService {
             id: row.service_concept_id,
             name: row.service_concept_name,
             description: row.service_concept_description,
-            price: Number(parseFloat(row.service_concept_price).toFixed(2)),
+            price: this.getFinalPrice(Number(parseFloat(row.service_concept_price).toFixed(2))),
             duration: row.service_concept_duration,
             images: Array.isArray(row.service_concept_image_url) ? row.service_concept_image_url : [],
             serviceTypes: new Map<string, any>() // Use a Map for types to avoid duplicates

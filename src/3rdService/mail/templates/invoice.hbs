@@ -209,7 +209,7 @@
     <div class="price-breakdown">
       <h3>Chi tiết thanh toán</h3>
       <div class="price-row">
-        <span>Giá gốc:</span>
+        <span>Giá dịch vụ:</span>
         <span>{{invoice.originalPrice}} VND</span>
       </div>
       {{#if invoice.discountAmount}}
@@ -220,14 +220,10 @@
       </div>
       {{/if}}
       {{/if}}
-      {{#if invoice.feeAmount}}
-      {{#if (gt invoice.feeAmount 0)}}
       <div class="price-row">
-        <span>Phí dịch vụ:</span>
-        <span>{{invoice.feeAmount}} VND</span>
+        <span>Thuế VAT:</span>
+        <span>{{invoice.taxAmount}} VND</span>
       </div>
-      {{/if}}
-      {{/if}}
       <div class="price-row">
         <span>Tổng cộng:</span>
         <span>{{invoice.payablePrice}} VND</span>

@@ -51,12 +51,17 @@ export class InvoiceService {
       throw new ConflictException('Đơn hàng này đã có hóa đơn');
     }
 
-    const serviceConcept = await this.servicePackageService.findServiceConcept(booking.serviceConceptId);
-    if (!serviceConcept) {
-      throw new NotFoundException(`Gói dịch vụ với ID ${booking.serviceConceptId} không tồn tại`);
-    }
-
-    const originalPrice = Math.round(serviceConcept.price);
+    // Get pricing breakdown using the new pricing logic
+    const pricingBreakdown = await this.servicePackageService.getInvoicePricingBreakdown(booking.serviceConceptId);
+    
+    // For invoice, we show:
+    // - Price = Origin Price + Commission (hidden from customer)
+    // - Tax = Tax Amount
+    // - Total = Final Price (what customer sees)
+    const price = pricingBreakdown.originPrice + pricingBreakdown.commissionAmount;
+    const taxAmount = pricingBreakdown.taxAmount;
+    const totalAmount = pricingBreakdown.finalPrice; // This is what customer sees
+    
     let discountAmount = 0;
     let voucher = null;
     if (voucherId) {
@@ -81,13 +86,14 @@ export class InvoiceService {
         throw new BadRequestException(`Voucher với ID ${voucherId} không còn hiệu lực`);
       }
 
-      if (originalPrice < voucher.minPrice) {
+      // Apply voucher discount to the total amount (final price that customer sees)
+      if (totalAmount < voucher.minPrice) {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
       }
 
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
         const discountValue = parseFloat(voucher.discount_value);
-        discountAmount = Math.round((originalPrice * discountValue) / 100);
+        discountAmount = Math.round((totalAmount * discountValue) / 100);
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
@@ -99,18 +105,12 @@ export class InvoiceService {
       }
     }
 
-    let discountedPrice = originalPrice - discountAmount;
-    
-    // Calculate tax amount by reverse engineering from originalPrice
-    // originalPrice = basePrice * (1 + 30/100) + basePrice * 0.05
-    // originalPrice = basePrice * 1.35
-    // basePrice = originalPrice / 1.35
-    // taxAmount = basePrice * 0.05
-    const basePrice = originalPrice / 1.35;
-    const taxAmount = Math.round(basePrice * 0.05);
+    // Calculate final amounts after discount
+    const discountedPrice = price - discountAmount; // Apply discount to price (origin + commission)
+    const discountedTotal = totalAmount - discountAmount; // Apply discount to total amount
     
     const feeAmount = 0;
-    const payablePrice = discountedPrice + feeAmount;
+    const payablePrice = discountedTotal; // Final amount customer needs to pay
 
     let depositAmount = 0;
     let remainingAmount = 0;
@@ -136,7 +136,7 @@ export class InvoiceService {
       ...createInvoiceDto,
       bookingId: booking.id,
       voucherId: voucher?.id || null,
-      originalPrice,
+      originalPrice: price, // This is now origin + commission (hidden from customer)
       discountAmount,
       discountedPrice,
       taxAmount,
