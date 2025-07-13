@@ -18,6 +18,8 @@ import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-s
 import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
 import { DataSource } from 'typeorm';
 import { BookingStatus } from 'src/constants/booking.enum';
+import { Booking } from 'src/modules/bookings/entities/booking.entity';
+import { ConceptRangeType } from 'src/constants/servicePackage.enum';
 
 @Injectable()
 export class LocationAvailabilityService {
@@ -190,6 +192,8 @@ export class LocationAvailabilityService {
     @InjectRepository(LocationSlotTimeWorkingDate)
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
     private dataSource: DataSource,
+    @InjectRepository(Booking)
+    private bookingRepository: Repository<Booking>,
   ) {}
 
   // Helper function to generate dates for the current week
@@ -559,20 +563,43 @@ export class LocationAvailabilityService {
 
     // Format dates and slot times in response
     const formattedData = await Promise.all(data.map(async availability => {
-      // Get all slot time working dates for this availability
-      const slotTimeWorkingDates = await this.locationSlotTimeWorkingDateRepository.find({
-        where: {
-          slotTimeId: In(availability.slotTimes.map(st => st.id)),
-          workingDateId: In(availability.workingDates.map(wd => wd.id))
-        },
-        relations: ['slotTime', 'workingDate']
-      });
+      // For each workingDate, check if any slot is booked by a single-day booking
+      const workingDates = await Promise.all((availability.workingDates || []).map(async workingDate => {
+        let isAvailable = true;
+        for (const slotTime of (availability.slotTimes || [])) {
+          const bookings = await this.bookingRepository.find({
+            where: {
+              date: workingDate.date,
+              locationId: availability.location.id,
+              status: In([BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED])
+            },
+            relations: ['serviceConcept']
+          });
+          const hasBooking = bookings.some(booking => {
+            if (!booking.serviceConcept || booking.serviceConcept.conceptRangeType !== ConceptRangeType.SINGLE_DAY) return false;
+            // Check if booking.time is within slotTime
+            const [bHour, bMin] = booking.time.split(':').map(Number);
+            const [slotStartHour, slotStartMin] = slotTime.startSlotTime.split(':').map(Number);
+            const [slotEndHour, slotEndMin] = slotTime.endSlotTime.split(':').map(Number);
+            const bookingMinutes = bHour * 60 + bMin;
+            const slotStartMinutes = slotStartHour * 60 + slotStartMin;
+            const slotEndMinutes = slotEndHour * 60 + slotEndMin;
+            return bookingMinutes >= slotStartMinutes && bookingMinutes < slotEndMinutes;
+          });
+          if (hasBooking) {
+            isAvailable = false;
+            break;
+          }
+        }
+        return {
+          ...this.formatLocationWorkingDates(workingDate),
+          isAvailable
+        };
+      }));
 
       return {
         ...availability,
-        workingDates: availability.workingDates?.map(workingDate => 
-          this.formatLocationWorkingDates(workingDate)
-        ),
+        workingDates,
         slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
         slotTimeWorkingDates: []
       };
