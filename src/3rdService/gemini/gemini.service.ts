@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -8,6 +7,7 @@ import { Repository } from 'typeorm';
 import { ConceptVector } from '../../modules/service-package/entities/concept-vector.entity';
 import { GeminiModel } from './dto/gemini.enums';
 import { ServiceConcept } from '../../modules/service-package/entities/service-concept.entity';
+import { ServiceConceptImage } from '../../modules/service-package/entities/service-concept-image.entity';
 
 @Injectable()
 export class GeminiService {
@@ -40,6 +40,12 @@ export class GeminiService {
         private configService: ConfigService,
         @InjectRepository(ConceptVector)
         private conceptVectorRepository: Repository<ConceptVector>,
+        // ✅ ADDED: Inject ServiceConceptRepository
+        @InjectRepository(ServiceConcept)
+        private serviceConceptRepository: Repository<ServiceConcept>,
+        // ✅ ADDED: Inject ServiceConceptImageRepository
+        @InjectRepository(ServiceConceptImage)
+        private serviceConceptImageRepository: Repository<ServiceConceptImage>,
     ) {
         const apiKey = this.configService.get<string>('gemini.apiKey');
         if (!apiKey) {
@@ -49,10 +55,7 @@ export class GeminiService {
 
         this.genAI = new GoogleGenerativeAI(apiKey);
 
-        // Lấy model từ cấu hình hoặc sử dụng model mặc định
         this.modelName = this.configService.get<string>('gemini.model') || 'models/gemini-2.0-flash-001';
-
-        // Lấy cấu hình generation và safety từ cấu hình
         this.generationConfig = this.configService.get('gemini.generationConfig') || {};
         this.safetySettings = this.configService.get('gemini.safetySettings') || [];
     }
@@ -70,25 +73,19 @@ export class GeminiService {
         return model;
     }
 
-    /**
-     * Kiểm tra prompt có phải gợi ý/tư vấn concept không
-     */
     private isSuggestConceptPrompt(prompt?: string): boolean {
         if (!prompt) return false;
-        // Hàm loại bỏ dấu tiếng Việt
         function removeVietnameseTones(str: string): string {
             return str.normalize('NFD')
                 .replace(/\p{Diacritic}/gu, '')
                 .replace(/đ/g, 'd').replace(/Đ/g, 'D');
         }
-        // Từ khóa chính, không cần liệt kê biến thể thủ công
         const suggestKeywords = [
             'gợi ý concept', 'tư vấn concept', 'concept phù hợp', 'suggest concept', 'recommend concept',
             'gợi ý concept nào', 'tư vấn concept nào', 'concept nào phù hợp', 'concept suggestion', 'concept advice'
         ];
         const promptRaw = prompt.toLowerCase();
         const promptNoTone = removeVietnameseTones(promptRaw);
-        // Fuzzy match: chấp nhận sai dấu, sai chính tả nhẹ (Levenshtein <= 4)
         function levenshtein(a: string, b: string): number {
             const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
             for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
@@ -104,13 +101,10 @@ export class GeminiService {
             }
             return matrix[a.length][b.length];
         }
-        // Regex nhận diện các biến thể rút gọn/viết tắt phổ biến
         const shortPattern = /\b(goi\s*y|gợi\s*y|tu\s*van|tư\s*vấn)?\s*(conc(ept)?|con|c)\b/i;
 
-        // Nếu match regex rút gọn thì coi là gợi ý concept
         if (shortPattern.test(promptRaw) || shortPattern.test(promptNoTone)) return true;
 
-        // So khớp từ khóa chính (có dấu, không dấu, fuzzy)
         return suggestKeywords.some(kw => {
             const kwRaw = kw.toLowerCase();
             const kwNoTone = removeVietnameseTones(kwRaw);
@@ -137,9 +131,7 @@ export class GeminiService {
         }
     >> {
         const startTime = Date.now();
-        // Nếu prompt là gợi ý/tư vấn concept thì trả về concept mẫu (chỉ trả về concept, không trả về text)
         if (this.isSuggestConceptPrompt(prompt) || this.isServicePrompt(prompt)) {
-            // Lấy tối đa 3 concept/dịch vụ mẫu (ưu tiên có hình)
             const conceptRepo = this.conceptVectorRepository.manager.getRepository(ServiceConcept);
             let concepts = await conceptRepo.find({
                 relations: ['images'],
@@ -152,7 +144,6 @@ export class GeminiService {
             if (selected.length < 3) {
                 selected = [...withImage, ...withoutImage].slice(0, 3);
             }
-            // Gọi AI sinh text giới thiệu dịch vụ/concept
             const model = this.genAI.getGenerativeModel({
                 model: GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION,
                 generationConfig: {
@@ -188,7 +179,6 @@ export class GeminiService {
                 }
             };
         }
-        // Xử lý bình thường: dùng model Flash (nhanh), giảm maxOutputTokens
         const model = this.genAI.getGenerativeModel({
             model: GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION,
             generationConfig: {
@@ -218,15 +208,14 @@ export class GeminiService {
     //#endregion
 
     //#region Concept Vector Generation
+    // ✅ UPDATED METHOD
     async analyzeImageWithConcepts(
         file: Express.Multer.File,
         prompt?: string
-    ): Promise<IGeminiResponse<{
-        analysis: ImageAnalysisResponse['data']
-        concepts_same: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number })[]
-    }>> {
+    ): Promise<IGeminiResponse<any>> {
         const startTime = Date.now();
-        // 1. Image analysis (reuse processImage logic, but inline for efficiency)
+
+        // 1. Image Analysis
         const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
         const imageData = {
             inlineData: {
@@ -234,46 +223,23 @@ export class GeminiService {
                 mimeType: file.mimetype
             }
         };
-        const analysisPrompt = `
-                ${this.systemContext}
-                Phân tích bức ảnh này và cung cấp:
-                1. Mô tả tổng quan
-                2. Phân tích kỹ thuật (bố cục, ánh sáng, màu sắc)
-                3. Gợi ý cải thiện
-                ${prompt || ''}
-            `;
+        const analysisPrompt = `${this.systemContext}\nPhân tích bức ảnh này và cung cấp:\n1. Mô tả tổng quan\n2. Phân tích kỹ thuật (bố cục, ánh sáng, màu sắc)\n3. Gợi ý cải thiện\n${prompt || ''}`;
         const result = await model.generateContent({
-            contents: [{
-                role: 'user',
-                parts: [{ text: analysisPrompt }, imageData]
-            }]
+            contents: [{ role: 'user', parts: [{ text: analysisPrompt }, imageData] }]
         });
         const analysis = await this.parseImageAnalysis(result.response.text());
 
-        // 2. Concept vector search (reuse searchConcepts logic, but inline for efficiency)
-        let concepts_same: (Omit<ConceptVector, 'embedding'> & { relevanceScore: number; distance: number; name: string | null; price: number | null; imageUrl: string | null })[] = [];
-
+        // 2. Concept Vector Search
         const keywords = await this.generateKeywordsFromImage(file);
         const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
-        if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768 || !queryEmbedding.every(val => typeof val === 'number' && !isNaN(val))) {
+        if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768) {
             throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
         }
+
         const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
         queryBuilder
             .select('conceptVector')
-            .addSelect(`
-                    (
-                        CASE 
-                            WHEN EXISTS (
-                                SELECT 1 
-                                FROM unnest(conceptVector.keywords) keyword 
-                                WHERE keyword = ANY(:keywords)
-                            ) THEN 1
-                            ELSE 0
-                        END * 0.4 + 
-                        (1 - (conceptVector.embedding <=> :queryEmbedding::vector)) * 0.6
-                    )::float as relevance_score
-                `)
+            .addSelect(`(CASE WHEN EXISTS (SELECT 1 FROM unnest(conceptVector.keywords) keyword WHERE keyword = ANY(:keywords)) THEN 1 ELSE 0 END * 0.4 + (1 - (conceptVector.embedding <=> :queryEmbedding::vector)) * 0.6)::float as relevance_score`)
             .addSelect('(conceptVector.embedding <-> :queryEmbedding::vector)::float as distance')
             .setParameter('keywords', keywords)
             .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`)
@@ -281,98 +247,91 @@ export class GeminiService {
             .limit(5);
         const results = await queryBuilder.getRawAndEntities();
 
-
-        // For each concept, fetch name, price, and first imageUrl, and attach keywords for filtering
-        concepts_same = await Promise.all(results.entities.map(async (entity, index) => {
-            // Remove embedding from the returned object
+        let concepts_same = await Promise.all(results.entities.map(async (entity, index) => {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { embedding, concept_image_id, keywords: conceptKeywords, ...rest } = entity;
-
-            // Fetch concept info and first image
+            const { embedding, ...rest } = entity;
             let name: string | null = null;
             let price: number | null = null;
             let imageUrl: string | null = null;
-            let keywords: string[] = Array.isArray(conceptKeywords) ? conceptKeywords.map((k: any) => String(k).toLowerCase()) : [];
-            if (concept_image_id) {
-                // Lấy ServiceConceptImage trước
-                const conceptImageRepo = this.conceptVectorRepository.manager.getRepository('service_concept_image');
-                const conceptImage: any = await conceptImageRepo.findOne({ where: { id: concept_image_id } });
-                if (conceptImage && conceptImage.serviceConceptId) {
-                    // Lấy ServiceConcept kèm images
-                    const conceptRepo = this.conceptVectorRepository.manager.getRepository(ServiceConcept);
-                    const conceptWithImage = await conceptRepo.findOne({
+            let vendorSlug: string | null = null;
+            let location: string | null = null;
+            let vendorId: string | null = null;
+
+            if (entity.concept_image_id) {
+                // Use injected repository
+                const conceptImage = await this.serviceConceptImageRepository.findOne({ where: { id: entity.concept_image_id } });
+
+                if (conceptImage?.serviceConceptId) {
+                    // Use injected repository and fix nested relations path
+                    const conceptWithImage = await this.serviceConceptRepository.findOne({
                         where: { id: conceptImage.serviceConceptId },
-                        relations: ['images'],
+                        relations: [
+                            'images',
+                            'servicePackage',
+                            'servicePackage.vendor',
+                            'servicePackage.vendor.locations'
+                        ],
                         order: { images: { createdAt: 'ASC' } }
                     });
+
                     if (conceptWithImage) {
                         name = conceptWithImage.name ?? null;
                         price = conceptWithImage.price ?? null;
-                        if (Array.isArray(conceptWithImage.images) && conceptWithImage.images.length > 0 && conceptWithImage.images[0]?.imageUrl) {
-                            imageUrl = conceptWithImage.images[0].imageUrl;
+                        imageUrl = conceptWithImage.images?.[0]?.imageUrl ?? null;
+
+                        // Use optional chaining to prevent errors
+                        if (conceptWithImage.servicePackage?.vendor) {
+                            vendorSlug = conceptWithImage.servicePackage.vendor.slug ?? null;
+                            location = conceptWithImage.servicePackage.vendor.locations?.[0]?.address ?? null;
+                            vendorId = conceptWithImage.servicePackage.vendor.id ?? null;
                         }
                     }
                 }
             }
+
             return {
                 ...rest,
-                concept_image_id,
                 name,
                 price,
                 imageUrl,
-                keywords,
+                vendorSlug,
+                location,
+                vendorId,
+                keywords: Array.isArray(entity.keywords) ? entity.keywords.map(k => String(k).toLowerCase()) : [],
                 relevanceScore: parseFloat(results.raw[index].relevance_score),
                 distance: parseFloat(results.raw[index].distance)
             };
         }));
 
-
-        // Lọc concept theo chủ thể chính
+        // Concept filtering logic remains the same
         const landscapeKeywords = ['phong cảnh', 'landscape', 'cảnh vật', 'nature', 'outdoor', 'ngoài trời', 'thiên nhiên'];
         const peopleKeywords = ['nữ', 'nam', 'trẻ em', 'người', 'portrait', 'chân dung', 'group', 'person', 'people', 'beauty shot'];
-
         const isLandscape = keywords.some(k => landscapeKeywords.includes(k));
         const hasPeopleKeyword = keywords.some(k => peopleKeywords.includes(k));
 
         if (isLandscape) {
-            // Chỉ lấy concept có từ khóa phong cảnh, loại bỏ concept người
             concepts_same = concepts_same.filter(c =>
-                Array.isArray(c.keywords) &&
                 c.keywords.some(k => landscapeKeywords.includes(k)) &&
                 !c.keywords.some(k => peopleKeywords.includes(k))
             );
         } else if (!hasPeopleKeyword) {
-            // Nếu ảnh không có từ khóa người, loại bỏ mọi concept có từ khóa người
-            concepts_same = concepts_same.filter(c =>
-                Array.isArray(c.keywords) &&
-                !c.keywords.some(k => peopleKeywords.includes(k))
-            );
+            concepts_same = concepts_same.filter(c => !c.keywords.some(k => peopleKeywords.includes(k)));
         } else {
-            // Nếu trong keywords có "nữ" và không có "trẻ em", chỉ trả về concept gần nhất thỏa mãn điều kiện này
             const femaleNotChild = concepts_same.filter(c =>
-                Array.isArray(c.keywords) &&
-                c.keywords.includes('nữ') &&
-                !c.keywords.includes('trẻ em')
+                c.keywords.includes('nữ') && !c.keywords.includes('trẻ em')
             );
             if (femaleNotChild.length > 0) {
-                // Sắp xếp theo relevanceScore giảm dần, distance tăng dần
                 femaleNotChild.sort((a, b) => b.relevanceScore - a.relevanceScore || a.distance - b.distance);
                 concepts_same = [femaleNotChild[0]];
             }
         }
 
-
         if (!concepts_same || concepts_same.length === 0) {
             return {
                 success: false,
-                data: {
-                    analysis,
-                    concepts_same: []
-                },
+                data: { analysis, concepts_same: [] },
                 metadata: {
-                    filename: file.originalname,
-                    size: file.size,
-                    mimeType: file.mimetype,
+                    filename: file.originalname, size: file.size, mimeType: file.mimetype,
                     processingTime: Date.now() - startTime,
                     message: 'Không tìm thấy concept phù hợp với ảnh này.'
                 }
@@ -380,14 +339,9 @@ export class GeminiService {
         }
         return {
             success: true,
-            data: {
-                analysis,
-                concepts_same
-            },
+            data: { analysis, concepts_same },
             metadata: {
-                filename: file.originalname,
-                size: file.size,
-                mimeType: file.mimetype,
+                filename: file.originalname, size: file.size, mimeType: file.mimetype,
                 processingTime: Date.now() - startTime
             }
         };
@@ -463,21 +417,17 @@ export class GeminiService {
     }
 
     async generateConceptVector(image: Express.Multer.File, concept_image_id: string): Promise<ConceptVector> {
-        // Generate keywords from image
         const keywords = await this.generateKeywordsFromImage(image);
         this.logger.log(`Generated keywords: ${keywords.join(', ')}`);
 
-        // Generate embedding from keywords
         const embedding = await this.generateEmbedding(keywords.join(' '));
         this.logger.log(`Generated embedding length: ${embedding.length}`);
         this.logger.log(`Generated embedding sample: ${embedding.slice(0, 10).join(', ')}...`);
 
-        // Kiểm tra embedding trước khi lưu
         if (!Array.isArray(embedding) || embedding.length !== 768 || !embedding.every(val => typeof val === 'number' && !isNaN(val))) {
             throw new Error(`Invalid embedding: must be an array of 768 numbers`);
         }
 
-        // Create or update concept vector
         let conceptVector = await this.conceptVectorRepository.findOne({ where: { concept_image_id } });
         if (!conceptVector) {
             conceptVector = this.conceptVectorRepository.create({
@@ -496,8 +446,6 @@ export class GeminiService {
 
     private async generateKeywordsFromImage(image: Express.Multer.File): Promise<string[]> {
         const model = await this.initializeModel();
-
-        // Convert image to base64
         const imageData = {
             inlineData: {
                 data: image.buffer.toString('base64'),
@@ -522,7 +470,6 @@ nếu là cảnh: mô tả loại cảnh vật, địa điểm, môi trường c
             throw new Error('No text response from Gemini API');
         }
 
-        // Clean and parse the keywords
         const keywords = text
             .split(',')
             .map(k => k.trim().toLowerCase())
@@ -540,45 +487,34 @@ nếu là cảnh: mô tả loại cảnh vật, địa điểm, môi trường c
             const response = await result.response;
             const responseText = response.text();
 
-            this.logger.log(`Gemini API embedding response: ${responseText}`); // Log để debug
+            this.logger.log(`Gemini API embedding response: ${responseText}`);
 
             try {
-                // Phân tích cú pháp phản hồi
                 let embedding = JSON.parse(responseText);
-
-                // Nếu embedding là mảng chuỗi, chuyển thành mảng số
                 if (embedding.every((val: any) => typeof val === 'string')) {
                     embedding = embedding.map((val: string) => parseFloat(val));
                 }
-
-                // Kiểm tra định dạng và độ dài
                 if (!Array.isArray(embedding) || embedding.length !== 768 || !embedding.every((val: any) => typeof val === 'number' && !isNaN(val))) {
                     throw new Error(`Invalid embedding format or length. Expected 768 numbers, got ${embedding.length}`);
                 }
-
                 return embedding;
             } catch (parseError) {
                 this.logger.warn(`Failed to parse embedding response: ${parseError.message}, using fallback embedding`);
-                // Tạo vector dự phòng với 768 phần tử
                 const fallbackEmbedding = new Array(768).fill(0);
                 const words = text.toLowerCase().split(/\s+/);
                 words.forEach((word, index) => {
                     if (index < 768) {
-                        fallbackEmbedding[index] = Math.min(word.length / 10, 1); // Chuẩn hóa giá trị
+                        fallbackEmbedding[index] = Math.min(word.length / 10, 1);
                     }
                 });
                 return fallbackEmbedding;
             }
         } catch (error) {
             this.logger.error(`Error generating embedding: ${error.message}`);
-            // Trả về vector dự phòng với 768 phần tử
             return new Array(768).fill(0);
         }
     }
 
-    /**
-    * Kiểm tra prompt có phải hỏi về dịch vụ không
-    */
     private isServicePrompt(prompt?: string): boolean {
         if (!prompt) return false;
         const serviceKeywords = [
@@ -586,8 +522,6 @@ nếu là cảnh: mô tả loại cảnh vật, địa điểm, môi trường c
             'bên bạn có dịch vụ', 'show dịch vụ', 'liệt kê dịch vụ', 'gói dịch vụ', 'package', 'service list'
         ];
         const promptRaw = prompt.toLowerCase();
-        // Fuzzy match đơn giản
         return serviceKeywords.some(kw => promptRaw.includes(kw));
     }
-
 }
