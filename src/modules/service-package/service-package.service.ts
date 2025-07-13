@@ -190,7 +190,7 @@ export class ServicePackageService {
   }
 
   async findAll(query?: PaginationDto, showAll = false): Promise<{
-    data: (ServicePackage & { countPackageUsed: number })[];
+    data: (ServicePackage & { countPackageUsed: number, serviceConcepts: ServiceConcept[] })[];
     pagination: {
       current: number;
       pageSize: number;
@@ -237,11 +237,15 @@ export class ServicePackageService {
       counts.map((c) => [c.package_id, Number(c.count)]),
     );
 
-    // Add counts to each package
+    // Add counts to each package and convert price of each concept to final price
     const packagesWithCounts = data.map((pkg) => ({
       ...pkg,
       countPackageUsed: countMap.get(pkg.id) || 0,
-    })) as (ServicePackage & { countPackageUsed: number })[];
+      serviceConcepts: pkg.serviceConcepts?.map(concept => ({
+        ...concept,
+        price: this.getFinalPrice(concept.price)
+      })) || []
+    })) as (ServicePackage & { countPackageUsed: number, serviceConcepts: ServiceConcept[] })[];
 
     return {
       data: packagesWithCounts,
@@ -288,6 +292,14 @@ export class ServicePackageService {
     `,
       [id],
     );
+
+    // Convert price of each concept to final price
+    if (servicePackage.serviceConcepts) {
+      servicePackage.serviceConcepts = servicePackage.serviceConcepts.map(concept => ({
+        ...concept,
+        price: this.getFinalPrice(concept.price)
+      }));
+    }
 
     return {
       ...servicePackage,
@@ -1678,7 +1690,7 @@ export class ServicePackageService {
         },
         serviceConcepts: Array.from(pkg.serviceConcepts.values()).map((concept: any) => ({
           ...concept,
-          serviceTypes: Array.from(concept.serviceTypes.values())
+          price: this.getFinalPrice(concept.price)
         }))
       }))
       .slice(0, pageSize); // Only show requested page size

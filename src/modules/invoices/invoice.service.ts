@@ -58,9 +58,9 @@ export class InvoiceService {
     // - Price = Origin Price + Commission (hidden from customer)
     // - Tax = Tax Amount
     // - Total = Final Price (what customer sees)
-    const price = pricingBreakdown.originPrice + pricingBreakdown.commissionAmount;
-    const taxAmount = pricingBreakdown.taxAmount;
-    const totalAmount = pricingBreakdown.finalPrice; // This is what customer sees
+    const price = Math.round(pricingBreakdown.originPrice + pricingBreakdown.commissionAmount);
+    const taxAmount = Math.round(pricingBreakdown.taxAmount);
+    const totalAmount = Math.round(pricingBreakdown.finalPrice); // This is what customer sees
     
     let discountAmount = 0;
     let voucher = null;
@@ -106,11 +106,11 @@ export class InvoiceService {
     }
 
     // Calculate final amounts after discount
-    const discountedPrice = price - discountAmount; // Apply discount to price (origin + commission)
-    const discountedTotal = totalAmount - discountAmount; // Apply discount to total amount
+    const discountedPrice = Math.round(price - discountAmount); // Apply discount to price (origin + commission)
+    const discountedTotal = Math.round(totalAmount - discountAmount); // Apply discount to total amount
     
     const feeAmount = 0;
-    const payablePrice = discountedTotal; // Final amount customer needs to pay
+    const payablePrice = Math.round(discountedTotal); // Final amount customer needs to pay
 
     let depositAmount = 0;
     let remainingAmount = 0;
@@ -121,7 +121,7 @@ export class InvoiceService {
       depositAmount = Math.round(payablePrice * (booking.depositAmount / 100));
       remainingAmount = payablePrice - depositAmount;
     } else {
-      depositAmount = booking.depositAmount;
+      depositAmount = Math.round(booking.depositAmount || 0);
       remainingAmount = payablePrice - depositAmount;
     }
 
@@ -129,6 +129,7 @@ export class InvoiceService {
       throw new BadRequestException('Số tiền đặt cọc và số tiền còn lại phải lớn hơn 0');
     }
 
+    // Ensure all amounts are integers for database storage
     depositAmount = Math.round(depositAmount);
     remainingAmount = Math.round(remainingAmount);
 

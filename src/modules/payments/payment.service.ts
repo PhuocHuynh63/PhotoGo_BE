@@ -601,11 +601,11 @@ export class PaymentService {
           earnedPoint -= 5;
         }
         // Nếu >= 70% hoặc không phải dạng phần trăm thì nhận full điểm
-        point.balance += earnedPoint;
+        point.balance += Math.round(earnedPoint);
         await this.pointRepository.save(point);
         const pointTransaction = this.pointTransactionRepository.create({
           point: point,
-          amount: earnedPoint,
+          amount: Math.round(earnedPoint),
           type: PointTransactionType.EARN,
           description: `Thanh toán đặt cọc`,
         });
