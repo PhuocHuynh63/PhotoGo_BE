@@ -280,7 +280,7 @@ export class VendorService {
       latitude: loc.latitude,
       longitude: loc.longitude,
     }));
-    
+
     // Map service packages with final prices
     response.servicePackages = await Promise.all(vendor.servicePackages.map(async pkg => ({
       id: pkg.id,
@@ -298,14 +298,16 @@ export class VendorService {
         } catch (error) {
           this.logger.warn(`Could not get final price for concept ${concept.id}: ${error.message}`);
         }
-        
+
         return {
           id: concept.id,
           name: concept.name,
           description: concept.description,
           images: concept.images.map(img => img.imageUrl),
-          price: finalPrice, // Final price that customer sees
+          price: finalPrice,
           duration: concept.duration,
+          conceptRangeType: concept.conceptRangeType,
+          numberOfDays: concept.numberOfDays,
           serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
             id: sct.serviceType.id,
             name: sct.serviceType.name,
@@ -316,7 +318,7 @@ export class VendorService {
       created_at: pkg.created_at,
       updated_at: pkg.updated_at
     })));
-    
+
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
 

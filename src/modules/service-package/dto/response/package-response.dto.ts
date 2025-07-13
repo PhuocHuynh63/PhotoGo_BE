@@ -22,6 +22,12 @@ export class ServiceConceptDto {
   @ApiProperty({ example: 'Gói chụp ảnh cưới cơ bản với 100 ảnh' })
   description?: string;
 
+  @ApiProperty({ example: 'Loại range' })
+  conceptRangeType: string;
+
+  @ApiProperty({ example: 5 })
+  numberOfDays: number;
+
   @ApiProperty({ example: 1000000 })
   price: number;
 
