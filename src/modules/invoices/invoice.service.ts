@@ -92,13 +92,13 @@ export class InvoiceService {
       }
 
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
-        const discountValue = parseFloat(voucher.discount_value);
+        const discountValue = Number(voucher.discount_value);
         discountAmount = Math.round((totalAmount * discountValue) / 100);
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
       } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
-        discountAmount = Math.round(parseFloat(voucher.discount_value));
+        discountAmount = Math.round(Number(voucher.discount_value));
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
@@ -167,6 +167,7 @@ export class InvoiceService {
     const skip = (currentPage - 1) * pageSizeNum;
 
     const [invoices, total] = await this.invoiceRepository.findAndCount({
+      relations: ['booking', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage'],
       skip,
       take: pageSizeNum,
       order: {
@@ -175,8 +176,15 @@ export class InvoiceService {
     });
     const totalPages = Math.ceil(total / pageSizeNum);
 
+    // Apply pricing logic to each invoice
+    const processedInvoices = await Promise.all(
+      invoices.map(async (invoice) => {
+        return await this.applyPricingLogic(invoice);
+      })
+    );
+
     return {
-      data: invoices,
+      data: processedInvoices,
       pagination: {
         current: currentPage,
         pageSize: pageSizeNum,
@@ -202,7 +210,7 @@ export class InvoiceService {
 
     const [invoices, total] = await this.invoiceRepository.findAndCount({
       where: { booking: { userId } },
-      relations: ['booking', 'payments'],
+      relations: ['booking', 'payments', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage'],
       skip,
       take: pageSizeNum,
       order: {
@@ -211,27 +219,22 @@ export class InvoiceService {
     });
     const totalPages = Math.ceil(total / pageSizeNum);
 
-    const serviceConceptCache = new Map<string, any>();
-    const servicePackageCache = new Map<string, any>();
-
-    for (const invoice of invoices) {
-      let serviceConcept = serviceConceptCache.get(invoice.booking.serviceConceptId);
-      if (!serviceConcept) {
-        serviceConcept = await this.servicePackageService.findServiceConcept(invoice.booking.serviceConceptId);
-        serviceConceptCache.set(invoice.booking.serviceConceptId, serviceConcept);
-      }
-
-      let servicePackage = servicePackageCache.get(serviceConcept.servicePackageId);
-      if (!servicePackage) {
-        servicePackage = await this.servicePackageService.findOne(serviceConcept.servicePackageId);
-        servicePackageCache.set(serviceConcept.servicePackageId, servicePackage);
-      }
-
-      invoice.vendorId = servicePackage.vendor.id;
-    }
+    // Apply pricing logic to each invoice
+    const processedInvoices = await Promise.all(
+      invoices.map(async (invoice) => {
+        const processedInvoice = await this.applyPricingLogic(invoice);
+        
+        // Add vendorId for backward compatibility
+        if (processedInvoice.booking?.serviceConcept?.servicePackage?.vendor) {
+          processedInvoice.vendorId = processedInvoice.booking.serviceConcept.servicePackage.vendor.id;
+        }
+        
+        return processedInvoice;
+      })
+    );
 
     return {
-      data: invoices,
+      data: processedInvoices,
       pagination: {
         current: currentPage,
         pageSize: pageSizeNum,
@@ -255,7 +258,8 @@ export class InvoiceService {
       throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
     }
 
-    return invoice;
+    // Apply pricing logic to the invoice
+    return await this.applyPricingLogic(invoice);
   }
 
   async updateInvoice(id: string, updateInvoiceDto: Partial<UpdateInvoiceDto>): Promise<Invoice> {
@@ -303,6 +307,118 @@ export class InvoiceService {
     const result = await this.invoiceRepository.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
+    }
+  }
+
+  /**
+   * Apply pricing logic to an invoice
+   * This method recalculates all pricing fields based on the current pricing breakdown
+   */
+  private async applyPricingLogic(invoice: Invoice): Promise<Invoice> {
+    try {
+      // Get current pricing breakdown
+      const pricingBreakdown = await this.servicePackageService.getInvoicePricingBreakdown(invoice.booking.serviceConceptId);
+      
+      // Recalculate all pricing fields
+      const recalculatedPrice = Math.round(pricingBreakdown.originPrice + pricingBreakdown.commissionAmount);
+      const recalculatedTaxAmount = Math.round(pricingBreakdown.taxAmount);
+      const recalculatedTotalAmount = Math.round(pricingBreakdown.finalPrice);
+      
+      // Apply voucher discount if exists
+      let recalculatedDiscountAmount = 0;
+      if (invoice.voucherId) {
+        const voucher = await this.voucherService.findOneVoucher(invoice.voucherId);
+        if (voucher) {
+          if (recalculatedTotalAmount >= voucher.minPrice) {
+            if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
+              const discountValue = Number(voucher.discount_value);
+              recalculatedDiscountAmount = Math.round((recalculatedTotalAmount * discountValue) / 100);
+              if (voucher.maxPrice && recalculatedDiscountAmount > voucher.maxPrice) {
+                recalculatedDiscountAmount = voucher.maxPrice;
+              }
+            } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
+              recalculatedDiscountAmount = Math.round(Number(voucher.discount_value));
+              if (voucher.maxPrice && recalculatedDiscountAmount > voucher.maxPrice) {
+                recalculatedDiscountAmount = voucher.maxPrice;
+              }
+            }
+          }
+        }
+      }
+      
+      // Calculate final amounts after discount
+      const recalculatedDiscountedPrice = Math.round(recalculatedPrice - recalculatedDiscountAmount);
+      const recalculatedDiscountedTotal = Math.round(recalculatedTotalAmount - recalculatedDiscountAmount);
+      const recalculatedPayablePrice = Math.round(recalculatedDiscountedTotal);
+      
+      // Recalculate deposit and remaining amounts
+      let recalculatedDepositAmount = 0;
+      let recalculatedRemainingAmount = 0;
+      
+      if (invoice.booking.depositType === BookingDepositType.PERCENTAGE) {
+        recalculatedDepositAmount = Math.round(recalculatedPayablePrice * (invoice.booking.depositAmount / 100));
+        recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
+      } else {
+        recalculatedDepositAmount = Math.round(invoice.booking.depositAmount || 0);
+        recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
+      }
+      
+      // Update invoice with recalculated values
+      invoice.originalPrice = recalculatedPrice;
+      invoice.discountAmount = recalculatedDiscountAmount;
+      invoice.discountedPrice = recalculatedDiscountedPrice;
+      invoice.taxAmount = recalculatedTaxAmount;
+      invoice.payablePrice = recalculatedPayablePrice;
+      invoice.depositAmount = recalculatedDepositAmount;
+      invoice.remainingAmount = recalculatedRemainingAmount;
+      
+      return invoice;
+    } catch (error) {
+      console.error('Error applying pricing logic to invoice:', error);
+      // Return original invoice if pricing logic fails
+      return invoice;
+    }
+  }
+
+  /**
+   * Refresh pricing for all invoices
+   * This method recalculates pricing for all invoices and updates them in the database
+   */
+  async refreshAllInvoicePricing(): Promise<{ updatedCount: number; errorCount: number }> {
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    try {
+      const invoices = await this.invoiceRepository.find({
+        relations: ['booking', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage']
+      });
+
+      for (const invoice of invoices) {
+        try {
+          const updatedInvoice = await this.applyPricingLogic(invoice);
+          
+          // Update the invoice in database
+          await this.invoiceRepository.update(invoice.id, {
+            originalPrice: updatedInvoice.originalPrice,
+            discountAmount: updatedInvoice.discountAmount,
+            discountedPrice: updatedInvoice.discountedPrice,
+            taxAmount: updatedInvoice.taxAmount,
+            payablePrice: updatedInvoice.payablePrice,
+            depositAmount: updatedInvoice.depositAmount,
+            remainingAmount: updatedInvoice.remainingAmount,
+          });
+          
+          updatedCount++;
+        } catch (error) {
+          console.error(`Error updating invoice ${invoice.id}:`, error);
+          errorCount++;
+        }
+      }
+
+      return { updatedCount, errorCount };
+    } catch (error) {
+      console.error('Error refreshing invoice pricing:', error);
+      throw new BadRequestException('Lỗi khi cập nhật giá hóa đơn');
     }
   }
 }

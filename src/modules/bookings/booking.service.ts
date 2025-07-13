@@ -29,6 +29,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
 import { SubscriptionStatus } from '../../constants/subscription.enum';
 import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
+import { VoucherTypeDiscount } from '../../constants/voucher.enum';
 
 @Injectable()
 export class BookingService {
@@ -1417,77 +1418,131 @@ export class BookingService {
     getDiscountAmountDto: GetDiscountAmountDto
   ): Promise<{ discount: number, depositAmount: number, remainingAmount: number }> {
     // 1. Find the service concept
-    const serviceConcept = await this.serviceConceptRepository.findOne({ where: { id: serviceConceptId }, relations: ['servicePackage', 'servicePackage.vendor'] });
+    const serviceConcept = await this.serviceConceptRepository.findOne({ 
+      where: { id: serviceConceptId }, 
+      relations: ['servicePackage', 'servicePackage.vendor'] 
+    });
+    
     if (!serviceConcept) {
       throw new NotFoundException(`Service Concept với ID ${serviceConceptId} không tìm thấy`);
     }
-    const price = Number(serviceConcept.price);
-    const depositAmount = getDiscountAmountDto.depositAmount;
-    let deposite = (depositAmount * price / 100).toFixed(0);
-    let remainingAmount = price - Number(deposite);
 
-    // Nếu không có voucherId thì trả về giá gốc, discount = 0
+    const originalPrice = Number(serviceConcept.price);
+    const depositPercentage = getDiscountAmountDto.depositAmount;
+    const depositType = getDiscountAmountDto.depositType || BookingDepositType.PERCENTAGE;
+
+    // Validate deposit percentage
+    if (!depositPercentage || depositPercentage < 30 || depositPercentage > 100) {
+      throw new BadRequestException('Tỷ lệ đặt cọc phải từ 30% đến 100%');
+    }
+
+    // If no voucher, return original calculation
     if (!getDiscountAmountDto.voucherId) {
+      const depositAmount = (originalPrice * depositPercentage / 100);
+      const remainingAmount = originalPrice - depositAmount;
+      
       return {
         discount: 0,
-        depositAmount: Number(deposite),
-        remainingAmount: Number(remainingAmount.toFixed(0))
+        depositAmount: Math.round(depositAmount),
+        remainingAmount: Math.round(remainingAmount)
       };
     }
 
-    // 2. Find the voucher
-    const voucher = await this.voucherRepository.findOne({ where: { id: getDiscountAmountDto.voucherId } });
+    // 2. Find and validate voucher
+    const voucher = await this.voucherRepository.findOne({ 
+      where: { id: getDiscountAmountDto.voucherId } 
+    });
+    
     if (!voucher) {
       throw new NotFoundException(`Voucher với ID ${getDiscountAmountDto.voucherId} không tìm thấy`);
     }
-    // 3. Check if voucher is in campaign
-    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
-    // 4. Check if voucher is assigned to user
-    const voucherUser = await this.voucherUserRepository.findOne({ where: { voucher_id: voucher.id, user_id: userId } });
+
+    // 3. Check voucher availability and ownership
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({ 
+      where: { voucherId: voucher.id, isAvailable: true }, 
+      relations: ['campaign'] 
+    });
+    
+    const voucherUser = await this.voucherUserRepository.findOne({ 
+      where: { voucher_id: voucher.id, user_id: userId } 
+    });
+    
     if (!campaignVoucher && !voucherUser) {
       throw new NotFoundException('Voucher không thuộc campaign hoặc không thuộc user');
     }
 
-    // --- BẮT ĐẦU LOGIC KIỂM TRA VENDOR CỦA CAMPAIGN ---
+    // 4. Validate vendor compatibility for campaign vouchers
     if (campaignVoucher) {
-      // Lấy campaign-vendor
       const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-      const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+      const campaignVendor = await campaignVendorRepo.findOne({ 
+        where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, 
+        relations: ['vendor'] 
+      });
+      
       if (campaignVendor) {
-        // Lấy vendorId của concept
         const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
         if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
           throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
         }
       }
     }
-    // --- KẾT THÚC LOGIC KIỂM TRA VENDOR CỦA CAMPAIGN ---
 
-    // 5. Check minPrice
-    if (price < voucher.minPrice) {
-      throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice}`);
+    // 5. Check minimum price requirement
+    if (originalPrice < voucher.minPrice) {
+      throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ`);
     }
-    // 6. Calculate discount
-    let discount = 0;
-    if (getDiscountAmountDto.depositType === BookingDepositType.PERCENTAGE) {
-      discount = price * (Number(voucher.discount_value) / 100);
+
+    // Check if voucher is still valid (not expired)
+    const currentDate = new Date();
+    const startDate = new Date(voucher.start_date);
+    const endDate = new Date(voucher.end_date);
+    
+    if (currentDate < startDate || currentDate > endDate) {
+      throw new BadRequestException('Voucher đã hết hạn hoặc chưa đến thời gian sử dụng');
+    }
+
+    // Check if voucher usage limit is reached
+    if (voucher.usedCount >= voucher.quantity) {
+      throw new BadRequestException('Voucher đã hết lượt sử dụng');
+    }
+
+    // 6. Calculate discount amount
+    let discountAmount = 0;
+    
+    if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
+      // Percentage discount
+      discountAmount = originalPrice * (Number(voucher.discount_value) / 100);
+    } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
+      // Fixed amount discount
+      discountAmount = Number(voucher.discount_value);
     } else {
-      discount = price - voucher.discount_value;
+      throw new BadRequestException('Loại giảm giá voucher không hợp lệ');
     }
-    // 7. Cap discount at maxPrice
-    if (discount > voucher.maxPrice) {
-      discount = voucher.maxPrice;
-    }
-    // 8. Calculate remaining amount after discount
-    let priceAfterAplyVoucher = price - discount;
-    deposite = (depositAmount * priceAfterAplyVoucher / 100).toFixed(0);
 
-    // 9. Calculate remaining amount after deposit
-    remainingAmount = priceAfterAplyVoucher - Number(deposite);
+    // 7. Cap discount at maximum allowed
+    if (discountAmount > voucher.maxPrice) {
+      discountAmount = voucher.maxPrice;
+    }
+
+    // 8. Calculate final price after discount and ensure it's not negative
+    let finalPrice = originalPrice - discountAmount;
+    
+    // Ensure final price is not negative
+    if (finalPrice < 0) {
+      discountAmount = originalPrice;
+      finalPrice = 0;
+    }
+
+    // 9. Calculate deposit amount based on final price
+    const depositAmount = (finalPrice * depositPercentage / 100);
+    
+    // 10. Calculate remaining amount
+    const remainingAmount = finalPrice - depositAmount;
+
     return {
-      discount: Number(discount.toFixed(0)),
-      depositAmount: Number(deposite),
-      remainingAmount: Number(remainingAmount.toFixed(0))
+      discount: Math.round(discountAmount),
+      depositAmount: Math.round(depositAmount),
+      remainingAmount: Math.round(remainingAmount)
     };
   }
 
