@@ -368,9 +368,13 @@ export class ServicePackageService {
         // Xoá wishlist_item liên quan trước
         await this.dataSource.query(`DELETE FROM wishlist_item WHERE service_concept_id = $1`, [concept.id]);
 
-        const concept_image_id = await this.dataSource.query(`SELECT id FROM service_concept_image WHERE service_concept_id = $1`, [concept.id]);
+        // Lấy tất cả concept_image_id là UUID string
+        const conceptImageRows = await this.dataSource.query(`SELECT id FROM service_concept_image WHERE service_concept_id = $1`, [concept.id]);
+        const conceptImageIds = conceptImageRows.map((img: any) => img.id);
         // Xoá concept vector trước để tránh lỗi khoá ngoại
-        await this.dataSource.query(`DELETE FROM concept_vector WHERE concept_image_id = $1`, [concept_image_id]);
+        if (conceptImageIds.length > 0) {
+          await this.dataSource.query(`DELETE FROM concept_vector WHERE concept_image_id = ANY($1)`, [conceptImageIds]);
+        }
         // Xoá images
         await this.serviceConceptImageRepository.delete({ serviceConceptId: concept.id });
         // Xoá serviceConceptServiceType
