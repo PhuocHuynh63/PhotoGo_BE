@@ -213,6 +213,7 @@ export class GeminiService {
             let vendorSlug: string | null = null;
             let vendorLocations: Location[] | null = null;
             let vendorId: string | null = null;
+            let conceptId: string | null = null;
 
             if (entity.concept_image_id) {
                 const conceptImage = await this.serviceConceptImageRepository.findOne({ where: { id: entity.concept_image_id } });
@@ -223,6 +224,8 @@ export class GeminiService {
                         relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
                         order: { images: { createdAt: 'ASC' } }
                     });
+
+                    conceptId = conceptImage.serviceConceptId || null;
 
                     if (conceptWithImage) {
                         name = conceptWithImage.name ?? null;
@@ -246,6 +249,7 @@ export class GeminiService {
                 vendorSlug,
                 location: vendorLocations,
                 vendorId,
+                conceptId: conceptId || null,
                 keywords: Array.isArray(entity.keywords) ? entity.keywords.map(k => String(k).toLowerCase()) : [],
                 relevanceScore: parseFloat(results.raw[index].relevance_score),
                 distance: parseFloat(results.raw[index].distance)
