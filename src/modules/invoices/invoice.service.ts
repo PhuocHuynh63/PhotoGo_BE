@@ -51,16 +51,21 @@ export class InvoiceService {
       throw new ConflictException('Đơn hàng này đã có hóa đơn');
     }
 
-    // Get pricing breakdown using the new pricing logic
-    const pricingBreakdown = await this.servicePackageService.getInvoicePricingBreakdown(booking.serviceConceptId);
+    // Get the origin price from service concept (stored in DB)
+    const originPrice = Number(booking.serviceConcept.price); // This is origin price from DB
     
-    // For invoice, we show:
-    // - Price = Origin Price + Commission (hidden from customer)
-    // - Tax = Tax Amount
-    // - Total = Final Price (what customer sees)
-    const price = Math.round(pricingBreakdown.originPrice + pricingBreakdown.commissionAmount);
-    const taxAmount = Math.round(pricingBreakdown.taxAmount);
-    const totalAmount = Math.round(pricingBreakdown.finalPrice); // This is what customer sees
+    // Convert origin price to final price (what customer sees) - same logic as ServicePackageService
+    const COMMISSION_RATE = 0.30; // 30%
+    const TAX_RATE = 0.05; // 5%
+    const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
+    
+    const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
+    const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
+    const taxAmount = Math.round(originPrice * TAX_RATE);
+    
+    // For invoice display: originalPrice = originPrice + commission (hidden from customer)
+    const price = Math.round(originPrice + commissionAmount);
+    const totalAmount = finalPrice; // This is what customer sees
     
     let discountAmount = 0;
     let voucher = null;
@@ -316,13 +321,23 @@ export class InvoiceService {
    */
   private async applyPricingLogic(invoice: Invoice): Promise<Invoice> {
     try {
-      // Get current pricing breakdown
-      const pricingBreakdown = await this.servicePackageService.getInvoicePricingBreakdown(invoice.booking.serviceConceptId);
+      // Get the origin price from service concept (stored in DB)
+      const serviceConcept = await this.servicePackageService.findServiceConcept(invoice.booking.serviceConceptId);
+      const originPrice = Number(serviceConcept.price); // This is origin price from DB
       
-      // Recalculate all pricing fields
-      const recalculatedPrice = Math.round(pricingBreakdown.originPrice + pricingBreakdown.commissionAmount);
-      const recalculatedTaxAmount = Math.round(pricingBreakdown.taxAmount);
-      const recalculatedTotalAmount = Math.round(pricingBreakdown.finalPrice);
+      // Convert origin price to final price (what customer sees) - same logic as ServicePackageService
+      const COMMISSION_RATE = 0.30; // 30%
+      const TAX_RATE = 0.05; // 5%
+      const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
+      
+      const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
+      const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
+      const taxAmount = Math.round(originPrice * TAX_RATE);
+      
+      // For invoice display: originalPrice = originPrice + commission (hidden from customer)
+      const recalculatedPrice = Math.round(originPrice + commissionAmount);
+      const recalculatedTaxAmount = taxAmount;
+      const recalculatedTotalAmount = finalPrice; // This is what customer sees
       
       // Apply voucher discount if exists
       let recalculatedDiscountAmount = 0;

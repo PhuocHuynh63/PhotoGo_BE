@@ -103,6 +103,14 @@ export class BookingService {
     return hours * 60 + minutes;
   }
 
+  // Helper function to calculate final price from origin price (same logic as ServicePackageService)
+  private calculateFinalPrice(originPrice: number): number {
+    const COMMISSION_RATE = 0.30; // 30%
+    const TAX_RATE = 0.05; // 5%
+    const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
+    return Math.round(originPrice * TOTAL_MULTIPLIER);
+  }
+
   // Create single day booking (old logic)
   private async createSingleDayBooking(
     createBookingDto: CreateBookingDto,
@@ -1427,7 +1435,9 @@ export class BookingService {
       throw new NotFoundException(`Service Concept với ID ${serviceConceptId} không tìm thấy`);
     }
 
-    const originalPrice = Number(serviceConcept.price);
+    // Get the final price (customer price) from origin price stored in DB
+    const originPrice = Number(serviceConcept.price);
+    const finalPrice = this.calculateFinalPrice(originPrice); // Convert to final price for customer
     const depositPercentage = getDiscountAmountDto.depositAmount;
     const depositType = getDiscountAmountDto.depositType || BookingDepositType.PERCENTAGE;
 
@@ -1436,10 +1446,10 @@ export class BookingService {
       throw new BadRequestException('Tỷ lệ đặt cọc phải từ 30% đến 100%');
     }
 
-    // If no voucher, return original calculation
+    // If no voucher, return calculation based on final price
     if (!getDiscountAmountDto.voucherId) {
-      const depositAmount = (originalPrice * depositPercentage / 100);
-      const remainingAmount = originalPrice - depositAmount;
+      const depositAmount = (finalPrice * depositPercentage / 100);
+      const remainingAmount = finalPrice - depositAmount;
       
       return {
         discount: 0,
@@ -1488,7 +1498,7 @@ export class BookingService {
     }
 
     // 5. Check minimum price requirement
-    if (originalPrice < voucher.minPrice) {
+    if (finalPrice < voucher.minPrice) {
       throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ`);
     }
 
@@ -1511,7 +1521,7 @@ export class BookingService {
     
     if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
       // Percentage discount
-      discountAmount = originalPrice * (Number(voucher.discount_value) / 100);
+      discountAmount = finalPrice * (Number(voucher.discount_value) / 100);
     } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
       // Fixed amount discount
       discountAmount = Number(voucher.discount_value);
@@ -1525,19 +1535,19 @@ export class BookingService {
     }
 
     // 8. Calculate final price after discount and ensure it's not negative
-    let finalPrice = originalPrice - discountAmount;
+    let discountedFinalPrice = finalPrice - discountAmount;
     
     // Ensure final price is not negative
-    if (finalPrice < 0) {
-      discountAmount = originalPrice;
-      finalPrice = 0;
+    if (discountedFinalPrice < 0) {
+      discountAmount = finalPrice;
+      discountedFinalPrice = 0;
     }
 
     // 9. Calculate deposit amount based on final price
-    const depositAmount = (finalPrice * depositPercentage / 100);
+    const depositAmount = (discountedFinalPrice * depositPercentage / 100);
     
     // 10. Calculate remaining amount
-    const remainingAmount = finalPrice - depositAmount;
+    const remainingAmount = discountedFinalPrice - depositAmount;
 
     return {
       discount: Math.round(discountAmount),
