@@ -155,22 +155,26 @@ export class CreateCheckoutSessionDto {
     conceptId: string;
 
     @ApiProperty({
-        description: 'Chi tiết ngày làm việc',
+        description: 'Chi tiết ngày làm việc (chỉ dùng khi conceptRangeType là SINGLE_DAY)',
         example: { working_date_id: 'working-date-123', slot_time_id: 'slot-time-456', date: '30/04/2024', time: '10:00', duration: 60 },
+        required: false,
+        nullable: true,
     })
     @ValidateNested()
     @Type(() => SingleDayBookingDetailsDto)
     singleDayBookingDetails?: SingleDayBookingDetailsDto;
 
     @ApiProperty({
-        description: 'Chi tiết ngày làm việc cho nhiều ngày',
+        description: 'Danh sách ngày làm việc (chỉ dùng khi conceptRangeType là MULTI_DAYS)',
         example: [
             '30/04/2024',
             '01/05/2024'
         ],
+        required: false,
+        nullable: true,
+        type: [String],
     })
-    @ValidateNested()
-    multiDaysBookingDetails?: [];
+    multiDaysBookingDetails?: string[];
 }
 
 export class CheckoutSessionDto extends CreateCheckoutSessionDto {
