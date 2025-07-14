@@ -4,9 +4,11 @@ import {
     IsNumber,
     IsString,
     ValidateNested,
+    IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { ConceptRangeType } from 'src/constants/servicePackage.enum';
 
 export class VendorDetailsDto {
     @ApiProperty({
@@ -62,7 +64,7 @@ export class ConceptDto {
     name: string;
 }
 
-export class BookingDetailsDto {
+class SingleDayBookingDetailsDto {
     @ApiProperty({
         description: 'ID của ngày làm việc',
         example: 'working-date-123',
@@ -106,6 +108,15 @@ export class BookingDetailsDto {
 
 export class CreateCheckoutSessionDto {
     @ApiProperty({
+        description: 'Loại ngày đặt chỗ',
+        example: 'một ngày',
+        enum: ConceptRangeType,
+    })
+    @IsEnum(ConceptRangeType)
+    @IsNotEmpty()
+    conceptRangeType: ConceptRangeType;
+
+    @ApiProperty({
         description: 'Giá của gói dịch vụ',
         example: 150000,
     })
@@ -148,9 +159,18 @@ export class CreateCheckoutSessionDto {
         example: { working_date_id: 'working-date-123', slot_time_id: 'slot-time-456', date: '30/04/2024', time: '10:00', duration: 60 },
     })
     @ValidateNested()
-    @Type(() => BookingDetailsDto)
-    @IsNotEmpty()
-    bookingDetails: BookingDetailsDto;
+    @Type(() => SingleDayBookingDetailsDto)
+    singleDayBookingDetails?: SingleDayBookingDetailsDto;
+
+    @ApiProperty({
+        description: 'Chi tiết ngày làm việc cho nhiều ngày',
+        example: [
+            '30/04/2024',
+            '01/05/2024'
+        ],
+    })
+    @ValidateNested()
+    multiDaysBookingDetails?: [];
 }
 
 export class CheckoutSessionDto extends CreateCheckoutSessionDto {

@@ -30,6 +30,8 @@ export class CheckoutSessionService {
   ): Promise<CheckoutSessionDto> {
     const sessionKey = this.getSessionKey(userId, id);
 
+    // if (sessionData)
+
     const newSession: CheckoutSessionDto = {
       checkoutSessionId: sessionKey,
       userId: userId,
