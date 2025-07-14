@@ -174,6 +174,7 @@ export class CreateCheckoutSessionDto {
         nullable: true,
         type: [String],
     })
+    @IsString({ each: true })
     multiDaysBookingDetails?: string[];
 }
 
