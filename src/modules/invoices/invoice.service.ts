@@ -225,18 +225,14 @@ export class InvoiceService {
     const totalPages = Math.ceil(total / pageSizeNum);
 
     // Apply pricing logic to each invoice
-    const processedInvoices = await Promise.all(
-      invoices.map(async (invoice) => {
-        const processedInvoice = await this.applyPricingLogic(invoice);
-        
-        // Add vendorId for backward compatibility
-        if (processedInvoice.booking?.serviceConcept?.servicePackage?.vendor) {
-          processedInvoice.vendorId = processedInvoice.booking.serviceConcept.servicePackage.vendor.id;
-        }
-        
-        return processedInvoice;
-      })
-    );
+    const processedInvoices = invoices.map((invoice) => {
+      // Nếu đã có các trường giá trị, chỉ trả về luôn
+      // Nếu cần backward compatibility, có thể kiểm tra và chỉ applyPricingLogic nếu thiếu trường
+      return {
+        ...invoice,
+        vendorId: invoice.booking?.serviceConcept?.servicePackage?.vendor?.id,
+      };
+    });
 
     return {
       data: processedInvoices,
