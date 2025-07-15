@@ -8,6 +8,8 @@ import { ConceptVector } from '../../modules/service-package/entities/concept-ve
 import { GeminiModel } from './dto/gemini.enums';
 import { ServiceConcept } from '../../modules/service-package/entities/service-concept.entity';
 import { ServiceConceptImage } from '../../modules/service-package/entities/service-concept-image.entity';
+import { ServiceConceptStatus } from '../../constants/servicePackage.enum';
+import * as crypto from 'crypto';
 // Import a Type-Only Location to avoid conflicts
 import type { Location } from '../../modules/locations/entities/location.entity';
 
@@ -18,23 +20,23 @@ export class GeminiService {
     private readonly modelName: string;
     private readonly generationConfig: any;
     private readonly safetySettings: any;
+    // Tối ưu: Simple in-memory cache
+    private readonly cache = new Map<string, { data: any; expiry: number }>();
+    private readonly CACHE_TTL = 3600000; // 1 hour
     private readonly systemContext = `
-        Bạn là trợ lý AI của ứng dụng PhotoGo, một nền tảng đặt lịch studio, freelancer về chủ đề chụp ảnh với nhiều concept và make up.
-        Khi phân tích ảnh:
-        - Tập trung vào các yếu tố nghệ thuật trong ảnh
-        - Đề cập đến bố cục, màu sắc, ánh sáng
-        - Đánh giá chất lượng ảnh
-        - Đưa ra gợi ý cải thiện nếu cần
+        Bạn là AI phân tích ảnh chuyên nghiệp của PhotoGo - nền tảng đặt lịch studio chụp ảnh.
         
-        Khi trả lời câu hỏi:
-        - Đưa ra các thông tin liên quan đến nhiếp ảnh
-        - Đưa ra các thông tin (gói, concept, make up) có sẵn trong ứng dụng PhotoGo
-        - Sử dụng ngôn ngữ thân thiện
-        - Tập trung vào chủ đề nhiếp ảnh, concept của ảnh đã đính kèm
-        - Đưa ra các gợi ý thực tế, có sẵn trong ứng dụng PhotoGo
-        - Không đưa ra các thông tin không liên quan đến nhiếp ảnh
-        - Không đưa ra các thông tin không có trong ảnh đã đính kèm
-        - Không đưa ra các thông tin không có trong ứng dụng PhotoGo
+        Nguyên tắc phân tích ảnh:
+        - Phân tích kỹ thuật: bố cục, ánh sáng, màu sắc, composition
+        - Đánh giá chất lượng nghệ thuật với tone thân thiện
+        - Đưa ra gợi ý cải thiện cụ thể và khuyến khích
+        - Chào hỏi ngắn gọn rồi đi thẳng vào phân tích
+        
+        Khi trả lời về dịch vụ:
+        - Thông tin dựa trên dữ liệu thực tế của PhotoGo
+        - Gợi ý concept, gói chụp có sẵn trong hệ thống
+        - Ngôn ngữ thân thiện, nhiệt tình nhưng không dài dòng
+        - Tập trung vào giải pháp nhiếp ảnh thực tế
     `;
 
     constructor(
@@ -79,7 +81,8 @@ export class GeminiService {
         }
         const suggestKeywords = [
             'gợi ý concept', 'tư vấn concept', 'concept phù hợp', 'suggest concept', 'recommend concept',
-            'gợi ý concept nào', 'tư vấn concept nào', 'concept nào phù hợp', 'concept suggestion', 'concept advice'
+            'gợi ý concept nào', 'tư vấn concept nào', 'concept nào phù hợp', 'concept suggestion', 'concept advice',
+            'gợi ý', 'tư vấn', 'suggest', 'recommend', 'recommendation', 'advice'
         ];
         const promptRaw = prompt.toLowerCase();
         const promptNoTone = removeVietnameseTones(promptRaw);
@@ -98,7 +101,7 @@ export class GeminiService {
             }
             return matrix[a.length][b.length];
         }
-        const shortPattern = /\b(goi\s*y|gợi\s*y|tu\s*van|tư\s*vấn)?\s*(conc(ept)?|con|c)\b/i;
+        const shortPattern = /\b(goi\s*y|gợi\s*y|tu\s*van|tư\s*vấn)?\s*(conc(ept)?|con|c)?\b/i;
 
         if (shortPattern.test(promptRaw) || shortPattern.test(promptNoTone)) return true;
 
@@ -119,7 +122,7 @@ export class GeminiService {
         if (this.isSuggestConceptPrompt(prompt) || this.isServicePrompt(prompt)) {
             // Use injected repository
             let concepts = await this.serviceConceptRepository.find({
-                relations: ['images'],
+                relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
                 order: { createdAt: 'ASC' },
                 take: 5
             });
@@ -129,6 +132,22 @@ export class GeminiService {
             if (selected.length < 3) {
                 selected = [...withImage, ...withoutImage].slice(0, 3);
             }
+
+            // Transform concepts to match concepts_same format from analyzeImageWithConcepts
+            const concepts_same = selected.map(concept => ({
+                id: concept.id,
+                name: concept.name ?? null,
+                price: concept.price ?? null,
+                imageUrl: Array.isArray(concept.images) && concept.images.length > 0 ? concept.images[0].imageUrl : null,
+                vendorSlug: concept.servicePackage?.vendor?.slug ?? null,
+                location: concept.servicePackage?.vendor?.locations ?? null,
+                vendorId: concept.servicePackage?.vendor?.id ?? null,
+                conceptId: concept.id,
+                keywords: [], // Empty array since we don't have keywords for text-based suggestions
+                relevanceScore: 1.0, // Default high relevance for manual suggestions
+                distance: 0.0 // Default low distance for manual suggestions
+            }));
+
             const model = this.genAI.getGenerativeModel({
                 model: GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION,
                 generationConfig: { ...this.generationConfig, maxOutputTokens: 512 },
@@ -147,12 +166,7 @@ export class GeminiService {
                     example: this.isServicePrompt(prompt)
                         ? "Một số dịch vụ nổi bật của PhotoGo:"
                         : "Một số concept nổi bật của PhotoGo:",
-                    concepts: selected.map(concept => ({
-                        conceptId: concept.id,
-                        name: concept.name ?? null,
-                        price: concept.price ?? null,
-                        imageUrl: Array.isArray(concept.images) && concept.images.length > 0 ? concept.images[0].imageUrl : null
-                    }))
+                    concepts_same: concepts_same
                 },
                 metadata: { processingTime: Date.now() - startTime }
             };
@@ -176,142 +190,307 @@ export class GeminiService {
     }
     //#endregion
 
+    //#region Helper Methods
+    private async generateImageAnalysis(imageData: any, prompt?: string): Promise<any> {
+        const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
+        const analysisPrompt = `${this.systemContext}
+
+Xin chào! Mình sẽ giúp bạn phân tích bức ảnh này một cách chuyên nghiệp:
+
+1. **Mô tả tổng quan**: Nội dung chính của ảnh
+2. **Phân tích kỹ thuật**: 
+   - Bố cục và composition
+   - Ánh sáng và exposure
+   - Màu sắc và tông màu
+3. **Gợi ý cải thiện**: Những điểm có thể nâng cao để ảnh đẹp hơn
+
+${prompt || ''}`;
+
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: analysisPrompt }, imageData] }]
+        });
+
+        return await this.parseImageAnalysis(result.response.text());
+    }
+
+    // Tối ưu: Cache utilities
+    private createFileHash(buffer: Buffer): string {
+        return crypto.createHash('md5').update(buffer).digest('hex');
+    }
+
+    private getCached<T>(key: string): T | null {
+        const cached = this.cache.get(key);
+        if (cached && cached.expiry > Date.now()) {
+            return cached.data as T;
+        }
+        if (cached) {
+            this.cache.delete(key); // Remove expired
+        }
+        return null;
+    }
+
+    private setCached<T>(key: string, data: T): void {
+        this.cache.set(key, {
+            data,
+            expiry: Date.now() + this.CACHE_TTL
+        });
+    }
+
+    // Tối ưu: Enhanced error handling
+    private async executeWithFallback<T>(
+        operation: () => Promise<T>,
+        fallback: () => T,
+        errorMessage: string
+    ): Promise<T> {
+        try {
+            return await operation();
+        } catch (error) {
+            this.logger.error(`${errorMessage}: ${error.message}`);
+            return fallback();
+        }
+    }
+    //#endregion
+
     //#region Concept Vector Generation
     async analyzeImageWithConcepts(
         file: Express.Multer.File,
         prompt?: string
     ): Promise<IGeminiResponse<any>> {
         const startTime = Date.now();
-        const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
-        const imageData = { inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } };
-        const analysisPrompt = `${this.systemContext}\nPhân tích bức ảnh này và cung cấp:\n1. Mô tả tổng quan\n2. Phân tích kỹ thuật (bố cục, ánh sáng, màu sắc)\n3. Gợi ý cải thiện\n${prompt || ''}`;
-        const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: analysisPrompt }, imageData] }] });
-        const analysis = await this.parseImageAnalysis(result.response.text());
+        const metrics = {
+            startTime,
+            fileSize: file.size,
+            mimeType: file.mimetype,
+            fileName: file.originalname
+        };
 
-        const keywords = await this.generateKeywordsFromImage(file);
-        const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
-        if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768) {
-            throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
-        }
+        try {
+            const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
+            const imageData = { inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } };
 
-        const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
-        queryBuilder
-            .select('conceptVector')
-            .addSelect(`(CASE WHEN EXISTS (SELECT 1 FROM unnest(conceptVector.keywords) keyword WHERE keyword = ANY(:keywords)) THEN 1 ELSE 0 END * 0.4 + (1 - (conceptVector.embedding <-> :queryEmbedding::vector)) * 0.6)::float as relevance_score`)
-            .addSelect('(conceptVector.embedding <-> :queryEmbedding::vector)::float as distance')
-            .setParameter('keywords', keywords)
-            .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`)
-            .orderBy('relevance_score', 'DESC')
-            .limit(5);
-        const results = await queryBuilder.getRawAndEntities();
+            // Tối ưu: Chạy song song thay vì tuần tự
+            const [analysis, keywords] = await Promise.all([
+                this.generateImageAnalysis(imageData, prompt),
+                this.generateKeywordsFromImage(file)
+            ]);
 
-        let concepts_same = await Promise.all(results.entities.map(async (entity, index) => {
-            const { embedding, ...rest } = entity;
-            let name: string | null = null;
-            let price: number | null = null;
-            let imageUrl: string | null = null;
-            let vendorSlug: string | null = null;
-            let vendorLocations: Location[] | null = null;
-            let vendorId: string | null = null;
-            let conceptId: string | null = null;
+            const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
+            if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768) {
+                throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
+            }
 
-            if (entity.concept_image_id) {
-                const conceptImage = await this.serviceConceptImageRepository.findOne({ where: { id: entity.concept_image_id } });
+            const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
+            queryBuilder
+                .select('conceptVector')
+                .addSelect(`(CASE WHEN EXISTS (SELECT 1 FROM unnest(conceptVector.keywords) keyword WHERE keyword = ANY(:keywords)) THEN 1 ELSE 0 END * 0.4 + (1 - (conceptVector.embedding <-> :queryEmbedding::vector)) * 0.6)::float as relevance_score`)
+                .addSelect('(conceptVector.embedding <-> :queryEmbedding::vector)::float as distance')
+                .setParameter('keywords', keywords)
+                .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`)
+                .orderBy('relevance_score', 'DESC')
+                .limit(5);
+            const results = await queryBuilder.getRawAndEntities();
 
-                if (conceptImage?.serviceConceptId) {
-                    const conceptWithImage = await this.serviceConceptRepository.findOne({
-                        where: { id: conceptImage.serviceConceptId },
-                        relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
-                        order: { images: { createdAt: 'ASC' } }
+            // Tối ưu: Single query thay vì N+1 queries
+            const conceptImageIds = results.entities.map(e => e.concept_image_id).filter(id => id);
+
+            let concepts_same: any[] = [];
+            if (conceptImageIds.length > 0) {
+                // Single query với JOIN để lấy tất cả thông tin cần thiết
+                const conceptsData = await this.serviceConceptImageRepository
+                    .createQueryBuilder('sci')
+                    .leftJoinAndSelect('sci.serviceConcept', 'sc')
+                    .leftJoinAndSelect('sc.servicePackage', 'sp')
+                    .leftJoinAndSelect('sp.vendor', 'v')
+                    .leftJoinAndSelect('v.locations', 'l')
+                    .leftJoinAndSelect('sc.images', 'img')
+                    .where('sci.id IN (:...ids)', { ids: conceptImageIds })
+                    .orderBy('img.createdAt', 'ASC')
+                    .getMany();
+
+                // Map results efficiently
+                const conceptDataMap = new Map();
+                conceptsData.forEach(sci => {
+                    conceptDataMap.set(sci.id, {
+                        conceptId: sci.serviceConceptId,
+                        name: sci.serviceConcept?.name ?? null,
+                        price: sci.serviceConcept?.price ?? null,
+                        imageUrl: sci.serviceConcept?.images?.[0]?.imageUrl ?? null,
+                        vendorSlug: sci.serviceConcept?.servicePackage?.vendor?.slug ?? null,
+                        location: sci.serviceConcept?.servicePackage?.vendor?.locations ?? null,
+                        vendorId: sci.serviceConcept?.servicePackage?.vendor?.id ?? null
                     });
+                });
 
-                    conceptId = conceptImage.serviceConceptId || null;
+                concepts_same = results.entities.map((entity, index) => {
+                    const { embedding, ...rest } = entity;
+                    const conceptData = conceptDataMap.get(entity.concept_image_id) || {};
 
-                    if (conceptWithImage) {
-                        name = conceptWithImage.name ?? null;
-                        price = conceptWithImage.price ?? null;
-                        imageUrl = conceptWithImage.images?.[0]?.imageUrl ?? null;
+                    return {
+                        ...rest,
+                        ...conceptData,
+                        conceptId: conceptData.conceptId || null,
+                        keywords: Array.isArray(entity.keywords) ? entity.keywords.map(k => String(k).toLowerCase()) : [],
+                        relevanceScore: parseFloat(results.raw[index].relevance_score),
+                        distance: parseFloat(results.raw[index].distance)
+                    };
+                });
+            }
 
-                        if (conceptWithImage.servicePackage?.vendor) {
-                            vendorSlug = conceptWithImage.servicePackage.vendor.slug ?? null;
-                            vendorLocations = conceptWithImage.servicePackage.vendor.locations ?? null;
-                            vendorId = conceptWithImage.servicePackage.vendor.id ?? null;
-                        }
-                    }
+            const peopleKeywords = ['nữ', 'nam', 'trẻ em', 'người', 'portrait', 'chân dung', 'group', 'person', 'people', 'beauty shot', 'cosplay', 'cặp đôi', 'cưới'];
+            const animalKeywords = ['mèo', 'chó', 'thú cưng', 'pet', 'animal', 'cat', 'dog'];
+            const landscapeKeywords = ['phong cảnh', 'landscape', 'cảnh vật', 'nature', 'outdoor', 'ngoài trời', 'thiên nhiên', 'kiến trúc'];
+            const objectKeywords = ['still life', 'food photography', 'sản phẩm', 'trái cây', 'đồ vật', 'product', 'cam'];
+
+            // Tối ưu: Check relevance score trước khi filter - nếu tất cả đều có score thấp thì không phù hợp
+            const RELEVANCE_THRESHOLD = 0.1;
+            const hasGoodMatches = concepts_same.some(c => c.relevanceScore > RELEVANCE_THRESHOLD);
+
+            if (!hasGoodMatches) {
+                this.logger.debug(`No concepts with good relevance scores. Best score: ${Math.max(...concepts_same.map(c => c.relevanceScore))}`);
+                // Jump to fallback logic
+                concepts_same = [];
+            } else {
+                // Chỉ filter khi có matches tốt
+                const keywords = await this.generateKeywordsFromImage(file);
+                const isInputPeople = keywords.some(k => peopleKeywords.includes(k));
+                const isInputAnimal = keywords.some(k => animalKeywords.includes(k));
+                const isInputLandscape = keywords.some(k => landscapeKeywords.includes(k));
+                const isInputObject = keywords.some(k => objectKeywords.includes(k));
+
+                if (isInputPeople) {
+                    // If the input is a person, results MUST also be about people.
+                    concepts_same = concepts_same.filter(c =>
+                        c.keywords.some(k => peopleKeywords.includes(k)) &&
+                        !c.keywords.some(k => animalKeywords.includes(k) || objectKeywords.includes(k))
+                    );
+                } else if (isInputAnimal) {
+                    // If the input is an animal, results MUST also be about animals.
+                    concepts_same = concepts_same.filter(c =>
+                        c.keywords.some(k => animalKeywords.includes(k)) &&
+                        !c.keywords.some(k => peopleKeywords.includes(k))
+                    );
+                } else if (isInputObject) {
+                    // If the input is an object, results should be about objects.
+                    concepts_same = concepts_same.filter(c =>
+                        c.keywords.some(k => objectKeywords.includes(k)) &&
+                        !c.keywords.some(k => peopleKeywords.includes(k) || animalKeywords.includes(k))
+                    );
+                } else if (isInputLandscape) {
+                    // If it's a landscape, filter out results with people, animals, or objects.
+                    concepts_same = concepts_same.filter(c =>
+                        c.keywords.some(k => landscapeKeywords.includes(k)) &&
+                        !c.keywords.some(k => peopleKeywords.includes(k) || animalKeywords.includes(k) || objectKeywords.includes(k))
+                    );
                 }
             }
 
+            if (!concepts_same || concepts_same.length === 0) {
+                // Khi không tìm thấy concept phù hợp, lấy một số concept ngẫu nhiên từ hệ thống
+                const fallbackConcepts = await this.serviceConceptRepository.find({
+                    relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                    where: { status: ServiceConceptStatus.ACTIVE },
+                    order: { createdAt: 'DESC' },
+                    take: 5
+                });
+
+                const fallbackConceptsSame = await Promise.all(fallbackConcepts.map(async (concept) => {
+                    let vendorSlug: string | null = null;
+                    let vendorLocations: Location[] | null = null;
+                    let vendorId: string | null = null;
+
+                    if (concept.servicePackage?.vendor) {
+                        vendorSlug = concept.servicePackage.vendor.slug ?? null;
+                        vendorLocations = concept.servicePackage.vendor.locations ?? null;
+                        vendorId = concept.servicePackage.vendor.id ?? null;
+                    }
+
+                    return {
+                        id: concept.id,
+                        name: concept.name ?? null,
+                        price: concept.price ?? null,
+                        imageUrl: concept.images?.[0]?.imageUrl ?? null,
+                        vendorSlug,
+                        location: vendorLocations,
+                        vendorId,
+                        conceptId: concept.id,
+                        keywords: [], // Empty array for fallback concepts
+                        relevanceScore: 0.5, // Lower relevance for fallback
+                        distance: 1.0 // Higher distance for fallback
+                    };
+                }));
+
+                // Tạo prompt cho AI để giải thích tại sao không tìm thấy và gợi ý
+                const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
+                const imageData = { inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } };
+
+                const fallbackPrompt = `${this.systemContext}
+
+Xin chào! Mình đã phân tích ảnh này và có một vài thông tin để chia sẻ:
+
+1. **Mô tả về ảnh**: Nội dung và đặc điểm chính
+2. **Về việc tìm kiếm concept**: Tại sao không tìm thấy concept hoàn toàn phù hợp trong hệ thống
+3. **Gợi ý tích cực**: PhotoGo có rất nhiều concept đa dạng và thú vị khác mà bạn có thể khám phá
+
+Tone thân thiện, tích cực và khuyến khích.`;
+
+                const fallbackResult = await model.generateContent({
+                    contents: [{ role: 'user', parts: [{ text: fallbackPrompt }, imageData] }]
+                });
+
+                const fallbackAnalysis = await this.parseImageAnalysis(fallbackResult.response.text());
+
+                return {
+                    success: true,
+                    data: {
+                        analysis: fallbackAnalysis,
+                        concepts_same: fallbackConceptsSame,
+                        isNoMatch: true,
+                        suggestion: "Mặc dù không tìm thấy concept hoàn toàn phù hợp, PhotoGo có nhiều concept thú vị khác bạn có thể tham khảo!"
+                    },
+                    metadata: {
+                        filename: file.originalname,
+                        size: file.size,
+                        mimeType: file.mimetype,
+                        processingTime: Date.now() - startTime,
+                        message: 'Không tìm thấy concept phù hợp hoàn toàn, đã gợi ý các concept khác.'
+                    }
+                };
+            }
             return {
-                ...rest,
-                name,
-                price,
-                imageUrl,
-                vendorSlug,
-                location: vendorLocations,
-                vendorId,
-                conceptId: conceptId || null,
-                keywords: Array.isArray(entity.keywords) ? entity.keywords.map(k => String(k).toLowerCase()) : [],
-                relevanceScore: parseFloat(results.raw[index].relevance_score),
-                distance: parseFloat(results.raw[index].distance)
-            };
-        }));
-
-        // ✅ IMPROVEMENT V2: Stricter category-based filtering.
-        const peopleKeywords = ['nữ', 'nam', 'trẻ em', 'người', 'portrait', 'chân dung', 'group', 'person', 'people', 'beauty shot', 'cosplay', 'cặp đôi', 'cưới'];
-        const animalKeywords = ['mèo', 'chó', 'thú cưng', 'pet', 'animal', 'cat', 'dog'];
-        const landscapeKeywords = ['phong cảnh', 'landscape', 'cảnh vật', 'nature', 'outdoor', 'ngoài trời', 'thiên nhiên', 'kiến trúc'];
-        const objectKeywords = ['still life', 'food photography', 'sản phẩm', 'trái cây', 'đồ vật', 'product', 'cam'];
-
-        const isInputPeople = keywords.some(k => peopleKeywords.includes(k));
-        const isInputAnimal = keywords.some(k => animalKeywords.includes(k));
-        const isInputLandscape = keywords.some(k => landscapeKeywords.includes(k));
-        const isInputObject = keywords.some(k => objectKeywords.includes(k));
-
-        if (isInputPeople) {
-            // If the input is a person, results MUST also be about people.
-            concepts_same = concepts_same.filter(c =>
-                c.keywords.some(k => peopleKeywords.includes(k)) &&
-                !c.keywords.some(k => animalKeywords.includes(k) || objectKeywords.includes(k))
-            );
-        } else if (isInputAnimal) {
-            // If the input is an animal, results MUST also be about animals.
-            concepts_same = concepts_same.filter(c =>
-                c.keywords.some(k => animalKeywords.includes(k)) &&
-                !c.keywords.some(k => peopleKeywords.includes(k))
-            );
-        } else if (isInputObject) {
-            // If the input is an object, results should be about objects.
-            concepts_same = concepts_same.filter(c =>
-                c.keywords.some(k => objectKeywords.includes(k)) &&
-                !c.keywords.some(k => peopleKeywords.includes(k) || animalKeywords.includes(k))
-            );
-        } else if (isInputLandscape) {
-            // If it's a landscape, filter out results with people, animals, or objects.
-            concepts_same = concepts_same.filter(c =>
-                c.keywords.some(k => landscapeKeywords.includes(k)) &&
-                !c.keywords.some(k => peopleKeywords.includes(k) || animalKeywords.includes(k) || objectKeywords.includes(k))
-            );
-        }
-
-        if (!concepts_same || concepts_same.length === 0) {
-            return {
-                success: false,
-                data: { analysis, concepts_same: [] },
+                success: true,
+                data: { analysis, concepts_same },
                 metadata: {
                     filename: file.originalname, size: file.size, mimeType: file.mimetype,
-                    processingTime: Date.now() - startTime,
-                    message: 'Không tìm thấy concept phù hợp với ảnh này.'
+                    processingTime: Date.now() - startTime
                 }
             };
-        }
-        return {
-            success: true,
-            data: { analysis, concepts_same },
-            metadata: {
-                filename: file.originalname, size: file.size, mimeType: file.mimetype,
-                processingTime: Date.now() - startTime
+        } catch (error) {
+            this.logger.error(`Error analyzing image with concepts: ${error.message}`, error.stack);
+            return {
+                success: false,
+                data: null,
+                metadata: {
+                    ...metrics,
+                    processingTime: Date.now() - startTime,
+                    message: 'Lỗi phân tích ảnh với concept.'
+                }
+            };
+        } finally {
+            // Log performance metrics
+            const finalMetrics = {
+                ...metrics,
+                processingTime: Date.now() - startTime,
+                success: true
+            };
+            this.logger.log('Image analysis performance', finalMetrics);
+
+            // Clear cache if it gets too large (simple memory management)
+            if (this.cache.size > 1000) {
+                const oldestKeys = Array.from(this.cache.keys()).slice(0, 500);
+                oldestKeys.forEach(key => this.cache.delete(key));
+                this.logger.debug('Cache cleanup: removed 500 oldest entries');
             }
-        };
+        }
     }
     // #endregion
 
@@ -392,73 +571,45 @@ export class GeminiService {
     }
 
     private async generateKeywordsFromImage(image: Express.Multer.File): Promise<string[]> {
-        const model = await this.initializeModel();
-        const imageData = { inlineData: { data: image.buffer.toString('base64'), mimeType: image.mimetype } };
-        const prompt = `Vai trò: Bạn là một AI phân tích hình ảnh chuyên sâu, có kiến thức sâu rộng về nhiếp ảnh, lịch sử nghệ thuật, và ký hiệu học văn hóa. Nhiệm vụ của bạn là "giải phẫu" một bức ảnh và chuyển hóa mọi chi tiết hình ảnh thành một danh sách từ khóa (keywords) toàn diện và có cấu trúc.
-
-Nhiệm vụ: Hãy phân tích thật kỹ lưGỡng bức ảnh được cung cấp và tạo ra một danh sách từ khóa chi tiết nhất có thể, bao quát tất cả các khía cạnh có thể quan sát và suy luận được. Hãy suy nghĩ vượt ra ngoài những gì hiển nhiên và đi sâu vào các chi tiết tinh tế.
-
-Các hạng mục phân tích (Bắt buộc):
-
-Chủ thể & Nội dung:
-
-Con người: Xác định chi tiết giới tính, độ tuổi ước tính (trẻ sơ sinh, thiếu niên, người trưởng thành, người cao tuổi), dân tộc, trang phục (loại quần áo, phong cách, thương hiệu nếu có), phụ kiện, cảm xúc (vui, buồn, tức giận, trầm tư), hành động (đang chạy, ngồi, nói chuyện), và mối quan hệ giữa các chủ thể (gia đình, bạn bè, đồng nghiệp).
-
-Động vật: Loài, giống, hành động.
-
-Vật thể: Tên gọi của các vật thể chính và phụ, chất liệu (gỗ, kim loại, thủy tinh), tình trạng (mới, cũ, hỏng).
-
-Bối cảnh & Môi trường:
-
-Địa điểm: Cụ thể hóa địa điểm (ví dụ: thay vì "ngoài trời", hãy ghi "bãi biển nhiệt đới lúc hoàng hôn"; thay vì "trong nhà", hãy ghi "phòng khách phong cách tối giản").
-
-Thời gian: Thời gian trong ngày (bình minh, giữa trưa, hoàng hôn, ban đêm), mùa trong năm.
-
-Kiến trúc & Thiên nhiên: Phong cách kiến trúc (cổ điển, hiện đại, brutalism), các yếu tố tự nhiên (cây cối, núi, sông, hồ), thời tiết (nắng, mưa, tuyết, sương mù).
-
-Bố cục & Kỹ thuật nhiếp ảnh:
-
-Bố cục: Quy tắc 1/3, đường dẫn, đối xứng, khung trong khung (framing), tiền cảnh, trung cảnh, hậu cảnh.
-
-Góc máy: Toàn cảnh, trung cảnh, cận cảnh, góc cao, góc thấp, góc nhìn ngang.
-
-Kỹ thuật: Độ sâu trường ảnh (nông/sâu), bokeh, lia máy (panning), phơi sáng dài, phơi sáng kép, hiệu ứng lens flare.
-
-Ánh sáng & Màu sắc:
-
-Ánh sáng: Nguồn sáng (tự nhiên, nhân tạo), chất lượng ánh sáng (gắt, mềm, khuếch tán), hướng sáng (chính diện, ngược sáng, chiếu xiên), ánh sáng viền (rim light), giờ vàng (golden hour), giờ xanh (blue hour).
-
-Màu sắc: Tông màu chủ đạo (ấm, lạnh), bảng màu (đơn sắc, tương phản, tương đồng), màu sắc nổi bật, độ bão hòa (cao/thấp), màu đen trắng.
-
-Thể loại, Phong cách & Cảm xúc:
-
-Thể loại: Chân dung, phong cảnh, đường phố, kiến trúc, thời trang, đời thường, trừu tượng, báo chí, macro.
-
-Phong cách: Tối giản, cổ điển (vintage), hiện đại, tương lai (futuristic), lãng mạn, kịch tính, ma mị (moody), siêu thực.
-
-Không khí & Cảm xúc: Yên bình, hỗn loạn, vui vẻ, u buồn, hoài niệm, năng động, tĩnh lặng, bí ẩn.
-
-Khái niệm & Biểu tượng:
-
-Phân tích các ý nghĩa ẩn dụ, biểu tượng văn hóa, chủ đề (ví dụ: sự cô đơn, tình yêu, sự xung đột, sự phát triển).
-
-Yêu cầu định dạng đầu ra (Rất quan trọng):
-
-CHỈ trả về một danh sách các từ khóa.
-
-Mỗi từ khóa phải ngắn gọn, súc tích, viết bằng chữ thường.
-
-Phân tách các từ khóa bằng dấu phẩy (,).
-
-TUYỆT ĐỐI KHÔNG thêm bất kỳ đầu mục, số thứ tự, câu chữ giải thích, hay bất kỳ văn bản nào khác ngoài danh sách từ khóa.
-
-TUYỆT ĐỐI KHÔNG sử dụng các từ chung chung như "ảnh", "hình", "photo", "picture", "nice", "beautiful", "nghệ thuật".`;
-        const result = await model.generateContent([prompt, imageData]);
-        const text = result.response.text();
-        if (!text) {
-            throw new Error('No text response from Gemini API');
+        // Tối ưu: Check cache first
+        const fileHash = this.createFileHash(image.buffer);
+        const cacheKey = `keywords:${fileHash}`;
+        const cached = this.getCached<string[]>(cacheKey);
+        if (cached) {
+            this.logger.debug(`Cache hit for keywords: ${fileHash}`);
+            return cached;
         }
-        return text.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0);
+
+        return await this.executeWithFallback(
+            async () => {
+                const model = await this.initializeModel();
+                const imageData = { inlineData: { data: image.buffer.toString('base64'), mimeType: image.mimetype } };
+                const prompt = `Vai trò: AI phân tích ảnh chuyên sâu. Tạo danh sách từ khóa toàn diện từ ảnh.
+
+Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, phong cách, cảm xúc.
+
+Định dạng: CHỈ trả về từ khóa phân tách bằng dấu phẩy, viết thường, không giải thích.`;
+
+                const result = await model.generateContent([prompt, imageData]);
+                const text = result.response.text();
+                if (!text) {
+                    throw new Error('No text response from Gemini API');
+                }
+                const keywords = text.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0);
+
+                // Cache the result
+                this.setCached(cacheKey, keywords);
+                return keywords;
+            },
+            () => {
+                // Fallback keywords
+                const fallbackKeywords = ['image', 'photo', 'general'];
+                if (image.mimetype.includes('jpeg')) fallbackKeywords.push('jpeg', 'photography');
+                this.logger.warn(`Using fallback keywords for: ${image.originalname}`);
+                return fallbackKeywords;
+            },
+            'Gemini keyword generation failed'
+        );
     }
 
     private async generateEmbedding(text: string): Promise<number[]> {
