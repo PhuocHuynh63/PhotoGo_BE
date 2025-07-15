@@ -258,6 +258,7 @@ Xin chào! Mình sẽ giúp bạn phân tích bức ảnh này một cách chuy�
    - Màu sắc và tông màu
 3. **Gợi ý cải thiện**: Những điểm có thể nâng cao để ảnh đẹp hơn
 
+
 ${prompt || ''}`;
 
         const result = await model.generateContent({
