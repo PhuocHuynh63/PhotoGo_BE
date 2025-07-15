@@ -38,7 +38,7 @@ export class Booking {
   date: Date;
 
   @Column({ type: 'time' })
-  time: string;
+  time: string | null;
 
   @Column({ type: 'enum', enum: BookingStatus, default: BookingStatus.PENDING })
   status: BookingStatus;

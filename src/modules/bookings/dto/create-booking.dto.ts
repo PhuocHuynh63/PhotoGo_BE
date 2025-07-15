@@ -52,6 +52,7 @@ export class CreateBookingDto {
   @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: 'Giờ phải có định dạng HH:mm'
   })
+  @Transform(({ value }) => value === "" ? null : value)
   @ApiProperty({
     description: 'Giờ booking (định dạng HH:mm) - chỉ dùng cho booking 1 ngày',
     example: '13:00',
@@ -65,9 +66,8 @@ export class CreateBookingDto {
   @ValidateNested({ each: true })
   @Type(() => CreateBookingScheduleItemDto)
   @Transform(({ value }) => {
-    // Nếu FE truyền mảng string, tự động chuyển thành mảng object { date }
     if (Array.isArray(value) && typeof value[0] === 'string') {
-      return value.map(date => ({ date }));
+      return value.map(date => Object.assign(new CreateBookingScheduleItemDto(), { date }));
     }
     return value;
   })

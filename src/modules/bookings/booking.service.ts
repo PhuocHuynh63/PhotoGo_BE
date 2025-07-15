@@ -99,6 +99,7 @@ export class BookingService {
 
   // Helper function to convert time string (HH:mm) to minutes
   private timeToMinutes(timeStr: string): number {
+    if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours * 60 + minutes;
   }
@@ -130,6 +131,11 @@ export class BookingService {
 
     if (!createBookingDto.time) {
       throw new BadRequestException('Giờ booking là bắt buộc cho booking 1 ngày');
+    }
+
+    // Xử lý time rỗng thành null
+    if (createBookingDto.time === "") {
+      createBookingDto.time = null;
     }
 
     // Use the old validation logic for single day booking
@@ -478,15 +484,17 @@ export class BookingService {
     // If same day, check time
     if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
       // Parse time string (HH:mm) to hours and minutes
-      const [bookingHours, bookingMinutes] = createBookingDto.time.split(':').map(Number);
-      const currentHours = vietnamCurrentDate.getHours();
-      const currentMinutes = vietnamCurrentDate.getMinutes();
+      if (createBookingDto.time) {
+        const [bookingHours, bookingMinutes] = createBookingDto.time.split(':').map(Number);
+        const currentHours = vietnamCurrentDate.getHours();
+        const currentMinutes = vietnamCurrentDate.getMinutes();
 
-      const currentTimeInMinutes = currentHours * 60 + currentMinutes;
-      const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
+        const currentTimeInMinutes = currentHours * 60 + currentMinutes;
+        const bookingTimeInMinutes = bookingHours * 60 + bookingMinutes;
 
-      if (bookingTimeInMinutes <= currentTimeInMinutes) {
-        throw new BadRequestException('Giờ booking không hợp lệ');
+        if (bookingTimeInMinutes <= currentTimeInMinutes) {
+          throw new BadRequestException('Giờ booking không hợp lệ');
+        }
       }
     }
   }
