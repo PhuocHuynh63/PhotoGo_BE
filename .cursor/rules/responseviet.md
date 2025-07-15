@@ -12,7 +12,6 @@ Ensure that:
 - All `@ApiOperation({ summary })` have summary in Vietnamese.
 - All `@ApiResponse({ description })` have descriptions in Vietnamese.
 - All `@ApiProperty({ description })` have descriptions in Vietnamese.
-- All `throw new HttpException('...')` or other exceptions include Vietnamese messages.
 - All enums that are shown to end-users must use Vietnamese values (e.g., `SUCCESS = "thành công"`).
 - All error messages in exceptions must be in Vietnamese.
 - All validation messages must be in Vietnamese.
