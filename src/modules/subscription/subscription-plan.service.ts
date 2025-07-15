@@ -14,7 +14,10 @@ export class SubscriptionPlanService {
   ) {}
 
   async create(createSubscriptionPlanDto: CreateSubscriptionPlanDto): Promise<SubscriptionPlan> {
-    const subscriptionPlan = this.subscriptionPlanRepository.create(createSubscriptionPlanDto);
+    const subscriptionPlan = this.subscriptionPlanRepository.create({
+      ...createSubscriptionPlanDto,
+      isActive: createSubscriptionPlanDto.isActive ?? true,
+    });
     return await this.subscriptionPlanRepository.save(subscriptionPlan);
   }
 
@@ -38,7 +41,7 @@ export class SubscriptionPlanService {
     });
 
     if (!subscriptionPlan) {
-      throw new NotFoundException('Không tìm thấy gói đăng ký');
+      throw new NotFoundException('Không tìm thấy subscription plan');
     }
 
     return subscriptionPlan;

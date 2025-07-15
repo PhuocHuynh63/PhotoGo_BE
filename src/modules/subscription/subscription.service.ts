@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription } from './entities/subscription.entity';
@@ -6,7 +6,9 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { FindSubscriptionDto } from './dto/find-subscription.dto';
 import { SubscriptionStatus, SubscriptionHistoryAction } from '../../constants/subscription.enum';
+import { PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
+import { SubscriptionPlanService } from './subscription-plan.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -14,10 +16,42 @@ export class SubscriptionService {
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
+    private readonly subscriptionPlanService: SubscriptionPlanService,
   ) {}
 
   async create(createSubscriptionDto: CreateSubscriptionDto): Promise<Subscription> {
-    const subscription = this.subscriptionRepository.create(createSubscriptionDto);
+    // Validate plan exists and is active
+    const plan = await this.subscriptionPlanService.findOne(createSubscriptionDto.planId);
+    if (!plan.isActive) {
+      throw new BadRequestException('Subscription plan không hoạt động');
+    }
+
+    // Check if user already has an active subscription
+    if (createSubscriptionDto.userId) {
+      const existingSubscription = await this.subscriptionRepository.findOne({
+        where: { 
+          userId: createSubscriptionDto.userId,
+          status: SubscriptionStatus.ACTIVE
+        }
+      });
+      if (existingSubscription) {
+        throw new BadRequestException('User đã có subscription đang hoạt động');
+      }
+    }
+
+    // Calculate endDate if not provided
+    let endDate = createSubscriptionDto.endDate ? new Date(createSubscriptionDto.endDate) : null;
+    if (!endDate) {
+      const startDate = new Date(createSubscriptionDto.startDate);
+      endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + plan.duration);
+    }
+
+    const subscription = this.subscriptionRepository.create({
+      ...createSubscriptionDto,
+      endDate: endDate,
+      status: SubscriptionStatus.ACTIVE
+    });
     const savedSubscription = await this.subscriptionRepository.save(subscription);
 
     // Tạo history record cho subscription mới
@@ -29,7 +63,6 @@ export class SubscriptionService {
         // Thông tin subscription
         subscriptionId: savedSubscription.id,
         userId: savedSubscription.userId,
-        vendorId: savedSubscription.vendorId,
         planId: savedSubscription.planId,
         
         // Thông tin thời gian
@@ -41,7 +74,8 @@ export class SubscriptionService {
         // Metadata khác
         timestamp: new Date().toISOString(),
         action: 'create',
-      }
+      },
+      PayerType.CUSTOMER
     );
 
     return savedSubscription;
@@ -63,15 +97,12 @@ export class SubscriptionService {
     const queryBuilder = this.subscriptionRepository.createQueryBuilder('subscription');
     queryBuilder.leftJoinAndSelect('subscription.user', 'user');
     queryBuilder.leftJoinAndSelect('subscription.plan', 'plan');
-    queryBuilder.leftJoinAndSelect('subscription.vendor', 'vendor');
 
     if (findSubscriptionDto.userId) {
       queryBuilder.andWhere('subscription.userId = :userId', { userId: findSubscriptionDto.userId });
     }
 
-    if (findSubscriptionDto.vendorId) {
-      queryBuilder.andWhere('subscription.vendorId = :vendorId', { vendorId: findSubscriptionDto.vendorId });
-    }
+
 
     if (findSubscriptionDto.status) {
       queryBuilder.andWhere('subscription.status = :status', { status: findSubscriptionDto.status });
@@ -98,7 +129,7 @@ export class SubscriptionService {
   async findOne(id: string): Promise<Subscription> {
     const subscription = await this.subscriptionRepository.findOne({
       where: { id },
-      relations: ['user', 'plan', 'vendor'],
+      relations: ['user', 'plan'],
     });
 
     if (!subscription) {
@@ -131,7 +162,6 @@ export class SubscriptionService {
         // Thông tin subscription
         subscriptionId: subscription.id,
         userId: subscription.userId,
-        vendorId: subscription.vendorId,
         planId: subscription.planId,
         
         // Thông tin thay đổi
@@ -144,7 +174,8 @@ export class SubscriptionService {
         timestamp: new Date().toISOString(),
         action: 'cancel',
         reason: 'User requested cancellation',
-      }
+      },
+      PayerType.CUSTOMER
     );
 
     return updatedSubscription;

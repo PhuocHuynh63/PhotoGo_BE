@@ -1,13 +1,13 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { SubscriptionInvoice } from './subscription-invoice.entity';
-import { PaymentMethod, PaymentStatus, PaymentType } from '../../../constants/payment.enum';
+import { PaymentMethod, PaymentStatus, PaymentType, PayerType } from '../../../constants/payment.enum';
 
 @Entity('subscription_payment')
 export class SubscriptionPayment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => SubscriptionInvoice, { nullable: false })
+  @ManyToOne(() => SubscriptionInvoice, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'subscription_invoice_id' })
   subscriptionInvoice: SubscriptionInvoice;
 
@@ -26,7 +26,7 @@ export class SubscriptionPayment {
   @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
   status: PaymentStatus;
 
-  @Column({ type: 'enum', enum: PaymentType, default: PaymentType.DEPOSIT })
+  @Column({ type: 'enum', enum: PaymentType, default: PaymentType.FULL_PAYMENT })
   type: PaymentType;
 
   @Column({ type: 'varchar', length: 100, nullable: true, name: 'transaction_id' })
@@ -34,6 +34,14 @@ export class SubscriptionPayment {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   description: string;
+
+  @Column({
+    type: 'enum',
+    enum: PayerType,
+    default: PayerType.CUSTOMER,
+    name: 'payer_type'
+  })
+  payerType: PayerType;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

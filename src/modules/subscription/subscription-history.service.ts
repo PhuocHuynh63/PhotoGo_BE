@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubscriptionHistory } from './entities/subscription-history.entity';
 import { SubscriptionHistoryAction } from '../../constants/subscription.enum';
+import { PayerType } from '../../constants/payment.enum';
 
 @Injectable()
 export class SubscriptionHistoryService {
@@ -16,12 +17,14 @@ export class SubscriptionHistoryService {
     action: SubscriptionHistoryAction,
     description?: string,
     metadata?: any,
+    payerType: PayerType = PayerType.CUSTOMER,
   ): Promise<SubscriptionHistory> {
     const history = this.subscriptionHistoryRepository.create({
       subscriptionId,
       action,
       description,
       metadata,
+      payerType,
     });
     return await this.subscriptionHistoryRepository.save(history);
   }

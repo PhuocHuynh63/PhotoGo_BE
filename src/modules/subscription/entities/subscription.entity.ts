@@ -1,34 +1,28 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToOne } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { SubscriptionPlan } from './subscription-plan.entity';
-import { Vendor } from '../../vendors/entities/vendor.entity';
 import { SubscriptionStatus, BillingCycle } from '../../../constants/subscription.enum';
+import { SubscriptionInvoice } from './subscription-invoice.entity';
+import { SubscriptionHistory } from './subscription-history.entity';
 
 @Entity('subscription')
 export class Subscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => User, { nullable: false })
+  @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ type: 'uuid', name: 'user_id' })
+  @Column({ type: 'uuid', name: 'user_id', nullable: true })
   userId: string;
 
   @ManyToOne(() => SubscriptionPlan, { nullable: false })
   @JoinColumn({ name: 'plan_id' })
   plan: SubscriptionPlan;
 
-  @Column({ type: 'varchar', length: 10, name: 'plan_id' })
+  @Column({ type: 'uuid', name: 'plan_id' })
   planId: string;
-
-  @ManyToOne(() => Vendor, { nullable: false })
-  @JoinColumn({ name: 'vendor_id' })
-  vendor: Vendor;
-
-  @Column({ type: 'uuid', name: 'vendor_id' })
-  vendorId: string;
 
   @Column({ type: 'date', name: 'start_date' })
   startDate: Date;
@@ -55,6 +49,12 @@ export class Subscription {
 
   @Column({ type: 'timestamptz', name: 'next_billing_at', nullable: true })
   nextBillingAt: Date;
+
+  @OneToMany(() => SubscriptionInvoice, invoice => invoice.subscription)
+  invoices: SubscriptionInvoice[];
+
+  @OneToMany(() => SubscriptionHistory, history => history.subscription)
+  history: SubscriptionHistory[];
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;

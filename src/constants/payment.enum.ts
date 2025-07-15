@@ -1,7 +1,8 @@
 export enum PaymentType {
   DEPOSIT = 'đặt cọc',
   RENEWAL = 'gia hạn',
-  REMAINING = 'còn lại'
+  REMAINING = 'còn lại',
+  FULL_PAYMENT = 'thanh toán đầy đủ'
 }
 
 export enum PaymentStatus {
@@ -22,4 +23,9 @@ export enum InvoiceStatus {
 
 export enum PaymentMethod {
   PAYOS = 'PAYOS'
+}
+
+export enum PayerType {
+  CUSTOMER = 'khách hàng',
+  VENDOR = 'nhà cung cấp'
 }

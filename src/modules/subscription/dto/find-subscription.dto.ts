@@ -10,11 +10,6 @@ export class FindSubscriptionDto {
   userId?: string;
 
   @IsOptional()
-  @IsUUID()
-  @ApiProperty({ description: 'ID của nhà cung cấp', required: false })
-  vendorId?: string;
-
-  @IsOptional()
   @IsEnum(SubscriptionStatus)
   @ApiProperty({ 
     description: 'Trạng thái đăng ký',

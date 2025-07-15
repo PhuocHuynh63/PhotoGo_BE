@@ -121,4 +121,51 @@ export class MailService {
     
     await this.sendMail(email, subject, 'refund-notification', context);
   }
+
+  async sendSubscriptionSuccessEmail(
+    email: string,
+    customerName: string,
+    subscriptionData: {
+      subscriptionId: string;
+      planName: string;
+      startDate: Date;
+      endDate: Date;
+      billingCycle: string;
+      status: string;
+      price: number;
+      paymentMethod: string;
+      nextBillingDate?: Date;
+    }
+  ): Promise<void> {
+    const subject = 'Đăng ký Subscription Thành công - PhotoGo';
+    
+    // Format dates
+    const startDate = this.formatDate(subscriptionData.startDate);
+    const endDate = this.formatDate(subscriptionData.endDate);
+    const nextBillingDate = subscriptionData.nextBillingDate ? this.formatDate(subscriptionData.nextBillingDate) : null;
+    
+    // Format price
+    const price = subscriptionData.price.toLocaleString('vi-VN') + ' VNĐ';
+    
+    // Determine status class for styling
+    const statusClass = subscriptionData.status === 'hoạt động' ? 'active' : 'pending';
+    
+    const context = {
+      customerName,
+      customerEmail: email,
+      subscriptionId: subscriptionData.subscriptionId,
+      planName: subscriptionData.planName,
+      startDate,
+      endDate,
+      billingCycle: subscriptionData.billingCycle,
+      status: subscriptionData.status,
+      statusClass,
+      price,
+      paymentMethod: subscriptionData.paymentMethod,
+      nextBillingDate,
+      supportEmail: 'support@photogo.id.vn'
+    };
+    
+    await this.sendMail(email, subject, 'subscription-success', context);
+  }
 }

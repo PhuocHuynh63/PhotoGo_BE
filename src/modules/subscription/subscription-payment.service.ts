@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubscriptionInvoice } from './entities/subscription-invoice.entity';
 import { SubscriptionPayment } from './entities/subscription-payment.entity';
-import { PaymentMethod, PaymentStatus, PaymentType } from '../../constants/payment.enum';
+import { PaymentMethod, PaymentStatus, PaymentType, PayerType } from '../../constants/payment.enum';
 import { PayOSService } from '../../3rdService/payos/payos.service';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionStatus, BillingCycle, SubscriptionInvoiceStatus } from '../../constants/subscription.enum';
@@ -11,9 +11,13 @@ import { SubscriptionPaymentCallbackDto } from './dto/subscription-payment-callb
 import { SubscriptionPlanService } from './subscription-plan.service';
 import { SubscriptionHistoryService } from './subscription-history.service';
 import { SubscriptionHistoryAction } from '../../constants/subscription.enum';
+import { MailService } from '../../3rdService/mail/mail.service';
+import { UserService } from '../users/user.service';
 
 @Injectable()
 export class SubscriptionPaymentService {
+  private readonly logger = new Logger(SubscriptionPaymentService.name);
+
   constructor(
     @InjectRepository(SubscriptionInvoice)
     private readonly subscriptionInvoiceRepository: Repository<SubscriptionInvoice>,
@@ -24,12 +28,35 @@ export class SubscriptionPaymentService {
     private readonly payosService: PayOSService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
+    private readonly mailService: MailService,
+    private readonly userService: UserService,
   ) {}
 
-  async createPayOSLinkForSubscriptionInvoice(invoiceId: string, type: PaymentType = PaymentType.DEPOSIT) {
-    const invoice = await this.subscriptionInvoiceRepository.findOne({ where: { id: invoiceId } });
+  async createPayOSLinkForSubscriptionInvoice(
+    invoiceId: string, 
+    type: PaymentType = PaymentType.FULL_PAYMENT,
+    payerType: PayerType = PayerType.CUSTOMER,
+    userId?: string,
+    vendorId?: string
+  ) {
+    const invoice = await this.subscriptionInvoiceRepository.findOne({ 
+      where: { id: invoiceId },
+      relations: ['subscription']
+    });
     if (!invoice) throw new NotFoundException('Không tìm thấy subscription invoice');
     if (invoice.status !== SubscriptionInvoiceStatus.PENDING) throw new BadRequestException('Invoice không hợp lệ');
+
+    // Validate payerType và thông tin tương ứng
+    if (payerType === PayerType.CUSTOMER && !userId) {
+      throw new BadRequestException('userId là bắt buộc khi payerType là CUSTOMER');
+    }
+    if (payerType === PayerType.VENDOR && !vendorId) {
+      throw new BadRequestException('vendorId là bắt buộc khi payerType là VENDOR');
+    }
+
+    // Cập nhật payerType cho invoice
+    invoice.payerType = payerType;
+    await this.subscriptionInvoiceRepository.save(invoice);
 
     // Tạo payment record
     const payment = this.subscriptionPaymentRepository.create({
@@ -38,16 +65,22 @@ export class SubscriptionPaymentService {
       status: PaymentStatus.PENDING,
       type,
       paymentMethod: PaymentMethod.PAYOS,
+      payerType,
     });
     const savedPayment = await this.subscriptionPaymentRepository.save(payment);
+
+    // Tạo description dựa trên payerType
+    const payerDescription = payerType === PayerType.CUSTOMER 
+      ? `Thanh toán subscription invoice ${invoice.id} - Khách hàng`
+      : `Thanh toán subscription invoice ${invoice.id} - Nhà cung cấp`;
 
     // Gọi PayOS để tạo link thanh toán
     const payosResult = await this.payosService.createPaymentLink({
       orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)), // Convert UUID to number
       amount: invoice.payablePrice,
-      description: `Thanh toán subscription invoice ${invoice.id}`,
-      cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}`,
-      returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}`,
+      description: payerDescription,
+      cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+      returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
     });
 
     // Lưu paymentOSId vào payment
@@ -57,12 +90,15 @@ export class SubscriptionPaymentService {
     return {
       paymentLink: payosResult.data?.checkoutUrl || payosResult.checkoutUrl,
       paymentId: savedPayment.id,
+      payerType: savedPayment.payerType,
+      invoiceId: invoice.id,
+      amount: invoice.payablePrice,
     };
   }
 
   async handlePayOSCallback(callbackData: SubscriptionPaymentCallbackDto) {
 
-    const { orderCode, status, subscriptionPaymentId, cancel, userId } = callbackData;
+    const { orderCode, status, subscriptionPaymentId, cancel, userId, vendorId, payerType } = callbackData;
 
     // Tìm payment theo subscriptionPaymentId hoặc orderCode
     let payment;
@@ -71,9 +107,10 @@ export class SubscriptionPaymentService {
         where: { id: subscriptionPaymentId },
         relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
-    } else {
+    } else if (orderCode) {
+      // Tìm payment theo paymentOSId (orderCode từ PayOS)
       payment = await this.subscriptionPaymentRepository.findOne({
-        where: { id: orderCode.toString() },
+        where: { paymentOSId: orderCode.toString() },
         relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
     }
@@ -131,13 +168,15 @@ export class SubscriptionPaymentService {
         amount: payment.amount,
         paymentType: payment.type,
         paymentMethod: payment.paymentMethod,
+        payerType: payment.payerType,
         transactionId: payment.transactionId,
         paymentOSId: payment.paymentOSId,
         status: payment.status,
         isCancelled: cancel || false,
         payosStatus: status,
         timestamp: new Date().toISOString(),
-      }
+      },
+      payment.payerType
     );
 
     // Nếu thanh toán thành công, cập nhật subscription
@@ -148,10 +187,11 @@ export class SubscriptionPaymentService {
       subscription.status = SubscriptionStatus.ACTIVE;
       subscription.lastBilledAt = new Date();
       
-      // Tự động assign user nếu có userId từ callback và subscription chưa có userId
-      if (userId && !subscription.userId) {
-        subscription.userId = userId;
-      }
+        // Tự động assign user/vendor dựa trên payerType
+        if (payerType === PayerType.CUSTOMER && userId && !subscription.userId) {
+          subscription.userId = userId;
+        }
+        // Note: Vendor assignment được xử lý qua SubscriptionVendor entity
       
       // Tính next billing date dựa trên billing cycle
       const nextBillingDate = new Date();
@@ -179,32 +219,33 @@ export class SubscriptionPaymentService {
 
         // Tự động assign user với subscription nếu là lần thanh toán đầu tiên
         if (!isRenewal) {
-          // Tạo history record cho việc assign user
-          await this.subscriptionHistoryService.createHistory(
-            subscription.id,
-            SubscriptionHistoryAction.ACTIVATED,
-            `Kích hoạt và assign user với subscription`,
-            {
-              subscriptionId: subscription.id,
-              userId: subscription.userId,
-              vendorId: subscription.vendorId,
-              planId: plan.id,
-              planName: plan.name,
-              planDuration: plan.duration,
-              planPrice: plan.price,
-              startDate: subscription.startDate.toISOString(),
-              endDate: newEndDate.toISOString(),
-              billingCycle: subscription.billingCycle,
-              status: subscription.status,
-              paymentId: payment.id,
-              invoiceId: invoice.id,
-              amount: payment.amount,
-              timestamp: new Date().toISOString(),
-              action: 'user_assignment',
-              isFirstPayment: true,
-              assignedUserId: userId || subscription.userId,
-            }
-          );
+                  // Tạo history record cho việc assign user
+        await this.subscriptionHistoryService.createHistory(
+          subscription.id,
+          SubscriptionHistoryAction.ACTIVATED,
+          `Kích hoạt và assign user với subscription`,
+          {
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            planId: plan.id,
+            planName: plan.name,
+            planDuration: plan.duration,
+            planPrice: plan.price,
+            startDate: subscription.startDate.toISOString(),
+            endDate: newEndDate.toISOString(),
+            billingCycle: subscription.billingCycle,
+            status: subscription.status,
+            paymentId: payment.id,
+            invoiceId: invoice.id,
+            amount: payment.amount,
+            payerType: payment.payerType,
+            timestamp: new Date().toISOString(),
+            action: 'user_assignment',
+            isFirstPayment: true,
+            assignedUserId: userId || subscription.userId,
+          },
+          payment.payerType
+        );
         } else {
           // Tạo history record cho gia hạn
           await this.subscriptionHistoryService.createHistory(
@@ -215,7 +256,6 @@ export class SubscriptionPaymentService {
               // Thông tin subscription
               subscriptionId: subscription.id,
               userId: subscription.userId,
-              vendorId: subscription.vendorId,
               
               // Thông tin plan
               planId: plan.id,
@@ -238,6 +278,7 @@ export class SubscriptionPaymentService {
               amount: payment.amount,
               paymentType: payment.type,
               paymentMethod: payment.paymentMethod,
+              payerType: payment.payerType,
               transactionId: payment.transactionId,
               paymentOSId: payment.paymentOSId,
               
@@ -245,12 +286,40 @@ export class SubscriptionPaymentService {
               timestamp: new Date().toISOString(),
               action: isRenewal ? SubscriptionHistoryAction.RENEWED : SubscriptionHistoryAction.ACTIVATED,
               isFirstPayment: !isRenewal,
-            }
+            },
+            payment.payerType
           );
         }
       }
 
       await this.subscriptionRepository.save(subscription);
+
+      // Gửi email thông báo thành công cho customer
+      if (payerType === PayerType.CUSTOMER && userId) {
+        try {
+          const customerEmail = await this.getUserEmail(userId);
+          const customerName = await this.getUserName(userId);
+          
+          await this.mailService.sendSubscriptionSuccessEmail(
+            customerEmail,
+            customerName,
+            {
+              subscriptionId: subscription.id,
+              planName: plan.name,
+              startDate: subscription.startDate,
+              endDate: subscription.endDate,
+              billingCycle: subscription.billingCycle,
+              status: subscription.status,
+              price: plan.price,
+              paymentMethod: payment.paymentMethod,
+              nextBillingDate: subscription.nextBillingAt,
+            }
+          );
+        } catch (error) {
+          this.logger.error(`Failed to send subscription success email: ${error.message}`);
+          // Không throw error để không ảnh hưởng đến flow thanh toán
+        }
+      }
     }
 
     return {
@@ -262,7 +331,82 @@ export class SubscriptionPaymentService {
       isRenewal: payment.type === PaymentType.RENEWAL,
       paymentStatus: payment.status,
       payosStatus: status,
-      userIdAssigned: userId || null,
+      payerType: payment.payerType,
+      userIdAssigned: payerType === PayerType.CUSTOMER ? (userId || null) : null,
+      vendorIdAssigned: payerType === PayerType.VENDOR ? (vendorId || null) : null,
     };
+  }
+
+  /**
+   * Xác định payerType dựa trên thông tin có sẵn
+   */
+  private determinePayerType(userId?: string, vendorId?: string): PayerType {
+    if (vendorId) {
+      return PayerType.VENDOR;
+    }
+    if (userId) {
+      return PayerType.CUSTOMER;
+    }
+    return PayerType.CUSTOMER; // Default
+  }
+
+  /**
+   * Validate thông tin payer
+   */
+  private validatePayerInfo(payerType: PayerType, userId?: string, vendorId?: string): void {
+    if (payerType === PayerType.CUSTOMER && !userId) {
+      throw new BadRequestException('userId là bắt buộc khi payerType là CUSTOMER');
+    }
+    if (payerType === PayerType.VENDOR && !vendorId) {
+      throw new BadRequestException('vendorId là bắt buộc khi payerType là VENDOR');
+    }
+  }
+
+  /**
+   * Lấy thông tin user email
+   */
+  private async getUserEmail(userId: string): Promise<string> {
+    try {
+      const user = await this.userService.findOne(userId);
+      return user.email;
+    } catch (error) {
+      this.logger.error(`Failed to get user email for userId ${userId}: ${error.message}`);
+      return 'customer@example.com'; // Fallback email
+    }
+  }
+
+  /**
+   * Lấy tên user
+   */
+  private async getUserName(userId: string): Promise<string> {
+    try {
+      const user = await this.userService.findOne(userId);
+      return user.fullName || user.email;
+    } catch (error) {
+      this.logger.error(`Failed to get user name for userId ${userId}: ${error.message}`);
+      return 'Khách hàng'; // Fallback name
+    }
+  }
+
+  async getPaymentById(paymentId: string) {
+    const payment = await this.subscriptionPaymentRepository.findOne({
+      where: { id: paymentId },
+      relations: ['subscriptionInvoice']
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    return payment;
+  }
+
+  async getInvoicePayments(invoiceId: string) {
+    const payments = await this.subscriptionPaymentRepository.find({
+      where: { subscriptionInvoiceId: invoiceId },
+      order: { createdAt: 'DESC' }
+    });
+
+    return payments;
   }
 } 

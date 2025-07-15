@@ -21,7 +21,7 @@ export class CreateSubscriptionPlanDto {
   @IsBoolean()
   @IsOptional()
   @ApiProperty({ description: 'Trạng thái hoạt động', default: true })
-  isActive?: boolean;
+  isActive?: boolean = true;
 }
 
 export class UpdateSubscriptionPlanDto {

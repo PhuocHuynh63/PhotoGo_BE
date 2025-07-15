@@ -1,28 +1,36 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { SubscriptionService } from './subscription.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { FindSubscriptionDto } from './dto/find-subscription.dto';
 import { Subscription } from './entities/subscription.entity';
+import { SubscriptionInvoice } from './entities/subscription-invoice.entity';
 import { Public } from 'src/decorator/custom';
 import { SubscriptionPaymentService } from './subscription-payment.service';
 import { SubscriptionInvoiceStatus } from '../../constants/subscription.enum';
 import { SubscriptionPlanService } from './subscription-plan.service';
 import { SubscriptionPaymentCallbackDto } from './dto/subscription-payment-callback.dto';
+import { CreatePaymentLinkDto } from './dto/create-payment-link.dto';
 import { SubscriptionStatus } from '../../constants/subscription.enum';
-import { PaymentType } from '../../constants/payment.enum';
+import { PaymentType, PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
+import { UserService } from '../users/user.service';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
 @ApiBearerAuth('access-token')
 export class SubscriptionController {
   constructor(
+    @InjectRepository(SubscriptionInvoice)
+    private readonly subscriptionInvoiceRepository: Repository<SubscriptionInvoice>,
     private readonly subscriptionService: SubscriptionService,
     private readonly subscriptionPaymentService: SubscriptionPaymentService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
+    // private readonly userService: UserService,
   ) {}
 
   @Post()
@@ -33,8 +41,21 @@ export class SubscriptionController {
     return this.subscriptionService.create(createSubscriptionDto);
   }
 
+  @Post('create-payment-link')
+  @ApiOperation({ summary: 'Tạo link thanh toán cho subscription invoice' })
+  @ApiResponse({ status: 201, description: 'Tạo thành công' })
+  createPaymentLink(@Body() createPaymentLinkDto: CreatePaymentLinkDto) {
+    return this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
+      createPaymentLinkDto.invoiceId,
+      createPaymentLinkDto.type,
+      createPaymentLinkDto.payerType,
+      createPaymentLinkDto.userId,
+      createPaymentLinkDto.vendorId
+    );
+  }
+
   @Post('pay')
-  @ApiOperation({ summary: 'Tạo link thanh toán PayOS cho subscription' })
+  @ApiOperation({ summary: 'Tạo link thanh toán PayOS cho subscription (legacy)' })
   async createPayOSLink(@Body() body: { userId: string; subscriptionId: string }) {
     const { userId, subscriptionId } = body;
     
@@ -47,25 +68,29 @@ export class SubscriptionController {
     if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
 
     // Tạo invoice mới
-    const invoiceRepo = (this as any).subscriptionPaymentService['subscriptionInvoiceRepository'];
-    let invoice = await invoiceRepo.findOne({ where: { subscriptionId, status: SubscriptionInvoiceStatus.PENDING } });
+    let invoice = await this.subscriptionInvoiceRepository.findOne({ where: { subscriptionId, status: SubscriptionInvoiceStatus.PENDING } });
     if (!invoice) {
-      invoice = invoiceRepo.create({
+      invoice = this.subscriptionInvoiceRepository.create({
         subscriptionId,
         payablePrice: plan.price,
         status: SubscriptionInvoiceStatus.PENDING,
       });
-      invoice = await invoiceRepo.save(invoice);
+      invoice = await this.subscriptionInvoiceRepository.save(invoice);
     }
 
-    // Tạo link thanh toán
-    const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(invoice.id);
+    // Tạo link thanh toán với payerType mặc định là CUSTOMER
+    const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
+      invoice.id,
+      PaymentType.FULL_PAYMENT,
+      PayerType.CUSTOMER,
+      userId
+    );
     return result;
   }
 
   @Post('payos-callback')
   @Public()
-  @ApiOperation({ summary: 'Callback từ PayOS sau khi thanh toán' })
+  @ApiOperation({ summary: 'Callback từ PayOS sau khi thanh toán (legacy)' })
   async handlePayOSCallback(
     @Query() query: { subscriptionPaymentId: string },
     @Body() callbackData: SubscriptionPaymentCallbackDto
@@ -74,6 +99,44 @@ export class SubscriptionController {
       ...callbackData,
       subscriptionPaymentId: query.subscriptionPaymentId
     });
+  }
+
+  @Post('payment-callback')
+  @Public()
+  @ApiOperation({ summary: 'Callback từ PayOS sau khi thanh toán' })
+  @ApiResponse({ status: 200, description: 'Xử lý thành công' })
+  handlePaymentCallback(@Body() callbackData: SubscriptionPaymentCallbackDto) {
+    return this.subscriptionPaymentService.handlePayOSCallback(callbackData);
+  }
+
+  @Get('payment/:paymentId/status')
+  @ApiOperation({ summary: 'Kiểm tra trạng thái thanh toán' })
+  @ApiParam({ name: 'paymentId', description: 'ID của payment' })
+  @ApiResponse({ status: 200, description: 'Thành công' })
+  async getPaymentStatus(@Param('paymentId') paymentId: string) {
+    const payment = await this.subscriptionPaymentService.getPaymentById(paymentId);
+    return {
+      paymentId,
+      status: payment.status,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      payerType: payment.payerType,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt
+    };
+  }
+
+  @Get('invoice/:invoiceId/payments')
+  @ApiOperation({ summary: 'Lấy danh sách payments của invoice' })
+  @ApiParam({ name: 'invoiceId', description: 'ID của invoice' })
+  @ApiResponse({ status: 200, description: 'Thành công' })
+  async getInvoicePayments(@Param('invoiceId') invoiceId: string) {
+    const payments = await this.subscriptionPaymentService.getInvoicePayments(invoiceId);
+    return { 
+      invoiceId, 
+      payments: payments,
+      totalPayments: payments.length
+    };
   }
 
   @Post(':id/renew')
@@ -89,8 +152,7 @@ export class SubscriptionController {
     }
 
     // Kiểm tra xem có invoice pending nào không
-    const invoiceRepo = (this as any).subscriptionPaymentService['subscriptionInvoiceRepository'];
-    const pendingInvoice = await invoiceRepo.findOne({ 
+    const pendingInvoice = await this.subscriptionInvoiceRepository.findOne({ 
       where: { subscriptionId: id, status: SubscriptionInvoiceStatus.PENDING } 
     });
     
@@ -103,12 +165,12 @@ export class SubscriptionController {
     if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
 
     // Tạo invoice mới cho gia hạn
-    const invoice = invoiceRepo.create({
+    const invoice = this.subscriptionInvoiceRepository.create({
       subscriptionId: id,
       payablePrice: plan.price,
       status: SubscriptionInvoiceStatus.PENDING,
     });
-    const savedInvoice = await invoiceRepo.save(invoice);
+    const savedInvoice = await this.subscriptionInvoiceRepository.save(invoice);
 
     // Tạo link thanh toán cho gia hạn
     const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
