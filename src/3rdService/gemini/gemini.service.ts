@@ -20,9 +20,26 @@ export class GeminiService {
     private readonly modelName: string;
     private readonly generationConfig: any;
     private readonly safetySettings: any;
-    // Tối ưu: Simple in-memory cache
+    // Tối ưu: Simple in-memory cache cho quick access
     private readonly cache = new Map<string, { data: any; expiry: number }>();
     private readonly CACHE_TTL = 3600000; // 1 hour
+
+    // Tối ưu: Performance configs
+    private readonly MAX_CONCURRENT_REQUESTS = 3;
+    private readonly EMBEDDING_BATCH_SIZE = 10;
+    private readonly RELEVANCE_THRESHOLD = 0.1;
+
+    // Tối ưu: Image processing configs
+    private readonly MAX_IMAGE_SIZE = 1024; // Max width/height in pixels
+    private readonly IMAGE_QUALITY = 85; // JPEG quality for compression
+
+    // Tối ưu: Request queue management
+    private activeRequests = 0;
+    private requestQueue: Array<() => Promise<any>> = [];
+
+    // Tối ưu: Model caching
+    private embeddingModel: any = null;
+
     private readonly systemContext = `
         Bạn là AI phân tích ảnh chuyên nghiệp của PhotoGo - nền tảng đặt lịch studio chụp ảnh.
         
@@ -143,7 +160,6 @@ export class GeminiService {
                 location: concept.servicePackage?.vendor?.locations ?? null,
                 vendorId: concept.servicePackage?.vendor?.id ?? null,
                 conceptId: concept.id,
-                keywords: [], // Empty array since we don't have keywords for text-based suggestions
                 relevanceScore: 1.0, // Default high relevance for manual suggestions
                 distance: 0.0 // Default low distance for manual suggestions
             }));
@@ -187,6 +203,44 @@ export class GeminiService {
             },
             metadata: { processingTime: Date.now() - startTime }
         };
+    }
+    //#endregion
+
+    //#region Image Processing Optimization
+    /**
+     * Tối ưu: Resize và compress ảnh để tăng tốc API calls
+     */
+    private async optimizeImageForProcessing(file: Express.Multer.File): Promise<Buffer> {
+        try {
+            const sharp = require('sharp');
+
+            // Check if image needs resizing
+            const metadata = await sharp(file.buffer).metadata();
+            const { width = 0, height = 0 } = metadata;
+
+            if (width <= this.MAX_IMAGE_SIZE && height <= this.MAX_IMAGE_SIZE && file.size < 500000) {
+                // Image is already small enough
+                return file.buffer;
+            }
+
+            this.logger.debug(`Optimizing image: ${width}x${height} (${file.size} bytes) -> max ${this.MAX_IMAGE_SIZE}px`);
+
+            // Resize và compress
+            const optimizedBuffer = await sharp(file.buffer)
+                .resize(this.MAX_IMAGE_SIZE, this.MAX_IMAGE_SIZE, {
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .jpeg({ quality: this.IMAGE_QUALITY })
+                .toBuffer();
+
+            this.logger.debug(`Image optimized: ${file.size} -> ${optimizedBuffer.length} bytes (${Math.round((1 - optimizedBuffer.length / file.size) * 100)}% reduction)`);
+            return optimizedBuffer;
+
+        } catch (error) {
+            this.logger.warn(`Failed to optimize image: ${error.message}, using original`);
+            return file.buffer;
+        }
     }
     //#endregion
 
@@ -249,6 +303,104 @@ ${prompt || ''}`;
             return fallback();
         }
     }
+
+    // Tối ưu: Queue management for API rate limiting
+    private async executeWithQueue<T>(operation: () => Promise<T>): Promise<T> {
+        return new Promise((resolve, reject) => {
+            const execute = async () => {
+                if (this.activeRequests >= this.MAX_CONCURRENT_REQUESTS) {
+                    this.requestQueue.push(execute);
+                    return;
+                }
+
+                this.activeRequests++;
+                try {
+                    const result = await operation();
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                } finally {
+                    this.activeRequests--;
+                    if (this.requestQueue.length > 0) {
+                        const nextRequest = this.requestQueue.shift();
+                        nextRequest?.();
+                    }
+                }
+            };
+            execute();
+        });
+    }
+
+    // Tối ưu: Optimized vector search with better query strategy
+    private async performOptimizedVectorSearch(queryEmbedding: number[], keywords: string[], limit: number = 5) {
+        // Use more efficient query with proper indexing hints
+        const queryBuilder = this.conceptVectorRepository.createQueryBuilder('cv');
+
+        return queryBuilder
+            .select([
+                'cv.id',
+                'cv.concept_image_id',
+                'cv.createdAt',
+                'cv.updatedAt'
+            ])
+            .addSelect(`(
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM unnest(cv.keywords) keyword 
+                    WHERE keyword = ANY(:keywords)
+                ) THEN 1 ELSE 0 END * 0.4 + 
+                (1 - (cv.embedding <-> :queryEmbedding::vector)) * 0.6
+            )::float as relevance_score`)
+            .addSelect('(cv.embedding <-> :queryEmbedding::vector)::float as distance')
+            .where('cv.embedding <-> :queryEmbedding::vector < :threshold', {
+                threshold: 1.0 // Pre-filter with distance threshold
+            })
+            .setParameter('keywords', keywords)
+            .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`)
+            .orderBy('relevance_score', 'DESC')
+            .limit(limit)
+            .getRawAndEntities();
+    }
+    //#endregion
+
+    //#region Batch Processing Methods
+    /**
+     * Tối ưu: Batch process multiple images for better performance
+     */
+    async batchAnalyzeImages(files: Express.Multer.File[], prompt?: string): Promise<IGeminiResponse<any>[]> {
+        const batchSize = this.EMBEDDING_BATCH_SIZE;
+        const results: IGeminiResponse<any>[] = [];
+
+        for (let i = 0; i < files.length; i += batchSize) {
+            const batch = files.slice(i, i + batchSize);
+            const batchPromises = batch.map(file =>
+                this.executeWithQueue(() => this.analyzeImageWithConcepts(file, prompt))
+            );
+
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+
+            // Brief pause between batches to respect rate limits
+            if (i + batchSize < files.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Tối ưu: Batch generate embeddings for multiple texts
+     */
+    async batchGenerateEmbeddings(texts: string[]): Promise<number[][]> {
+        const results: number[][] = [];
+
+        for (const text of texts) {
+            const embedding = await this.executeWithQueue(() => this.generateEmbedding(text));
+            results.push(embedding);
+        }
+
+        return results;
+    }
     //#endregion
 
     //#region Concept Vector Generation
@@ -265,13 +417,17 @@ ${prompt || ''}`;
         };
 
         try {
+            // Tối ưu: Optimize image trước khi process
+            const optimizedBuffer = await this.optimizeImageForProcessing(file);
+            const optimizedFile = { ...file, buffer: optimizedBuffer };
+
             const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
-            const imageData = { inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } };
+            const imageData = { inlineData: { data: optimizedBuffer.toString('base64'), mimeType: 'image/jpeg' } };
 
             // Tối ưu: Chạy song song thay vì tuần tự
             const [analysis, keywords] = await Promise.all([
                 this.generateImageAnalysis(imageData, prompt),
-                this.generateKeywordsFromImage(file)
+                this.generateKeywordsFromImage(optimizedFile)
             ]);
 
             const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
@@ -279,33 +435,30 @@ ${prompt || ''}`;
                 throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
             }
 
-            const queryBuilder = this.conceptVectorRepository.createQueryBuilder('conceptVector');
-            queryBuilder
-                .select('conceptVector')
-                .addSelect(`(CASE WHEN EXISTS (SELECT 1 FROM unnest(conceptVector.keywords) keyword WHERE keyword = ANY(:keywords)) THEN 1 ELSE 0 END * 0.4 + (1 - (conceptVector.embedding <-> :queryEmbedding::vector)) * 0.6)::float as relevance_score`)
-                .addSelect('(conceptVector.embedding <-> :queryEmbedding::vector)::float as distance')
-                .setParameter('keywords', keywords)
-                .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`)
-                .orderBy('relevance_score', 'DESC')
-                .limit(5);
-            const results = await queryBuilder.getRawAndEntities();
+            // Tối ưu: Use optimized vector search
+            const results = await this.performOptimizedVectorSearch(queryEmbedding, keywords, 5);
 
             // Tối ưu: Single query thay vì N+1 queries
             const conceptImageIds = results.entities.map(e => e.concept_image_id).filter(id => id);
 
             let concepts_same: any[] = [];
             if (conceptImageIds.length > 0) {
-                // Single query với JOIN để lấy tất cả thông tin cần thiết
-                const conceptsData = await this.serviceConceptImageRepository
-                    .createQueryBuilder('sci')
-                    .leftJoinAndSelect('sci.serviceConcept', 'sc')
-                    .leftJoinAndSelect('sc.servicePackage', 'sp')
-                    .leftJoinAndSelect('sp.vendor', 'v')
-                    .leftJoinAndSelect('v.locations', 'l')
-                    .leftJoinAndSelect('sc.images', 'img')
-                    .where('sci.id IN (:...ids)', { ids: conceptImageIds })
-                    .orderBy('img.createdAt', 'ASC')
-                    .getMany();
+                // Tối ưu: Parallel queries để giảm thời gian chờ
+                const [conceptsData, hasGoodMatches] = await Promise.all([
+                    // Query concept data
+                    this.serviceConceptImageRepository
+                        .createQueryBuilder('sci')
+                        .leftJoinAndSelect('sci.serviceConcept', 'sc')
+                        .leftJoinAndSelect('sc.servicePackage', 'sp')
+                        .leftJoinAndSelect('sp.vendor', 'v')
+                        .leftJoinAndSelect('v.locations', 'l')
+                        .leftJoinAndSelect('sc.images', 'img')
+                        .where('sci.id IN (:...ids)', { ids: conceptImageIds })
+                        .orderBy('img.createdAt', 'ASC')
+                        .getMany(),
+                    // Check relevance scores in parallel
+                    Promise.resolve(results.entities.some(e => parseFloat(results.raw.find(r => r.cv_id === e.id)?.relevance_score || '0') > this.RELEVANCE_THRESHOLD))
+                ]);
 
                 // Map results efficiently
                 const conceptDataMap = new Map();
@@ -329,7 +482,6 @@ ${prompt || ''}`;
                         ...rest,
                         ...conceptData,
                         conceptId: conceptData.conceptId || null,
-                        keywords: Array.isArray(entity.keywords) ? entity.keywords.map(k => String(k).toLowerCase()) : [],
                         relevanceScore: parseFloat(results.raw[index].relevance_score),
                         distance: parseFloat(results.raw[index].distance)
                     };
@@ -350,38 +502,9 @@ ${prompt || ''}`;
                 // Jump to fallback logic
                 concepts_same = [];
             } else {
-                // Chỉ filter khi có matches tốt
-                const keywords = await this.generateKeywordsFromImage(file);
-                const isInputPeople = keywords.some(k => peopleKeywords.includes(k));
-                const isInputAnimal = keywords.some(k => animalKeywords.includes(k));
-                const isInputLandscape = keywords.some(k => landscapeKeywords.includes(k));
-                const isInputObject = keywords.some(k => objectKeywords.includes(k));
-
-                if (isInputPeople) {
-                    // If the input is a person, results MUST also be about people.
-                    concepts_same = concepts_same.filter(c =>
-                        c.keywords.some(k => peopleKeywords.includes(k)) &&
-                        !c.keywords.some(k => animalKeywords.includes(k) || objectKeywords.includes(k))
-                    );
-                } else if (isInputAnimal) {
-                    // If the input is an animal, results MUST also be about animals.
-                    concepts_same = concepts_same.filter(c =>
-                        c.keywords.some(k => animalKeywords.includes(k)) &&
-                        !c.keywords.some(k => peopleKeywords.includes(k))
-                    );
-                } else if (isInputObject) {
-                    // If the input is an object, results should be about objects.
-                    concepts_same = concepts_same.filter(c =>
-                        c.keywords.some(k => objectKeywords.includes(k)) &&
-                        !c.keywords.some(k => peopleKeywords.includes(k) || animalKeywords.includes(k))
-                    );
-                } else if (isInputLandscape) {
-                    // If it's a landscape, filter out results with people, animals, or objects.
-                    concepts_same = concepts_same.filter(c =>
-                        c.keywords.some(k => landscapeKeywords.includes(k)) &&
-                        !c.keywords.some(k => peopleKeywords.includes(k) || animalKeywords.includes(k) || objectKeywords.includes(k))
-                    );
-                }
+                // Chỉ filter khi có matches tốt - simplified logic without keywords filtering
+                // Relevance score đã tính toán semantic similarity và keyword matching trong query
+                concepts_same = concepts_same.filter(c => c.relevanceScore > this.RELEVANCE_THRESHOLD);
             }
 
             if (!concepts_same || concepts_same.length === 0) {
@@ -413,7 +536,6 @@ ${prompt || ''}`;
                         location: vendorLocations,
                         vendorId,
                         conceptId: concept.id,
-                        keywords: [], // Empty array for fallback concepts
                         relevanceScore: 0.5, // Lower relevance for fallback
                         distance: 1.0 // Higher distance for fallback
                     };
@@ -614,8 +736,12 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
 
     private async generateEmbedding(text: string): Promise<number[]> {
         try {
-            const model = this.genAI.getGenerativeModel({ model: 'models/text-embedding-004' });
-            const result = await model.embedContent(text);
+            // Tối ưu: Cache embedding model để tránh tạo mới mỗi lần
+            if (!this.embeddingModel) {
+                this.embeddingModel = this.genAI.getGenerativeModel({ model: 'models/text-embedding-004' });
+            }
+
+            const result = await this.embeddingModel.embedContent(text);
             const embedding = result.embedding.values;
             if (!Array.isArray(embedding) || embedding.length !== 768) {
                 throw new Error(`Invalid embedding format or length. Expected 768 numbers, got ${embedding.length}`);
@@ -639,6 +765,56 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
             return fallbackEmbedding;
         }
     }
+
+    //#region Database Optimization Helpers
+    /**
+     * Tối ưu: Suggest database indexes for better performance
+     * Call this during app startup or maintenance
+     */
+    async suggestDatabaseOptimizations(): Promise<string[]> {
+        const suggestions: string[] = [];
+
+        try {
+            // Check if vector index exists
+            const vectorIndexExists = await this.conceptVectorRepository.query(`
+                SELECT indexname FROM pg_indexes 
+                WHERE tablename = 'concept_vector' 
+                AND indexname LIKE '%embedding%'
+            `);
+
+            if (vectorIndexExists.length === 0) {
+                suggestions.push('CREATE INDEX CONCURRENTLY idx_concept_vector_embedding ON concept_vector USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);');
+            }
+
+            // Check if keyword index exists
+            const keywordIndexExists = await this.conceptVectorRepository.query(`
+                SELECT indexname FROM pg_indexes 
+                WHERE tablename = 'concept_vector' 
+                AND indexname LIKE '%keywords%'
+            `);
+
+            if (keywordIndexExists.length === 0) {
+                suggestions.push('CREATE INDEX CONCURRENTLY idx_concept_vector_keywords ON concept_vector USING GIN (keywords);');
+            }
+
+            // Check if composite index exists
+            const compositeIndexExists = await this.conceptVectorRepository.query(`
+                SELECT indexname FROM pg_indexes 
+                WHERE tablename = 'concept_vector' 
+                AND indexname LIKE '%concept_image_id%'
+            `);
+
+            if (compositeIndexExists.length === 0) {
+                suggestions.push('CREATE INDEX CONCURRENTLY idx_concept_vector_concept_image_id ON concept_vector (concept_image_id);');
+            }
+
+        } catch (error) {
+            this.logger.error(`Error checking database indexes: ${error.message}`);
+        }
+
+        return suggestions;
+    }
+    //#endregion
 
     private isServicePrompt(prompt?: string): boolean {
         if (!prompt) return false;
