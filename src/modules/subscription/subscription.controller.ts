@@ -46,47 +46,47 @@ export class SubscriptionController {
   @ApiResponse({ status: 201, description: 'Tạo thành công' })
   createPaymentLink(@Body() createPaymentLinkDto: CreatePaymentLinkDto) {
     return this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
-      createPaymentLinkDto.invoiceId,
+      createPaymentLinkDto.planId,
       createPaymentLinkDto.type,
-      createPaymentLinkDto.payerType,
+      // createPaymentLinkDto.payerType,
       createPaymentLinkDto.userId,
-      createPaymentLinkDto.vendorId
+      // createPaymentLinkDto.vendorId
     );
   }
 
-  @Post('pay')
-  @ApiOperation({ summary: 'Tạo link thanh toán PayOS cho subscription (legacy)' })
-  async createPayOSLink(@Body() body: { userId: string; subscriptionId: string }) {
-    const { userId, subscriptionId } = body;
+  // @Post('pay')
+  // @ApiOperation({ summary: 'Tạo link thanh toán PayOS cho subscription (legacy)' })
+  // async createPayOSLink(@Body() body: { userId: string; subscriptionId: string }) {
+  //   const { userId, subscriptionId } = body;
     
-    // Lấy subscription
-    const subscription = await this.subscriptionService.findOne(subscriptionId);
-    if (!subscription) throw new NotFoundException('Không tìm thấy subscription');
+  //   // Lấy subscription
+  //   const subscription = await this.subscriptionService.findOne(subscriptionId);
+  //   if (!subscription) throw new NotFoundException('Không tìm thấy subscription');
 
-    // Lấy plan để lấy giá
-    const plan = await this.subscriptionPlanService.findOne(subscription.planId);
-    if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
+  //   // Lấy plan để lấy giá
+  //   const plan = await this.subscriptionPlanService.findOne(subscription.planId);
+  //   if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
 
-    // Tạo invoice mới
-    let invoice = await this.subscriptionInvoiceRepository.findOne({ where: { subscriptionId, status: SubscriptionInvoiceStatus.PENDING } });
-    if (!invoice) {
-      invoice = this.subscriptionInvoiceRepository.create({
-        subscriptionId,
-        payablePrice: plan.price,
-        status: SubscriptionInvoiceStatus.PENDING,
-      });
-      invoice = await this.subscriptionInvoiceRepository.save(invoice);
-    }
+  //   // Tạo invoice mới
+  //   let invoice = await this.subscriptionInvoiceRepository.findOne({ where: { subscriptionId, status: SubscriptionInvoiceStatus.PENDING } });
+  //   if (!invoice) {
+  //     invoice = this.subscriptionInvoiceRepository.create({
+  //       subscriptionId,
+  //       payablePrice: plan.price,
+  //       status: SubscriptionInvoiceStatus.PENDING,
+  //     });
+  //     invoice = await this.subscriptionInvoiceRepository.save(invoice);
+  //   }
 
-    // Tạo link thanh toán với payerType mặc định là CUSTOMER
-    const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
-      invoice.id,
-      PaymentType.FULL_PAYMENT,
-      PayerType.CUSTOMER,
-      userId
-    );
-    return result;
-  }
+  //   // Tạo link thanh toán với payerType mặc định là CUSTOMER
+  //   const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
+  //     invoice.id,
+  //     PaymentType.FULL_PAYMENT,
+  //     // PayerType.CUSTOMER,
+  //     userId
+  //   );
+  //   return result;
+  // }
 
   @Post('payos-callback')
   @Public()
@@ -101,13 +101,13 @@ export class SubscriptionController {
     });
   }
 
-  @Post('payment-callback')
-  @Public()
-  @ApiOperation({ summary: 'Callback từ PayOS sau khi thanh toán' })
-  @ApiResponse({ status: 200, description: 'Xử lý thành công' })
-  handlePaymentCallback(@Body() callbackData: SubscriptionPaymentCallbackDto) {
-    return this.subscriptionPaymentService.handlePayOSCallback(callbackData);
-  }
+  // @Post('payment-callback')
+  // @Public()
+  // @ApiOperation({ summary: 'Callback từ PayOS sau khi thanh toán' })
+  // @ApiResponse({ status: 200, description: 'Xử lý thành công' })
+  // handlePaymentCallback(@Body() callbackData: SubscriptionPaymentCallbackDto) {
+  //   return this.subscriptionPaymentService.handlePayOSCallback(callbackData);
+  // }
 
   @Get('payment/:paymentId/status')
   @ApiOperation({ summary: 'Kiểm tra trạng thái thanh toán' })

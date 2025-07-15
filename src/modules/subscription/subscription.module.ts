@@ -17,6 +17,7 @@ import { SubscriptionHistoryService } from './subscription-history.service';
 import { PayosModule } from '../../3rdService/payos/payos.module';
 import { MailModule } from '../../3rdService/mail/mail.module';
 import { UserModule } from '../users/user.module';
+import { VendorModule } from '../vendors/vendor.module';
 
 @Module({
   imports: [
@@ -30,15 +31,17 @@ import { UserModule } from '../users/user.module';
     ]),
     PayosModule,
     MailModule,
-    UserModule
+    UserModule,
+    VendorModule,
   ],
   controllers: [SubscriptionController, SubscriptionPlanController, SubscriptionVendorController],
   providers: [
     SubscriptionService,
     SubscriptionPlanService,
-    SubscriptionVendorService,
+    SubscriptionHistoryService,
     SubscriptionPaymentService,
-    SubscriptionHistoryService
+    SubscriptionVendorService,
+    SubscriptionHistoryService,
   ],
   exports: [SubscriptionService, SubscriptionPlanService, SubscriptionVendorService, SubscriptionPaymentService, SubscriptionHistoryService]
 })

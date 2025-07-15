@@ -13,6 +13,9 @@ import { SubscriptionHistoryService } from './subscription-history.service';
 import { SubscriptionHistoryAction } from '../../constants/subscription.enum';
 import { MailService } from '../../3rdService/mail/mail.service';
 import { UserService } from '../users/user.service';
+import { VendorService } from '../vendors/vendor.service';
+import { SubscriptionPlan } from './entities/subscription-plan.entity';
+import { Role } from '../roles/entities/role.entity';
 
 @Injectable()
 export class SubscriptionPaymentService {
@@ -25,39 +28,55 @@ export class SubscriptionPaymentService {
     private readonly subscriptionPaymentRepository: Repository<SubscriptionPayment>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(SubscriptionPlan)
+    private readonly subscriptionPlanRepository: Repository<SubscriptionPlan>,
     private readonly payosService: PayOSService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly mailService: MailService,
     private readonly userService: UserService,
+    private readonly vendorService: VendorService,
   ) {}
 
   async createPayOSLinkForSubscriptionInvoice(
-    invoiceId: string, 
+    planId: string, 
     type: PaymentType = PaymentType.FULL_PAYMENT,
-    payerType: PayerType = PayerType.CUSTOMER,
     userId?: string,
-    vendorId?: string
+    // vendorId?: string
   ) {
-    const invoice = await this.subscriptionInvoiceRepository.findOne({ 
-      where: { id: invoiceId },
+    const plan = await this.subscriptionPlanRepository.findOne({ 
+      where: { id: planId },
       relations: ['subscription']
     });
-    if (!invoice) throw new NotFoundException('Không tìm thấy subscription invoice');
-    if (invoice.status !== SubscriptionInvoiceStatus.PENDING) throw new BadRequestException('Invoice không hợp lệ');
+    if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
+    if (plan.isActive !== true) throw new BadRequestException('Plan không hợp lệ');
+
+    // Xác định payerType dựa vào check role của user
+    let payerType: PayerType;
+    if (userId) {
+      const user = await this.userService.findOne(userId);
+      if (user.role.name === 'vendor-owner') payerType = PayerType.VENDOR;
+      else payerType = PayerType.CUSTOMER;
+    }
+    else throw new BadRequestException('Phải truyền userId hoặc vendorId');
 
     // Validate payerType và thông tin tương ứng
     if (payerType === PayerType.CUSTOMER && !userId) {
       throw new BadRequestException('userId là bắt buộc khi payerType là CUSTOMER');
     }
-    if (payerType === PayerType.VENDOR && !vendorId) {
-      throw new BadRequestException('vendorId là bắt buộc khi payerType là VENDOR');
-    }
+    // if (payerType === PayerType.VENDOR && !vendorId) {
+    //   throw new BadRequestException('vendorId là bắt buộc khi payerType là VENDOR');
+    // }
 
-    // Cập nhật payerType cho invoice
-    invoice.payerType = payerType;
+    // Tạo subscription invoice
+    const invoice = this.subscriptionInvoiceRepository.create({
+      subscriptionId: plan.subscriptions[0].id,
+      payablePrice: plan.price,
+      status: SubscriptionInvoiceStatus.PENDING,
+      payerType,
+    });
     await this.subscriptionInvoiceRepository.save(invoice);
-
+    
     // Tạo payment record
     const payment = this.subscriptionPaymentRepository.create({
       subscriptionInvoiceId: invoice.id,
@@ -68,6 +87,24 @@ export class SubscriptionPaymentService {
       payerType,
     });
     const savedPayment = await this.subscriptionPaymentRepository.save(payment);
+
+    // Lưu history cho việc tạo payment
+    await this.subscriptionHistoryService.createHistory(
+      invoice.subscriptionId,
+      SubscriptionHistoryAction.CREATED,
+      'Tạo payment chờ thanh toán',
+      {
+        paymentId: savedPayment.id,
+        invoiceId: invoice.id,
+        amount: savedPayment.amount,
+        payerType,
+        status: savedPayment.status,
+        paymentMethod: savedPayment.paymentMethod,
+        timestamp: new Date().toISOString(),
+        action: 'chờ thanh toán',
+      },
+      payerType
+    );
 
     // Tạo description dựa trên payerType
     const payerDescription = payerType === PayerType.CUSTOMER 
@@ -299,7 +336,6 @@ export class SubscriptionPaymentService {
         try {
           const customerEmail = await this.getUserEmail(userId);
           const customerName = await this.getUserName(userId);
-          
           await this.mailService.sendSubscriptionSuccessEmail(
             customerEmail,
             customerName,
@@ -318,6 +354,32 @@ export class SubscriptionPaymentService {
         } catch (error) {
           this.logger.error(`Failed to send subscription success email: ${error.message}`);
           // Không throw error để không ảnh hưởng đến flow thanh toán
+        }
+      }
+      // Gửi email thông báo thành công cho vendor
+      if (payerType === PayerType.VENDOR && vendorId) {
+        try {
+          const vendor = await this.vendorService.findOne(vendorId);
+          const vendorUser = vendor.user_id;
+          const vendorEmail = vendorUser?.email || 'vendor@example.com';
+          const vendorName = vendorUser?.fullName || vendor.name || 'Nhà cung cấp';
+          await this.mailService.sendSubscriptionSuccessVendorEmail(
+            vendorEmail,
+            vendorName,
+            {
+              subscriptionId: subscription.id,
+              planName: plan.name,
+              startDate: subscription.startDate,
+              endDate: subscription.endDate,
+              billingCycle: subscription.billingCycle,
+              status: subscription.status,
+              price: plan.price,
+              paymentMethod: payment.paymentMethod,
+              nextBillingDate: subscription.nextBillingAt,
+            }
+          );
+        } catch (error) {
+          this.logger.error(`Failed to send subscription success vendor email: ${error.message}`);
         }
       }
     }
