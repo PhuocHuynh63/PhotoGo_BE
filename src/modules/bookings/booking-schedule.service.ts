@@ -85,7 +85,7 @@ export class BookingScheduleService {
     schedule.status = BookingScheduleStatus.POSTPONED;
     schedule.postponeReason = postponeDto.postponeReason;
     schedule.postponedToDate = new Date(postponeDto.postponedToDate);
-    schedule.notes = postponeDto.notes;
+    // schedule.notes = postponeDto.notes;
 
     return await this.bookingScheduleRepository.save(schedule);
   }
@@ -103,7 +103,7 @@ export class BookingScheduleService {
 
     schedule.status = BookingScheduleStatus.CONTINUED;
     schedule.date = schedule.postponedToDate;
-    schedule.notes = continueDto.notes || schedule.notes;
+    // schedule.notes = continueDto.notes || schedule.notes;
 
     return await this.bookingScheduleRepository.save(schedule);
   }
@@ -136,7 +136,7 @@ export class BookingScheduleService {
 
     schedule.status = BookingScheduleStatus.CANCELLED;
     if (reason) {
-      schedule.notes = reason;
+      // schedule.notes = reason;
     }
 
     return await this.bookingScheduleRepository.save(schedule);

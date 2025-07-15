@@ -10,14 +10,14 @@ export class ScheduleDto {
   @IsString()
   date: string;
 
-  @ApiProperty({
-    description: 'Ghi chú cho ngày này (tùy chọn)',
-    example: 'Chụp ảnh cưới',
-    required: false
-  })
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // @ApiProperty({
+  //   description: 'Ghi chú cho ngày này (tùy chọn)',
+  //   example: 'Chụp ảnh cưới',
+  //   required: false
+  // })
+  // @IsOptional()
+  // @IsString()
+  // notes?: string;
 }
 
 export class CheckMultiDayAvailabilityDto {
@@ -25,9 +25,9 @@ export class CheckMultiDayAvailabilityDto {
     description: 'Danh sách các ngày muốn kiểm tra',
     type: [ScheduleDto],
     example: [
-      { date: '13/12/2024', notes: 'Chụp ảnh cưới' },
-      { date: '14/12/2024', notes: 'Chụp ảnh cưới' },
-      { date: '15/12/2024', notes: 'Chụp ảnh cưới' }
+      { date: '13/12/2024' },
+      { date: '14/12/2024' },
+      { date: '15/12/2024' }
     ]
   })
   @IsArray()

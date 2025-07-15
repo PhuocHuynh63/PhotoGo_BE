@@ -1042,7 +1042,7 @@ export class BookingService {
       this.bookingScheduleRepository.create({
         bookingId: savedBooking.id,
         date: new Date(this.convertDateFormat(schedule.date)),
-        notes: schedule.notes,
+        // notes: schedule.notes,
         status: BookingScheduleStatus.SCHEDULED,
       })
     );

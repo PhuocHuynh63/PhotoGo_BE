@@ -5,9 +5,9 @@ export class CreateBookingScheduleDto {
   @IsDateString()
   date: string;
 
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // @IsOptional()
+  // @IsString()
+  // notes?: string;
 }
 
 export class UpdateBookingScheduleDto {
@@ -27,9 +27,9 @@ export class UpdateBookingScheduleDto {
   @IsDateString()
   postponedToDate?: string;
 
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // @IsOptional()
+  // @IsString()
+  // notes?: string;
 }
 
 export class PostponeBookingScheduleDto {
@@ -39,15 +39,15 @@ export class PostponeBookingScheduleDto {
   @IsDateString()
   postponedToDate: string;
 
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // @IsOptional()
+  // @IsString()
+  // notes?: string;
 }
 
 export class ContinueBookingScheduleDto {
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // @IsOptional()
+  // @IsString()
+  // notes?: string;
 }
 
 export class BookingScheduleResponseDto {
@@ -71,9 +71,9 @@ export class BookingScheduleResponseDto {
   @IsDateString()
   postponedToDate?: string;
 
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // @IsOptional()
+  // @IsString()
+  // notes?: string;
 
   @IsDateString()
   created_at: string;

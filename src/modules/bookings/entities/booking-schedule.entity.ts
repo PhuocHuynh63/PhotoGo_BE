@@ -26,8 +26,8 @@ export class BookingSchedule {
   @Column({ type: 'date', nullable: true, name: 'postponed_to_date' })
   postponedToDate: Date;
 
-  @Column({ type: 'text', nullable: true, name: 'notes' })
-  notes: string;
+  // @Column({ type: 'text', nullable: true, name: 'notes' })
+  // notes: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

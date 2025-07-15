@@ -1,5 +1,5 @@
 import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches, IsNotEmpty, IsArray, ValidateNested, ValidateIf } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { BookingSourceType, BookingDepositType, BookingStatus, BookingType } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -14,14 +14,14 @@ export class CreateBookingScheduleItemDto {
   })
   date: string;
 
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    description: 'Ghi chú cho ngày này',
-    example: 'Chụp ảnh ngoại cảnh',
-    required: false
-  })
-  notes?: string;
+  // @IsString()
+  // @IsOptional()
+  // @ApiProperty({
+  //   description: 'Ghi chú cho ngày này',
+  //   example: 'Chụp ảnh ngoại cảnh',
+  //   required: false
+  // })
+  // notes?: string;
 }
 
 export class CreateBookingDto {
@@ -64,19 +64,17 @@ export class CreateBookingDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateBookingScheduleItemDto)
+  @Transform(({ value }) => {
+    // Nếu FE truyền mảng string, tự động chuyển thành mảng object { date }
+    if (Array.isArray(value) && typeof value[0] === 'string') {
+      return value.map(date => ({ date }));
+    }
+    return value;
+  })
   @ApiProperty({
     description: 'Danh sách các ngày booking - chỉ dùng cho booking nhiều ngày',
     type: [CreateBookingScheduleItemDto],
-    example: [
-      {
-        date: '04/06/2025',
-        notes: 'Chụp ảnh ngoại cảnh'
-      },
-      {
-        date: '05/06/2025',
-        notes: 'Chụp ảnh studio'
-      }
-    ],
+    example: ['04/06/2025', '05/06/2025'],
     required: false
   })
   schedules?: CreateBookingScheduleItemDto[];
