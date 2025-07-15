@@ -628,10 +628,11 @@ export class LocationService {
     const todayBookings: SlotBookingDetailDto[] = [];
 
     for (const booking of bookings) {
-      const slotKey = `${booking.date.toISOString().slice(0, 10)}_${booking.time}`;
+      const dateObj = booking.date instanceof Date ? booking.date : new Date(booking.date);
+      const slotKey = `${dateObj.toISOString().slice(0, 10)}_${booking.time}`;
       if (!slotMap.has(slotKey)) {
         slotMap.set(slotKey, {
-          date: booking.date.toISOString().slice(0, 10),
+          date: dateObj.toISOString().slice(0, 10),
           time: booking.time,
           count: 0,
           bookings: []
@@ -657,7 +658,7 @@ export class LocationService {
       if (booking.invoices && booking.invoices.length > 0 && typeof booking.invoices[0].payablePrice === 'number') expectedRevenue += Number(booking.invoices[0].payablePrice);
 
       // Lịch hôm nay
-      if (booking.date.toISOString().slice(0, 10) === todayStr) {
+      if (dateObj.toISOString().slice(0, 10) === todayStr) {
         todayBookings.push(bookingDetail);
       }
     }
