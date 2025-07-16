@@ -29,7 +29,7 @@ export class InvoiceService {
     private readonly voucherUserRepository: Repository<VoucherUser>,
     @InjectRepository(Commission)
     private readonly commissionRepository: Repository<Commission>,
-  ) {}
+  ) { }
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
     if (!bookingId) {
@@ -51,18 +51,37 @@ export class InvoiceService {
       throw new ConflictException('Đơn hàng này đã có hóa đơn');
     }
 
-    const serviceConcept = await this.servicePackageService.findServiceConcept(booking.serviceConceptId);
-    if (!serviceConcept) {
-      throw new NotFoundException(`Gói dịch vụ với ID ${booking.serviceConceptId} không tồn tại`);
-    }
-
-    const originalPrice = Math.round(serviceConcept.price);
+    // Get the origin price from service concept (stored in DB)
+    const originPrice = Number(booking.serviceConcept.price); // This is origin price from DB
+    
+    // Convert origin price to final price (what customer sees) - same logic as ServicePackageService
+    const COMMISSION_RATE = 0.30; // 30%
+    const TAX_RATE = 0.05; // 5%
+    const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
+    
+    const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
+    const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
+    const taxAmount = Math.round(originPrice * TAX_RATE);
+    
+    // For invoice display: originalPrice = originPrice + commission (hidden from customer)
+    const price = Math.round(originPrice + commissionAmount);
+    const totalAmount = finalPrice; // This is what customer sees
+    
     let discountAmount = 0;
     let voucher = null;
     if (voucherId) {
       voucher = await this.voucherService.findOneVoucher(voucherId);
       if (!voucher) {
         throw new NotFoundException(`Voucher với ID ${voucherId} không tồn tại`);
+      }
+
+      // Check if user has been assigned the voucher (voucher-user) with status "có sẵn"
+      const voucherUser = await this.voucherUserRepository.findOne({
+        where: { user_id: booking.userId, voucher_id: voucherId },
+      });
+      
+      if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
+        throw new BadRequestException('Bạn không có quyền sử dụng voucher này hoặc voucher đã được sử dụng');
       }
 
       const now = new Date();
@@ -72,38 +91,31 @@ export class InvoiceService {
         throw new BadRequestException(`Voucher với ID ${voucherId} không còn hiệu lực`);
       }
 
-      if (originalPrice < voucher.minPrice) {
+      // Apply voucher discount to the total amount (final price that customer sees)
+      if (totalAmount < voucher.minPrice) {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
       }
 
-      const voucherUser = await this.voucherUserRepository.findOne({
-        where: { user_id: booking.userId, voucher_id: voucherId },
-      });
-      if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
-        throw new BadRequestException(`Bạn đã sử dụng voucher này hoặc voucher không khả dụng`);
-      }
-
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
-        const discountValue = parseFloat(voucher.discount_value);
-        discountAmount = Math.round((originalPrice * discountValue) / 100);
+        const discountValue = Number(voucher.discount_value);
+        discountAmount = Math.round((totalAmount * discountValue) / 100);
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
       } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
-        discountAmount = Math.round(parseFloat(voucher.discount_value));
+        discountAmount = Math.round(Number(voucher.discount_value));
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
       }
     }
 
-    let discountedPrice = originalPrice - discountAmount;
-    const commission = await this.commissionRepository.findOne({
-      where: { serviceConceptId: serviceConcept.id }
-    });
-    const taxAmount = (Math.round(originalPrice) - Math.round(commission.commissionAmount)) * 0.1;
+    // Calculate final amounts after discount
+    const discountedPrice = Math.round(price - discountAmount); // Apply discount to price (origin + commission)
+    const discountedTotal = Math.round(totalAmount - discountAmount); // Apply discount to total amount
+    
     const feeAmount = 0;
-    const payablePrice = discountedPrice + feeAmount;
+    const payablePrice = Math.round(discountedTotal); // Final amount customer needs to pay
 
     let depositAmount = 0;
     let remainingAmount = 0;
@@ -114,21 +126,23 @@ export class InvoiceService {
       depositAmount = Math.round(payablePrice * (booking.depositAmount / 100));
       remainingAmount = payablePrice - depositAmount;
     } else {
-      depositAmount = booking.depositAmount;
+      depositAmount = Math.round(booking.depositAmount || 0);
       remainingAmount = payablePrice - depositAmount;
     }
 
-    if (depositAmount <= 0 || remainingAmount <= 0) {
+    if (depositAmount < 0 || remainingAmount < 0) {
       throw new BadRequestException('Số tiền đặt cọc và số tiền còn lại phải lớn hơn 0');
     }
 
+    // Ensure all amounts are integers for database storage
     depositAmount = Math.round(depositAmount);
     remainingAmount = Math.round(remainingAmount);
 
     const invoice = this.invoiceRepository.create({
       ...createInvoiceDto,
       bookingId: booking.id,
-      originalPrice,
+      voucherId: voucher?.id || null,
+      originalPrice: price, // This is now origin + commission (hidden from customer)
       discountAmount,
       discountedPrice,
       taxAmount,
@@ -139,10 +153,6 @@ export class InvoiceService {
       paidAmount: 0,
       status: InvoiceStatus.PENDING,
     });
-
-    if (voucher) {
-      await this.voucherService.useVoucher(voucher.id, booking.userId);
-    }
 
     return this.invoiceRepository.save(invoice);
   }
@@ -162,6 +172,7 @@ export class InvoiceService {
     const skip = (currentPage - 1) * pageSizeNum;
 
     const [invoices, total] = await this.invoiceRepository.findAndCount({
+      relations: ['booking', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage'],
       skip,
       take: pageSizeNum,
       order: {
@@ -170,8 +181,15 @@ export class InvoiceService {
     });
     const totalPages = Math.ceil(total / pageSizeNum);
 
+    // Apply pricing logic to each invoice
+    const processedInvoices = await Promise.all(
+      invoices.map(async (invoice) => {
+        return await this.applyPricingLogic(invoice);
+      })
+    );
+
     return {
-      data: invoices,
+      data: processedInvoices,
       pagination: {
         current: currentPage,
         pageSize: pageSizeNum,
@@ -182,7 +200,6 @@ export class InvoiceService {
   }
 
   async findAllByUserId(userId: string, paginationDto: PaginationInvoiceDto): Promise<{
-
     data: Invoice[];
     pagination: {
       current: number;
@@ -198,7 +215,7 @@ export class InvoiceService {
 
     const [invoices, total] = await this.invoiceRepository.findAndCount({
       where: { booking: { userId } },
-      relations: ['booking', 'payments', 'refunds'],
+      relations: ['booking', 'payments', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage'],
       skip,
       take: pageSizeNum,
       order: {
@@ -207,8 +224,18 @@ export class InvoiceService {
     });
     const totalPages = Math.ceil(total / pageSizeNum);
 
+    // Apply pricing logic to each invoice
+    const processedInvoices = invoices.map((invoice) => {
+      // Nếu đã có các trường giá trị, chỉ trả về luôn
+      // Nếu cần backward compatibility, có thể kiểm tra và chỉ applyPricingLogic nếu thiếu trường
+      return {
+        ...invoice,
+        vendorId: invoice.booking?.serviceConcept?.servicePackage?.vendor?.id,
+      };
+    });
+
     return {
-      data: invoices,
+      data: processedInvoices,
       pagination: {
         current: currentPage,
         pageSize: pageSizeNum,
@@ -225,14 +252,15 @@ export class InvoiceService {
 
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['booking', 'payments', 'refunds'],
+      relations: ['booking', 'payments', 'booking.serviceConcept', 'booking.location', 'booking.location.vendor', 'booking.serviceConcept.servicePackage'],
     });
 
     if (!invoice) {
       throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
     }
 
-    return invoice;
+    // Apply pricing logic to the invoice
+    return await this.applyPricingLogic(invoice);
   }
 
   async updateInvoice(id: string, updateInvoiceDto: Partial<UpdateInvoiceDto>): Promise<Invoice> {
@@ -280,6 +308,128 @@ export class InvoiceService {
     const result = await this.invoiceRepository.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
+    }
+  }
+
+  /**
+   * Apply pricing logic to an invoice
+   * This method recalculates all pricing fields based on the current pricing breakdown
+   */
+  private async applyPricingLogic(invoice: Invoice): Promise<Invoice> {
+    try {
+      // Get the origin price from service concept (stored in DB)
+      const serviceConcept = await this.servicePackageService.findServiceConcept(invoice.booking.serviceConceptId);
+      const originPrice = Number(serviceConcept.price); // This is origin price from DB
+      
+      // Convert origin price to final price (what customer sees) - same logic as ServicePackageService
+      const COMMISSION_RATE = 0.30; // 30%
+      const TAX_RATE = 0.05; // 5%
+      const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
+      
+      const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
+      const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
+      const taxAmount = Math.round(originPrice * TAX_RATE);
+      
+      // For invoice display: originalPrice = originPrice + commission (hidden from customer)
+      const recalculatedPrice = Math.round(originPrice + commissionAmount);
+      const recalculatedTaxAmount = taxAmount;
+      const recalculatedTotalAmount = finalPrice; // This is what customer sees
+      
+      // Apply voucher discount if exists
+      let recalculatedDiscountAmount = 0;
+      if (invoice.voucherId) {
+        const voucher = await this.voucherService.findOneVoucher(invoice.voucherId);
+        if (voucher) {
+          if (recalculatedTotalAmount >= voucher.minPrice) {
+            if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
+              const discountValue = Number(voucher.discount_value);
+              recalculatedDiscountAmount = Math.round((recalculatedTotalAmount * discountValue) / 100);
+              if (voucher.maxPrice && recalculatedDiscountAmount > voucher.maxPrice) {
+                recalculatedDiscountAmount = voucher.maxPrice;
+              }
+            } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
+              recalculatedDiscountAmount = Math.round(Number(voucher.discount_value));
+              if (voucher.maxPrice && recalculatedDiscountAmount > voucher.maxPrice) {
+                recalculatedDiscountAmount = voucher.maxPrice;
+              }
+            }
+          }
+        }
+      }
+      
+      // Calculate final amounts after discount
+      const recalculatedDiscountedPrice = Math.round(recalculatedPrice - recalculatedDiscountAmount);
+      const recalculatedDiscountedTotal = Math.round(recalculatedTotalAmount - recalculatedDiscountAmount);
+      const recalculatedPayablePrice = Math.round(recalculatedDiscountedTotal);
+      
+      // Recalculate deposit and remaining amounts
+      let recalculatedDepositAmount = 0;
+      let recalculatedRemainingAmount = 0;
+      
+      if (invoice.booking.depositType === BookingDepositType.PERCENTAGE) {
+        recalculatedDepositAmount = Math.round(recalculatedPayablePrice * (invoice.booking.depositAmount / 100));
+        recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
+      } else {
+        recalculatedDepositAmount = Math.round(invoice.booking.depositAmount || 0);
+        recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
+      }
+      
+      // Update invoice with recalculated values
+      invoice.originalPrice = recalculatedPrice;
+      invoice.discountAmount = recalculatedDiscountAmount;
+      invoice.discountedPrice = recalculatedDiscountedPrice;
+      invoice.taxAmount = recalculatedTaxAmount;
+      invoice.payablePrice = recalculatedPayablePrice;
+      invoice.depositAmount = recalculatedDepositAmount;
+      invoice.remainingAmount = recalculatedRemainingAmount;
+      
+      return invoice;
+    } catch (error) {
+      console.error('Error applying pricing logic to invoice:', error);
+      // Return original invoice if pricing logic fails
+      return invoice;
+    }
+  }
+
+  /**
+   * Refresh pricing for all invoices
+   * This method recalculates pricing for all invoices and updates them in the database
+   */
+  async refreshAllInvoicePricing(): Promise<{ updatedCount: number; errorCount: number }> {
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    try {
+      const invoices = await this.invoiceRepository.find({
+        relations: ['booking', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage']
+      });
+
+      for (const invoice of invoices) {
+        try {
+          const updatedInvoice = await this.applyPricingLogic(invoice);
+          
+          // Update the invoice in database
+          await this.invoiceRepository.update(invoice.id, {
+            originalPrice: updatedInvoice.originalPrice,
+            discountAmount: updatedInvoice.discountAmount,
+            discountedPrice: updatedInvoice.discountedPrice,
+            taxAmount: updatedInvoice.taxAmount,
+            payablePrice: updatedInvoice.payablePrice,
+            depositAmount: updatedInvoice.depositAmount,
+            remainingAmount: updatedInvoice.remainingAmount,
+          });
+          
+          updatedCount++;
+        } catch (error) {
+          console.error(`Error updating invoice ${invoice.id}:`, error);
+          errorCount++;
+        }
+      }
+
+      return { updatedCount, errorCount };
+    } catch (error) {
+      console.error('Error refreshing invoice pricing:', error);
+      throw new BadRequestException('Lỗi khi cập nhật giá hóa đơn');
     }
   }
 }

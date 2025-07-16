@@ -85,6 +85,28 @@ export class PaymentController {
     }
   }
 
+  @Get('/transaction/:transactionId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin thanh toán theo ID giao dịch' })
+  @ApiResponse({ status: 200, description: 'Thông tin thanh toán', type: Payment })
+  @ApiResponse({ status: 400, description: 'ID giao dịch không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy thanh toán' })
+  @ResponseMessage('Lấy thông tin thanh toán theo ID giao dịch thành công')
+  async getPaymentsByTransactionId(@Param('transactionId') transactionId: string): Promise<string> {
+    if (!transactionId) {
+      throw new HttpException('ID giao dịch không được để trống', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.paymentService.findOneByTransactionId(transactionId);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy thông tin thanh toán theo ID giao dịch', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  } 
+
   @Post('/:invoiceId/payos/link')
   @ApiOperation({ summary: 'Tạo liên kết thanh toán PayOS' })
   @ApiResponse({ status: 201, description: 'Liên kết thanh toán được tạo thành công' })
@@ -109,6 +131,32 @@ export class PaymentController {
       throw new HttpException('Lỗi khi tạo liên kết thanh toán', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
+
+  // @Get('/:invoiceId/check-slot-availability')
+  // @ApiOperation({ summary: 'Kiểm tra slot thời gian còn khả dụng không trước khi thanh toán' })
+  // @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
+  // @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
+  // @ResponseMessage('Kiểm tra slot thành công')
+  // async checkSlotAvailability(@Param('invoiceId') invoiceId: string): Promise<{ available: boolean; message: string }> {
+  //   if (!invoiceId) {
+  //     throw new HttpException('ID hóa đơn không được để trống', HttpStatus.BAD_REQUEST);
+  //   }
+
+  //   try {
+  //     const isAvailable = await this.paymentService.checkSlotAvailability(invoiceId);
+  //     return {
+  //       available: isAvailable,
+  //       message: isAvailable 
+  //         ? 'Slot thời gian vẫn còn khả dụng' 
+  //         : 'Slot thời gian đã được đặt bởi người khác'
+  //     };
+  //   } catch (error) {
+  //     if (error instanceof HttpException) {
+  //       throw error;
+  //     }
+  //     throw new HttpException('Lỗi khi kiểm tra slot', HttpStatus.INTERNAL_SERVER_ERROR);
+  //   }
+  // }
 
   @Post('/webhook/payos')
   @ApiOperation({ summary: 'Xử lý webhook PayOS' })
@@ -137,9 +185,9 @@ export class PaymentController {
   @ApiOperation({ summary: 'Xử lý callback khi thanh toán thành công' })
   @ApiResponse({ status: 200, description: 'Xử lý callback thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async handlePaymentSuccess(@Query() callbackData: PaymentCallbackDto) {
+  async handlePaymentSuccess(@Query('paymentId') paymentId: string, @Body() callbackData: PaymentCallbackDto) {
     try {
-      await this.paymentService.handlePaymentSuccess(callbackData);
+      await this.paymentService.handlePaymentSuccess(paymentId, callbackData);
       return {
         statusCode: 200,
         message: 'Xử lý thanh toán thành công',
@@ -158,9 +206,9 @@ export class PaymentController {
   @ApiOperation({ summary: 'Xử lý callback khi thanh toán thất bại' })
   @ApiResponse({ status: 200, description: 'Xử lý callback thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  async handlePaymentError(@Query() callbackData: PaymentCallbackDto) {
+  async handlePaymentError(@Query('paymentId') paymentId: string, @Body() callbackData: PaymentCallbackDto) {
     try {
-      await this.paymentService.handlePaymentError(callbackData);
+      await this.paymentService.handlePaymentError(paymentId, callbackData);
       return {
         statusCode: 200,
         message: 'Xử lý thanh toán thất bại',

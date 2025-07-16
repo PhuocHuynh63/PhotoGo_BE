@@ -1,40 +1,85 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  HttpException,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import { BookingService } from './booking.service';
+import { BookingScheduleService } from './booking-schedule.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { CheckMultiDayAvailabilityDto, CheckMultiDayAvailabilityResponseDto } from './dto/check-multi-day-availability.dto';
 import { Booking } from './entities/booking.entity';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiExtraModels } from '@nestjs/swagger/dist/decorators/api-extra-models.decorator';
-import { BookingDepositType, BookingSourceType, BookingStatus } from 'src/constants/booking.enum';
+import {
+  BookingDepositType,
+  BookingSourceType,
+  BookingStatus,
+} from 'src/constants/booking.enum';
 import { Public } from 'src/decorator/custom';
 import { PaginationDto } from './dto/pagination.dto';
+import { GetDiscountAmountDto } from './dto/get-booking.dto';
+import { ResponseMessage } from '../../decorator/custom';
+import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
+import { RolesGuard } from '../auth/passport/roles.guard';
+import { Roles } from 'src/decorator/role.decorator';
+import { Role } from 'src/modules/roles/entities/role.entity';
 
 @Controller('bookings')
 @ApiExtraModels(CreateBookingDto)
 @ApiTags('Booking')
 @ApiBearerAuth('access-token')
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) {}
+  constructor(
+    private readonly bookingService: BookingService,
+    private readonly bookingScheduleService: BookingScheduleService,
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Tạo mới booking' })
   @ApiBody({ type: CreateBookingDto })
-  @ApiResponse({ status: 201, description: 'Tạo booking thành công', type: Booking })
+  @ApiResponse({
+    status: 201,
+    description: 'Tạo booking thành công',
+    type: Booking,
+  })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   async create(
     @Body() createBookingDto: CreateBookingDto,
     @Query('userId') userId: string,
-    @Query('serviceConceptId') serviceConceptId: string
-  ): Promise<{ booking: Booking; paymentLink: string }> {
+    @Query('serviceConceptId') serviceConceptId: string,
+  ): Promise<{ booking: Booking; paymentLink: string; code: string }> {
     try {
       if (!userId) {
         throw new HttpException('User ID là bắt buộc', HttpStatus.BAD_REQUEST);
       }
       if (!serviceConceptId) {
-        throw new HttpException('Service Concept ID là bắt buộc', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Service Concept ID là bắt buộc',
+          HttpStatus.BAD_REQUEST,
+        );
       }
-      const result = await this.bookingService.create(createBookingDto, userId, serviceConceptId);
+      const result = await this.bookingService.create(
+        createBookingDto,
+        userId,
+        serviceConceptId,
+      );
       return result;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -42,14 +87,18 @@ export class BookingController {
       }
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi tạo booking',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
   @Get()
   @Public()
-  @ApiResponse({ status: 200, description: 'Danh sách tất cả booking', type: [Booking] })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách tất cả booking',
+    type: [Booking],
+  })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   @ApiOperation({ summary: 'Lấy tất cả booking' })
@@ -67,18 +116,25 @@ export class BookingController {
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy danh sách booking',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
   @Get('user/:userId')
   @Public()
-  @ApiResponse({ status: 200, description: 'Danh sách booking của user', type: [Booking] })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách booking của user',
+    type: [Booking],
+  })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   @ApiOperation({ summary: 'Lấy danh sách booking của user' })
-  async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationDto): Promise<{
+  async findAllByUserId(
+    @Param('userId') userId: string,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<{
     data: Booking[];
     pagination: {
       current: number;
@@ -95,6 +151,75 @@ export class BookingController {
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy danh sách booking của user',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('vendor/:vendorId/priority')
+  @Public()
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách booking được sắp xếp theo độ ưu tiên',
+    type: [Booking],
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy danh sách booking được sắp xếp theo độ ưu tiên cho vendor' })
+  async getBookingsByPriorityScore(
+    @Param('vendorId') vendorId: string,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      if (!vendorId) {
+        throw new HttpException('Vendor ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.getBookingsByPriorityScore(vendorId, paginationDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking theo độ ưu tiên',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('get-discount-amount')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy số tiền giảm giá', type: GetDiscountAmountDto })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy số tiền giảm giá' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy số tiền giảm giá' })
+  async getDiscountAmount(@Query() getDiscountAmountDto: GetDiscountAmountDto): Promise<{discount: number, depositAmount: number, remainingAmount: number}> {
+    try {
+      return await this.bookingService.getDiscountAmount(getDiscountAmountDto.userId, getDiscountAmountDto.serviceConceptId, getDiscountAmountDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy số tiền giảm giá',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get('get-booking-by-code')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy booking theo code', type: Booking })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy booking theo code' })
+  async getBookingByCode(@Query('code') code: string): Promise<Booking> {
+    try {
+      return await this.bookingService.getBookingByCode(code);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy booking theo code',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -102,39 +227,134 @@ export class BookingController {
 
   @Get(':id')
   @Public()
-  @ApiResponse({ status: 200, description: 'Tìm thấy booking', type: Booking })
+  @ApiOperation({ summary: 'Lấy thông tin booking theo ID' })
+  @ApiResponse({ status: 200, description: 'Lấy thông tin booking thành công' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
-  @ApiResponse({ status: 500, description: 'Lỗi server' })
-  @ApiOperation({ summary: 'Lấy booking theo ID' })
+  @ResponseMessage('Lấy thông tin booking thành công')
   async findOne(@Param('id') id: string): Promise<Booking> {
+    return this.bookingService.findOne(id);
+  }
+
+  @Get(':id/with-schedules')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin booking với lịch trình' })
+  @ApiResponse({ status: 200, description: 'Lấy thông tin booking với lịch trình thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ResponseMessage('Lấy thông tin booking với lịch trình thành công')
+  async findOneWithSchedules(@Param('id') id: string): Promise<{ booking: Booking; schedules: any[] }> {
+    const booking = await this.bookingService.findOne(id);
+    const schedules = await this.bookingScheduleService.findAllByBooking(id);
+    return { booking, schedules };
+  }
+
+  // @Get(':id/check-availability')
+  // @ApiOperation({ summary: 'Kiểm tra slot thời gian còn khả dụng không trước khi thanh toán' })
+  // @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })
+  // @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  // @ResponseMessage('Kiểm tra slot thành công')
+  // async checkSlotAvailability(@Param('id') id: string): Promise<{ available: boolean; message: string }> {
+  //   const isAvailable = await this.bookingService['isSlotStillAvailable'](id);
+  //   return {
+  //     available: isAvailable,
+  //     message: isAvailable 
+  //       ? 'Slot thời gian vẫn còn khả dụng' 
+  //       : 'Slot thời gian đã được đặt bởi người khác'
+  //   };
+  // }
+
+  @Post('admin/handle-timeout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles({ id: 'R005' } as Role)
+  @ApiOperation({ summary: 'Xử lý timeout cho các booking chưa thanh toán (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Xử lý timeout thành công' })
+  @ResponseMessage('Xử lý timeout thành công')
+  async handleBookingTimeout(): Promise<{ message: string; cancelledCount: number }> {
+    return this.bookingService.handleBookingTimeout();
+  }
+
+  @Get('check-slot-availability')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Kiểm tra slot availability', type: Object })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy slot' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Kiểm tra slot availability cho single day booking' })
+  async checkSlotAvailability(
+    @Query('date') date: string,
+    @Query('time') time: string,
+    @Query('locationId') locationId: string,
+  ) {
     try {
-      if (!id) {
-        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      if (!date || !time || !locationId) {
+        throw new HttpException(
+          'Date, time và locationId là bắt buộc',
+          HttpStatus.BAD_REQUEST,
+        );
       }
-      return await this.bookingService.findOne(id);
+      return await this.bookingService.checkSlotAvailabilityWithDetails(
+        date,
+        time,
+        locationId,
+      );
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
       throw new HttpException(
-        error.message || 'Có lỗi xảy ra khi tìm booking',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+        error.message || 'Có lỗi xảy ra khi kiểm tra slot availability',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('check-multi-day-availability')
+  @Public()
+  @ApiBody({ type: CheckMultiDayAvailabilityDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Kiểm tra multi-day availability thành công', 
+    type: CheckMultiDayAvailabilityResponseDto 
+  })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Kiểm tra multi-day availability trước khi tạo booking' })
+  async checkMultiDayAvailability(
+    @Body() checkMultiDayAvailabilityDto: CheckMultiDayAvailabilityDto,
+  ): Promise<CheckMultiDayAvailabilityResponseDto> {
+    try {
+      // Get service concept to pass duration
+      const serviceConcept = await this.bookingService['serviceConceptRepository'].findOne({
+        where: { id: checkMultiDayAvailabilityDto.serviceConceptId }
+      });
+
+      return await this.bookingService.checkMultiDayAvailability(
+        checkMultiDayAvailabilityDto.schedules,
+        checkMultiDayAvailabilityDto.locationId,
+        serviceConcept
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi kiểm tra multi-day availability',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Cập nhật booking' })
-  @ApiResponse({ status: 200, description: 'Cập nhật booking thành công', type: Booking })
+  @ApiResponse({
+    status: 200,
+    description: 'Cập nhật booking thành công',
+    type: Booking,
+  })
   @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   async update(
     @Param('id') id: string,
-    @Body() updateBookingDto: UpdateBookingDto
+    @Body() updateBookingDto: UpdateBookingDto,
   ): Promise<Booking> {
     try {
       if (!id) {
-        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Booking ID là bắt buộc',
+          HttpStatus.BAD_REQUEST,
+        );
       }
       return await this.bookingService.update(id, updateBookingDto);
     } catch (error) {
@@ -143,11 +363,11 @@ export class BookingController {
       }
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi cập nhật booking',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
-  
+
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa booking' })
   @ApiResponse({ status: 200, description: 'Xóa booking thành công' })
@@ -156,7 +376,10 @@ export class BookingController {
   async remove(@Param('id') id: string): Promise<void> {
     try {
       if (!id) {
-        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Booking ID là bắt buộc',
+          HttpStatus.BAD_REQUEST,
+        );
       }
       await this.bookingService.remove(id);
     } catch (error) {
@@ -165,8 +388,61 @@ export class BookingController {
       }
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi xóa booking',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Get(':id/payos-info')
+  @Public()
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy PayOS info thành công',
+    schema: { example: { paymentOSId: '...', payosLink: '...' } },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Không tìm thấy booking hoặc PayOS info',
+  })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({
+    summary: 'Lấy PayOS info (paymentOSId và payosLink) theo bookingId',
+  })
+  async getPayOSInfoByBookingId(
+    @Param('id') id: string,
+  ): Promise<{ paymentOSId: string; payosLink: string }> {
+    try {
+      if (!id) {
+        throw new HttpException(
+          'Booking ID là bắt buộc',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return await this.bookingService.getPayOSInfoByBookingId(id);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy PayOS info',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('paymentOSId/:paymentOSId')
+  @Public()
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy booking theo paymentOSId thành công',
+    type: Booking,
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy booking theo paymentOSId' })
+  async getBookingByPaymentOSId(
+    @Param('paymentOSId') paymentOSId: string,
+  ): Promise<Booking> {
+    return await this.bookingService.getBookingByPaymentOSId(paymentOSId);
   }
 }

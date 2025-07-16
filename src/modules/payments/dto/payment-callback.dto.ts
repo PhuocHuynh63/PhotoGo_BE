@@ -2,10 +2,6 @@ import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PaymentCallbackDto {
-  @ApiProperty({ description: 'ID thanh toán', required: false })
-  @IsString()
-  @IsOptional()
-  paymentId?: string;
 
   @ApiProperty({ description: 'Trạng thái thanh toán', required: false })
   @IsString()

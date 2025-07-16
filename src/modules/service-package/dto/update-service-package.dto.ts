@@ -1,8 +1,9 @@
 import { PartialType } from '@nestjs/swagger';
 import { CreateServicePackageDto, CreateServicePackageMetadataDto, CreateServiceConceptServiceTypeDto, CreateServiceTypeDto, CreateServiceConceptDto } from './create-service-package.dto';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsUUID, IsArray } from 'class-validator';
-import { ServicePackageStatus } from 'src/constants/servicePackage.enum';
+import { IsString, IsOptional, IsEnum, IsUUID, IsArray, IsNumber } from 'class-validator';
+import { ServiceConceptStatus, ServicePackageStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
+import { Transform } from 'class-transformer';
 
 /**
  * DTO cho việc cập nhật gói dịch vụ
@@ -16,6 +17,7 @@ export class UpdateServicePackageDto {
   })
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
   name?: string;
 
   @ApiProperty({
@@ -25,6 +27,7 @@ export class UpdateServicePackageDto {
   })
   @IsString()
   @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
   description?: string;
 
   @ApiProperty({
@@ -35,6 +38,7 @@ export class UpdateServicePackageDto {
   })
   @IsEnum(ServicePackageStatus)
   @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
   status?: ServicePackageStatus;
 }
 
@@ -60,7 +64,117 @@ export class UpdateServiceTypeDto extends PartialType(CreateServiceTypeDto) {}
  * DTO cho việc cập nhật khái niệm dịch vụ
  * Kế thừa từ CreateServiceConceptDto với tất cả các trường là tùy chọn
  */
-export class UpdateServiceConceptDto extends PartialType(CreateServiceConceptDto) {
+export class UpdateServiceConceptDto{
+  @ApiProperty({
+    description: 'Tên của khái niệm dịch vụ',
+    example: 'Chụp ảnh cưới ngoại cảnh',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  name?: string;
+
+  @ApiProperty({
+    description: 'Mô tả chi tiết về khái niệm dịch vụ',
+    example: 'Chụp ảnh cưới tại các địa điểm ngoại cảnh đẹp',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  description?: string;
+
+  @ApiProperty({
+    description: 'Giá của khái niệm dịch vụ (VNĐ)',
+    example: 5000000,
+    required: false,
+  })
+  @IsNumber({}, { message: 'Giá phải là số' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return Number(value);
+  })
+  price?: number;
+
+  @ApiProperty({
+    description: 'Thời gian thực hiện (phút). Phải > 0 cho concept 1 ngày, phải = 0 cho concept nhiều ngày',
+    example: 120,
+    required: false,
+  })
+  @IsNumber({}, { message: 'Thời gian phải là số' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return Number(value);
+  })
+  duration?: number;
+
+  @ApiProperty({
+    description: 'Loại phạm vi của concept (1 ngày hoặc nhiều ngày)',
+    enum: ConceptRangeType,
+    example: ConceptRangeType.SINGLE_DAY,
+    required: false,
+  })
+  @IsEnum(ConceptRangeType, { message: 'Loại phạm vi concept không hợp lệ' })
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  conceptRangeType?: ConceptRangeType;
+
+  @ApiProperty({
+    description: 'Số ngày concept kéo dài. Phải = 1 cho concept 1 ngày, phải >= 2 cho concept nhiều ngày',
+    example: 1,
+    required: false,
+  })
+  @IsNumber({}, { message: 'Số ngày phải là số' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return Number(value);
+  })
+  numberOfDays?: number;
+
+  @ApiProperty({
+    description: 'Trạng thái của khái niệm dịch vụ',
+    enum: ServiceConceptStatus,
+    example: ServiceConceptStatus.ACTIVE,
+    required: false,
+    default: ServiceConceptStatus.ACTIVE,
+  })
+  @IsEnum(ServiceConceptStatus) 
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  status?: ServiceConceptStatus;
+
+  @ApiProperty({
+    description: 'Danh sách ID của các loại dịch vụ trong khái niệm',
+    example: ['123e4567-e89b-12d3-a456-426614174003', '123e4567-e89b-12d3-a456-426614174004'],
+    required: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    if (typeof value === 'string') {
+      const ids = value.split(',').map(id => id.trim()).filter(id => id !== '');
+      return ids.length > 0 ? ids : undefined;
+    }
+    return value;
+  })
+  @IsArray({ message: 'Danh sách loại dịch vụ phải là một mảng' })
+  @IsUUID('4', { each: true, message: 'ID loại dịch vụ không hợp lệ' })
+  serviceTypeIds?: string[];
+
+  @ApiProperty({
+    description: 'ID của gói dịch vụ mà khái niệm này thuộc về',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  servicePackageId?: string;
+
   @ApiProperty({
     description: 'Danh sách URL ảnh của concept',
     example: [
@@ -71,6 +185,10 @@ export class UpdateServiceConceptDto extends PartialType(CreateServiceConceptDto
     type: [String],
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return value;
+  })
   @IsArray()
   @IsString({ each: true })
   images?: string[];

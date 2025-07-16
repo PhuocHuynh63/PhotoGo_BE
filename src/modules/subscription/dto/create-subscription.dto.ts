@@ -1,29 +1,26 @@
-import { IsUUID, IsDateString, IsEnum, IsOptional, IsEmpty, IsString, Length } from 'class-validator';
+import { IsUUID, IsDateString, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { BillingCycle } from '../../../constants/subscription.enum';
 import { Transform } from 'class-transformer';
 
 export class CreateSubscriptionDto {
   @IsUUID()
-  @ApiProperty({ description: 'ID của người dùng' })
-  userId: string;
-
-  @IsString()
-  @Length(1, 10)
-  @ApiProperty({ description: 'ID của gói đăng ký' })
-  planId: string;
+  @ApiProperty({ description: 'ID của người dùng (có thể null cho vendor subscription)', required: false })
+  @IsOptional()
+  userId?: string;
 
   @IsUUID()
-  @ApiProperty({ description: 'ID của nhà cung cấp' })
-  vendorId: string;
+  @ApiProperty({ description: 'ID của gói đăng ký' })
+  planId: string;
 
   @IsDateString()
   @ApiProperty({ description: 'Ngày bắt đầu đăng ký' })
   startDate: string;
 
   @IsDateString()
-  @ApiProperty({ description: 'Ngày kết thúc đăng ký' })
-  endDate: string;
+  @IsOptional()
+  @ApiProperty({ description: 'Ngày kết thúc đăng ký (tự động tính nếu không cung cấp)', required: false })
+  endDate?: string;
 
   @IsEnum(BillingCycle)
   @ApiProperty({ 

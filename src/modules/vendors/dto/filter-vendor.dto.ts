@@ -173,7 +173,7 @@ export class RemarkableVendorDto {
   @ApiProperty({
     description: 'Trường để sắp xếp',
     enum: VendorSortField,
-    example: VendorSortField.SUBSCRIPTION_COUNT,
+    example: VendorSortField.CREATED_AT,
     required: false,
   })
   sortBy?: VendorSortField;

@@ -1,56 +1,78 @@
-import { Controller, Post, Get, Param, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RefundService } from './refund.service';
-import { CreateRefundDto } from './dto/create-refund.dto';
+import { CreateRefundDto, ManualRefundDto } from './dto/create-refund.dto';
 import { FindAllRefundsDto } from './dto/find-all-refunds.dto';
 import { Refund } from './entities/refund.entity';
+import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
+import { RolesGuard } from '../auth/passport/roles.guard';
+import { Roles } from '../../decorator/role.decorator';
+import { UserRolesId, UserRoles } from '../../constants/user.enum';
+import { GetUser } from '../../decorator/user.decorator';
+import { ResponseMessage } from '../../decorator/custom';
+import { Role } from '../roles/entities/role.entity';
 
 @ApiTags('Refunds')
 @ApiBearerAuth('access-token')
 @Controller('refunds')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class RefundController {
-  constructor(private readonly refundService: RefundService,
-  ) {}
+  constructor(private readonly refundService: RefundService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Tạo mới một hoàn trả' })
-  @ApiResponse({ status: 201, description: 'Hoàn trả đã được tạo thành công', type: Refund })
+  @ApiOperation({ summary: 'Tạo yêu cầu hoàn trả' })
+  @ApiResponse({ status: 201, description: 'Tạo yêu cầu hoàn trả thành công' })
+  @ResponseMessage('Tạo yêu cầu hoàn trả thành công')
   async create(@Body() createRefundDto: CreateRefundDto): Promise<Refund> {
-    return await this.refundService.create(createRefundDto);
+    return this.refundService.create(createRefundDto);
+  }
+
+  @Get('pending')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ApiOperation({ summary: 'Lấy danh sách refund đang chờ xử lý (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
+  @ResponseMessage('Lấy danh sách refund pending thành công')
+  async getPendingRefunds(): Promise<Refund[]> {
+    return this.refundService.getPendingRefunds();
+  }
+
+  @Post(':id/process-manual')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ApiOperation({ summary: 'Xử lý refund thủ công (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Xử lý refund thành công' })
+  @ResponseMessage('Xử lý refund thành công')
+  async processManualRefund(
+    @Param('id') id: string,
+    @Body() manualRefundDto: ManualRefundDto,
+    @GetUser('id') adminId: string
+  ): Promise<Refund> {
+    return this.refundService.processManualRefund(id, manualRefundDto, adminId);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lấy tất cả hoàn trả' })
-  @ApiResponse({ status: 200, description: 'Danh sách hoàn trả', type: [Refund] })
+  @ApiOperation({ summary: 'Lấy danh sách tất cả refund' })
+  @ApiResponse({ status: 200, description: 'Lấy danh sách thành công' })
+  @ResponseMessage('Lấy danh sách refund thành công')
   async findAll(@Query() query: FindAllRefundsDto): Promise<Refund[]> {
-    return await this.refundService.findAll(query);
+    return this.refundService.findAll(query);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Lấy hoàn trả theo ID' })
-  @ApiResponse({ status: 200, description: 'Chi tiết hoàn trả', type: Refund })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy hoàn trả' })
+  @ApiOperation({ summary: 'Lấy thông tin refund theo ID' })
+  @ApiResponse({ status: 200, description: 'Lấy thông tin thành công' })
+  @ResponseMessage('Lấy thông tin refund thành công')
   async findOne(@Param('id') id: string): Promise<Refund> {
-    return await this.refundService.findOne(id);
+    return this.refundService.findOne(id);
   }
 
-  // @Post('/refund/:paymentId')
-  // @ApiOperation({ summary: 'Refund a payment' })
-  // @ApiResponse({ status: 200, description: 'Refund processed successfully' })
-  // @ApiResponse({ status: 404, description: 'Payment not found' })
-  // @ApiResponse({ status: 400, description: 'Invalid refund request' })
-  // @ApiResponse({ status: 500, description: 'Internal server error' })
-  // async refundPayment(
-  //   @Param('paymentId') paymentId: string,
-  //   @Body() createRefundDto: CreateRefundDto,
-  // ) {
-  //   const result = await this.refundService.refundPayment(paymentId, createRefundDto);
-  //   return {
-  //     message: result.message,
-  //     refundId: result.data.refundId,
-  //     amount: result.data.amount,
-  //     date: result.data.date,
-  //   };
-  // }
-
+  @Post(':paymentId/refund-payment')
+  @ApiOperation({ summary: 'Hoàn trả payment qua PayOS' })
+  @ApiResponse({ status: 200, description: 'Hoàn trả thành công' })
+  @ResponseMessage('Hoàn trả thành công')
+  async refundPayment(
+    @Param('paymentId') paymentId: string,
+    @Body() createRefundDto: CreateRefundDto
+  ): Promise<any> {
+    return this.refundService.refundPayment(paymentId, createRefundDto);
+  }
 }

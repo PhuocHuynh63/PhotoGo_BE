@@ -1,8 +1,9 @@
-import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches, IsNotEmpty } from 'class-validator';
-import { BookingSourceType, BookingDepositType, BookingStatus } from '../../../constants/booking.enum';
+import { IsEnum, IsString, IsUUID, IsOptional, IsNumber, Matches, IsNotEmpty, IsArray, ValidateNested, ValidateIf } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+import { BookingSourceType, BookingDepositType, BookingStatus, BookingType } from '../../../constants/booking.enum';
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CreateBookingDto {
+export class CreateBookingScheduleItemDto {
   @IsString()
   @Matches(/^([0-2][0-9]|3[0-1])\/(0[1-9]|1[0-2])\/\d{4}$/, {
     message: 'Ngày phải có định dạng DD/MM/YYYY'
@@ -13,15 +14,70 @@ export class CreateBookingDto {
   })
   date: string;
 
+  // @IsString()
+  // @IsOptional()
+  // @ApiProperty({
+  //   description: 'Ghi chú cho ngày này',
+  //   example: 'Chụp ảnh ngoại cảnh',
+  //   required: false
+  // })
+  // notes?: string;
+}
+
+export class CreateBookingDto {
+  @IsEnum(BookingType)
+  @ApiProperty({
+    enum: BookingType,
+    description: 'Loại booking (một ngày hoặc nhiều ngày)',
+    enumName: 'BookingType',
+    example: BookingType.SINGLE_DAY
+  })
+  bookingType: BookingType;
+
+  // For single day booking
+  @ValidateIf(o => o.bookingType === BookingType.SINGLE_DAY)
+  @IsString()
+  @Matches(/^([0-2][0-9]|3[0-1])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+    message: 'Ngày phải có định dạng DD/MM/YYYY'
+  })
+  @ApiProperty({
+    description: 'Ngày booking (định dạng DD/MM/YYYY) - chỉ dùng cho booking 1 ngày',
+    example: '04/06/2025',
+    required: false
+  })
+  date?: string;
+
+  @ValidateIf(o => o.bookingType === BookingType.SINGLE_DAY)
   @IsString()
   @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: 'Giờ phải có định dạng HH:mm'
   })
+  @Transform(({ value }) => value === "" ? null : value)
   @ApiProperty({
-    description: 'Giờ booking (định dạng HH:mm)',
-    example: '13:00'
+    description: 'Giờ booking (định dạng HH:mm) - chỉ dùng cho booking 1 ngày',
+    example: '13:00',
+    required: false
   })
-  time: string;
+  time?: string;
+
+  // For multi-day booking
+  @ValidateIf(o => o.bookingType === BookingType.MULTI_DAY)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateBookingScheduleItemDto)
+  @Transform(({ value }) => {
+    if (Array.isArray(value) && typeof value[0] === 'string') {
+      return value.map(date => Object.assign(new CreateBookingScheduleItemDto(), { date }));
+    }
+    return value;
+  })
+  @ApiProperty({
+    description: 'Danh sách các ngày booking - chỉ dùng cho booking nhiều ngày',
+    type: [CreateBookingScheduleItemDto],
+    example: ['04/06/2025', '05/06/2025'],
+    required: false
+  })
+  schedules?: CreateBookingScheduleItemDto[];
 
   @IsEnum(BookingSourceType)
   @ApiProperty({

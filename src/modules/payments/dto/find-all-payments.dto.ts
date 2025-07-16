@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsUUID } from 'class-validator';
+import { IsOptional, IsEnum, IsUUID, IsString } from 'class-validator';
 import { PaymentStatus } from '../../../constants/payment.enum';
 
 export class FindAllPaymentsDto {
@@ -9,4 +9,9 @@ export class FindAllPaymentsDto {
   @IsOptional()
   @IsEnum(PaymentStatus)
   status?: PaymentStatus;
+}
+
+export class FindPaymentsByTransactionIdDto {
+  @IsString()
+  transactionId: string;  
 }

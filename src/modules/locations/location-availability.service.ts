@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { LocationAvailability } from './entities/location-availability.entity';
 import { Location } from './entities/location.entity';
 import { CreateLocationTimeScheduleDto } from './dto/create-location-time-schedule.dto';
@@ -13,11 +13,12 @@ import { CreateLocationSlotTimeDto } from './dto/create-location-slot-time.dto';
 import { UpdateLocationSlotTimeDto } from './dto/update-location-slot-time.dto';
 import { CreateLocationWorkingDateDto } from './dto/create-location-working-date.dto';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
-import { In } from 'typeorm';
 import { UpdateTimeOnlyForDayDto, DayOfWeek } from './dto/update-time-only-for-saturday.dto';
 import { UpdateLocationWorkingDateStatusDto } from './dto/update-location-working-date.dto';
 import { DataSource } from 'typeorm';
-import { BookingStatus } from 'src/constants/booking.enum';
+import { BookingStatus, BookingType } from 'src/constants/booking.enum';
+import { Booking } from 'src/modules/bookings/entities/booking.entity';
+import { ConceptRangeType } from 'src/constants/servicePackage.enum';
 
 @Injectable()
 export class LocationAvailabilityService {
@@ -105,7 +106,7 @@ export class LocationAvailabilityService {
       // Get all bookings for this slot time working date
       const bookings = await this.dataSource
         .createQueryBuilder()
-        .select('booking.id, booking.time, service_concept.duration, booking.date')
+        .select('booking.id, booking.time, service_concept.duration, booking.date, booking.status, booking.created_at')
         .from('booking', 'booking')
         .innerJoin('booking.serviceConcept', 'service_concept')
         .innerJoin('booking.location', 'location')
@@ -114,7 +115,7 @@ export class LocationAvailabilityService {
         .innerJoin('slotTimes.locationSlotTimeWorkingDates', 'slotTimeWorkingDates')
         .where('slotTimeWorkingDates.id = :slotTimeWorkingDateId', { slotTimeWorkingDateId: slotTimeWorkingDate.id })
         .andWhere('booking.status IN (:...statuses)', { 
-          statuses: [BookingStatus.COMPLETED] 
+          statuses: [BookingStatus.PAID, BookingStatus.PENDING] 
         })
         .andWhere('booking.date = :bookingDate', { bookingDate: slotTimeWorkingDate.workingDate.date })
         .getRawMany();
@@ -125,16 +126,24 @@ export class LocationAvailabilityService {
       if (slotTimeWorkingDate.slotTime) {
         const slotStartMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.startSlotTime);
         const slotEndMinutes = this.timeToMinutes(slotTimeWorkingDate.slotTime.endSlotTime);
+        const timeoutMinutes = 15; // 15 minutes timeout
+        const timeoutDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
         for (const booking of bookings) {
-          const bookingStartMinutes = this.timeToMinutes(booking.time);
-          const bookingEndMinutes = bookingStartMinutes + booking.duration;
+          // Skip PENDING bookings that have timed out
+          if (booking.status === BookingStatus.PENDING && new Date(booking.created_at) < timeoutDate) {
+            continue; // Skip timed out bookings
+          }
 
-          // Check if booking overlaps with slot
+          // Nếu duration = 0 thì mặc định là 60 phút
+          const duration = booking.duration === 0 ? 60 : booking.duration;
+          const bookingStartMinutes = this.timeToMinutes(booking.time);
+          const bookingEndMinutes = bookingStartMinutes + duration;
+
           if (
-            (bookingStartMinutes >= slotStartMinutes && bookingStartMinutes < slotEndMinutes) || // Booking starts during slot
-            (bookingEndMinutes > slotStartMinutes && bookingEndMinutes <= slotEndMinutes) || // Booking ends during slot
-            (bookingStartMinutes <= slotStartMinutes && bookingEndMinutes >= slotEndMinutes) // Booking spans entire slot
+            (bookingStartMinutes >= slotStartMinutes && bookingStartMinutes < slotEndMinutes) ||
+            (bookingEndMinutes > slotStartMinutes && bookingEndMinutes <= slotEndMinutes) ||
+            (bookingStartMinutes <= slotStartMinutes && bookingEndMinutes >= slotEndMinutes)
           ) {
             alreadyBooked++;
           }
@@ -182,6 +191,8 @@ export class LocationAvailabilityService {
     @InjectRepository(LocationSlotTimeWorkingDate)
     private locationSlotTimeWorkingDateRepository: Repository<LocationSlotTimeWorkingDate>,
     private dataSource: DataSource,
+    @InjectRepository(Booking)
+    private bookingRepository: Repository<Booking>,
   ) {}
 
   // Helper function to generate dates for the current week
@@ -548,8 +559,6 @@ export class LocationAvailabilityService {
       .skip((Number(current) - 1) * actualPageSize)
       .take(actualPageSize)
       .getManyAndCount();
-
-    // Format dates and slot times in response
     const formattedData = await Promise.all(data.map(async availability => {
       // Get all slot time working dates for this availability
       const slotTimeWorkingDates = await this.locationSlotTimeWorkingDateRepository.find({
@@ -560,6 +569,61 @@ export class LocationAvailabilityService {
         relations: ['slotTime', 'workingDate']
       });
 
+      // For each slot time working date, check if it's available
+      const formattedSlotTimeWorkingDates = await Promise.all(slotTimeWorkingDates.map(async slotTimeWorkingDate => {
+        // Check for single-day bookings in this slot
+        const singleDayBookings = await this.bookingRepository.find({
+          where: {
+            date: slotTimeWorkingDate.workingDate.date,
+            locationId: availability.location.id,
+            status: In([BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED]),
+            bookingType: BookingType.SINGLE_DAY
+          },
+          relations: ['serviceConcept']
+        });
+        
+        const hasSingleDayBooking = singleDayBookings.some(booking => {
+          if (!booking.serviceConcept || booking.serviceConcept.conceptRangeType !== ConceptRangeType.SINGLE_DAY) return false;
+          // Check if booking.time is within slotTime
+          const [bHour, bMin] = booking.time.split(':').map(Number);
+          const [slotStartHour, slotStartMin] = slotTimeWorkingDate.slotTime.startSlotTime.split(':').map(Number);
+          const [slotEndHour, slotEndMin] = slotTimeWorkingDate.slotTime.endSlotTime.split(':').map(Number);
+          const bookingMinutes = bHour * 60 + bMin;
+          const slotStartMinutes = slotStartHour * 60 + slotStartMin;
+          const slotEndMinutes = slotEndHour * 60 + slotEndMin;
+          return bookingMinutes >= slotStartMinutes && bookingMinutes < slotEndMinutes;
+        });
+
+        // Check for multi-day bookings that include this date
+        const multiDayBookings = await this.bookingRepository
+          .createQueryBuilder('booking')
+          .innerJoin('booking.schedules', 'schedule')
+          .where('booking.locationId = :locationId', { locationId: availability.location.id })
+          .andWhere('booking.status IN (:...statuses)', { 
+            statuses: [BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED] 
+          })
+          .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.MULTI_DAY })
+          .andWhere('schedule.date = :date', { date: slotTimeWorkingDate.workingDate.date })
+          .getMany();
+
+        const hasMultiDayBooking = multiDayBookings.length > 0;
+
+        // If there's any booking (single-day or multi-day), block this slot
+        const isSlotAvailable = !hasSingleDayBooking && !hasMultiDayBooking && slotTimeWorkingDate.workingDate.isAvailable;
+
+        return {
+          id: slotTimeWorkingDate.id,
+          date: this.formatDate(slotTimeWorkingDate.workingDate.date),
+          startSlotTime: slotTimeWorkingDate.slotTime.startSlotTime,
+          endSlotTime: slotTimeWorkingDate.slotTime.endSlotTime,
+          maxParallelBookings: slotTimeWorkingDate.maxParallelBookings || 1,
+          alreadyBooked: hasSingleDayBooking || hasMultiDayBooking ? 1 : 0,
+          isAvailable: isSlotAvailable,
+          blockReason: hasMultiDayBooking ? 'Ngày này đã được đặt bởi multi-day booking' : 
+                      hasSingleDayBooking ? 'Slot này đã được đặt bởi single-day booking' : null
+        };
+      }));
+
       return {
         ...availability,
         workingDates: availability.workingDates?.map(workingDate => 
@@ -569,8 +633,100 @@ export class LocationAvailabilityService {
         slotTimeWorkingDates: []
       };
     }));
-
     return {
+      data: formattedData,
+      pagination: {
+        current: Number(current),
+        pageSize: actualPageSize,
+        totalPage: Math.ceil(total / actualPageSize),
+        totalItem: total,
+      }
+    };
+  }
+
+  async findByLocationIdForMultiDay(locationId: string, query: FindLocationAvailabilityDto): Promise<{
+    data: LocationAvailability[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
+    const { isAvailable, current, pageSize, sortBy, sortDirection } = query;
+    const actualPageSize = Number(pageSize);
+    const queryBuilder = this.locationAvailabilityRepository.createQueryBuilder('location_availability')
+      .leftJoinAndSelect('location_availability.location', 'location')
+      .leftJoinAndSelect('location_availability.workingDates', 'workingDates')
+      .leftJoinAndSelect('location_availability.slotTimes', 'slotTimes')
+      .andWhere('location_availability.location_id = :locationId', { locationId })
+      .orderBy('location_availability.createdAt', sortDirection === 'asc' ? 'ASC' : 'DESC');
+
+    if (isAvailable !== undefined) {
+      queryBuilder.andWhere('location_availability.isAvailable = :isAvailable', { isAvailable });
+    }
+
+    if (sortBy) {
+      queryBuilder.orderBy(`location_availability.${sortBy}`, sortDirection === 'asc' ? 'ASC' : 'DESC');
+    }
+
+    const [data, total] = await queryBuilder
+      .skip((Number(current) - 1) * actualPageSize)
+      .take(actualPageSize)
+      .getManyAndCount();
+
+    // Format dates and slot times in response
+    const formattedData = await Promise.all(data.map(async availability => {
+      // For each workingDate, check if the entire date is available for multi-day booking
+      const workingDates = await Promise.all((availability.workingDates || []).map(async workingDate => {
+        // Check if there are any paid bookings for this date (regardless of time)
+        const bookings = await this.bookingRepository.find({
+          where: {
+            date: workingDate.date,
+            locationId: availability.location.id,
+            status: In([BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED])
+          },
+          relations: ['serviceConcept']
+        });
+
+        // Check specifically for single-day bookings
+        const singleDayBookings = bookings.filter(booking => 
+          booking.bookingType === BookingType.SINGLE_DAY
+        );
+
+        // Check for multi-day bookings that include this date
+        const multiDayBookings = await this.bookingRepository
+          .createQueryBuilder('booking')
+          .innerJoin('booking.schedules', 'schedule')
+          .where('booking.locationId = :locationId', { locationId: availability.location.id })
+          .andWhere('booking.status IN (:...statuses)', { 
+            statuses: [BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.COMPLETED] 
+          })
+          .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.MULTI_DAY })
+          .andWhere('schedule.date = :date', { date: workingDate.date })
+          .getMany();
+
+        const hasSingleDayBooking = singleDayBookings.length > 0;
+        const hasMultiDayBooking = multiDayBookings.length > 0;
+        const hasAnyBooking = hasSingleDayBooking || hasMultiDayBooking;
+
+        return {
+          ...this.formatLocationWorkingDates(workingDate),
+          isAvailable: !hasAnyBooking && workingDate.isAvailable,
+          blockReason: hasSingleDayBooking ? 'Ngày này đã có single-day booking, vui lòng chọn ngày khác' :
+                      hasMultiDayBooking ? 'Ngày này đã được đặt bởi multi-day booking' : null
+        };
+      }));
+
+      return {
+        ...availability,
+        workingDates: workingDates,
+        // slotTimes: await this.formatSlotTimesArray(availability.slotTimes),
+        // slotTimeWorkingDates: []
+      };
+    }));
+
+    return {  
       data: formattedData,
       pagination: {
         current: Number(current),
@@ -1038,5 +1194,153 @@ export class LocationAvailabilityService {
     await this.locationWorkingDateRepository.save(workingDate);
 
     return this.formatLocationWorkingDates(workingDate);
+  }
+
+  // Lock slot for booking process
+  async lockSlotForBooking(date: string, time: string, locationId: string): Promise<boolean> {
+    try {
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        throw new BadRequestException('Định dạng ngày không hợp lệ');
+      }
+
+      // Find the slot time working date relationship directly
+      const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+        where: {
+          workingDate: {
+            date: new Date(convertedDate),
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          },
+          slotTime: {
+            startSlotTime: time,
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          }
+        },
+        relations: ['slotTime', 'workingDate', 'workingDate.locationAvailability', 'workingDate.locationAvailability.location', 'slotTime.locationAvailability', 'slotTime.locationAvailability.location']
+      });
+
+      if (!slotTimeWorkingDate) {
+        throw new NotFoundException('Không tìm thấy thông tin slot time cho thời gian này trong ngày làm việc này');
+      }
+
+      // Use existing formatSlotTimeWorkingDates to get alreadyBooked count
+      const formattedSlot = await this.formatSlotTimeWorkingDates(slotTimeWorkingDate);
+      if (!formattedSlot) {
+        return false;
+      }
+
+      // Check if slot is available
+      if (formattedSlot.alreadyBooked >= slotTimeWorkingDate.maxParallelBookings) {
+        return false; // Slot is not available
+      }
+
+      // Lock the slot by temporarily reducing maxParallelBookings
+      slotTimeWorkingDate.maxParallelBookings = formattedSlot.alreadyBooked;
+      await this.locationSlotTimeWorkingDateRepository.save(slotTimeWorkingDate);
+
+      return true; // Slot locked successfully
+    } catch (error) {
+      this.logger.error(`Lỗi khóa slot: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Unlock slot after timeout or payment
+  async unlockSlot(date: string, time: string, locationId: string): Promise<void> {
+    try {
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        throw new BadRequestException('Định dạng ngày không hợp lệ');
+      }
+
+      // Find the slot time working date relationship directly
+      const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+        where: {
+          workingDate: {
+            date: new Date(convertedDate),
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          },
+          slotTime: {
+            startSlotTime: time,
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          }
+        },
+        relations: ['slotTime', 'workingDate', 'workingDate.locationAvailability', 'workingDate.locationAvailability.location', 'slotTime.locationAvailability', 'slotTime.locationAvailability.location']
+      });
+
+      if (!slotTimeWorkingDate) {
+        this.logger.warn('Thông tin slot time cho ngày này không tồn tại');
+        return;
+      }
+
+      // Restore original maxParallelBookings (assuming it was 1 before locking)
+      slotTimeWorkingDate.maxParallelBookings = 1;
+      await this.locationSlotTimeWorkingDateRepository.save(slotTimeWorkingDate);
+
+      this.logger.log(`Slot mở ra cho ngày: ${date}, thời gian: ${time}, vị trí: ${locationId}`);
+    } catch (error) {
+      this.logger.error(`Lỗi mở slot: ${error.message}`);
+    }
+  }
+
+  // Check if slot is available for booking
+  async isSlotAvailableForBooking(date: string, time: string, locationId: string): Promise<boolean> {
+    try {
+      // Convert date from DD/MM/YYYY to YYYY-MM-DD
+      const convertedDate = this.convertDateFormat(date);
+      if (!convertedDate) {
+        return false;
+      }
+
+      // Find the slot time working date relationship directly
+      const slotTimeWorkingDate = await this.locationSlotTimeWorkingDateRepository.findOne({
+        where: {
+          workingDate: {
+            date: new Date(convertedDate),
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          },
+          slotTime: {
+            startSlotTime: time,
+            locationAvailability: {
+              location: { id: locationId }
+            }
+          }
+        },
+        relations: ['slotTime', 'workingDate', 'workingDate.locationAvailability', 'workingDate.locationAvailability.location', 'slotTime.locationAvailability', 'slotTime.locationAvailability.location']
+      });
+
+      if (!slotTimeWorkingDate) {
+        return false;
+      }
+
+      // Check if working date is available
+      if (!slotTimeWorkingDate.workingDate.isAvailable) {
+        return false;
+      }
+
+      // Use existing formatSlotTimeWorkingDates to get availability info
+      const formattedSlot = await this.formatSlotTimeWorkingDates(slotTimeWorkingDate);
+      if (!formattedSlot) {
+        return false;
+      }
+
+      // Check if slot has available capacity
+      return formattedSlot.isAvailable;
+    } catch (error) {
+      this.logger.error(`Lỗi kiểm tra tính khả dụng của slot: ${error.message}`);
+      return false;
+    }
   }
 }

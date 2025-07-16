@@ -5,6 +5,7 @@ import {
   CreateCheckoutSessionDto,
   UpdateCheckoutSessionDto,
 } from './dto/checkout-sesion';
+import { ConceptRangeType } from 'src/constants/servicePackage.enum';
 
 @Injectable()
 export class CheckoutSessionService {
@@ -30,11 +31,26 @@ export class CheckoutSessionService {
   ): Promise<CheckoutSessionDto> {
     const sessionKey = this.getSessionKey(userId, id);
 
-    const newSession: CheckoutSessionDto = {
-      checkoutSessionId: sessionKey,
-      userId: userId,
-      ...sessionData,
-    };
+    let newSession: CheckoutSessionDto;
+
+    // Validate and create session based on concept range type
+    if (sessionData.conceptRangeType === ConceptRangeType.SINGLE_DAY) {
+      newSession = {
+        checkoutSessionId: sessionKey,
+        userId: userId,
+        ...sessionData,
+        multiDaysBookingDetails: undefined,
+      };
+    } else if (sessionData.conceptRangeType === ConceptRangeType.MULTIPLE_DAYS) {
+      newSession = {
+        checkoutSessionId: sessionKey,
+        userId: userId,
+        ...sessionData,
+        singleDayBookingDetails: undefined,
+      };
+    } else {
+      throw new BadRequestException('Loại phạm vi concept không hợp lệ');
+    }
 
     // Store the session data in Redis
     await this.redisClient.set(

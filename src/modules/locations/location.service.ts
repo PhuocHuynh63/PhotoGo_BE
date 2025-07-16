@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository, ILike, Between } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
@@ -11,6 +11,11 @@ import { SearchLocationDto } from './dto/search-location.dto';
 import { VendorStatus } from 'src/constants/vendor.enum';
 import { DataSource } from 'typeorm';
 import { PaginationDto } from './dto/pagination.dto';
+import { GetCitiesDto } from './dto/get-cities.dto';
+import { GoongService } from 'src/3rdService/goong/goong.service';
+import { LocationSlotBookingsResponseDto, SlotBookingsDto, SlotBookingDetailDto } from './dto/location-slot-bookings.dto';
+import { Booking } from '../bookings/entities/booking.entity';
+import { BookingStatus } from 'src/constants/booking.enum';
 
 @Injectable()
 export class LocationService {
@@ -19,7 +24,10 @@ export class LocationService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(Vendor)
     private readonly vendorRepository: Repository<Vendor>,
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
     private readonly dataSource: DataSource,
+    private readonly goongService: GoongService,
   ) { }
 
   //#region create
@@ -30,12 +38,6 @@ export class LocationService {
     }
     if (!createLocationDto.address) {
       throw new BadRequestException('Địa chỉ không được để trống');
-    }
-    if (!createLocationDto.city) {
-      throw new BadRequestException('Thành phố không được để trống');
-    }
-    if (!createLocationDto.province) {
-      throw new BadRequestException('Tỉnh/Thành phố không được để trống');
     }
 
     // Check if vendor exists
@@ -59,27 +61,76 @@ export class LocationService {
       throw new ConflictException('Vendor đã có địa điểm này');
     }
 
-    // Validate coordinates if provided
-    if (createLocationDto.latitude !== undefined || createLocationDto.longitude !== undefined) {
-      if (createLocationDto.latitude === undefined || createLocationDto.longitude === undefined) {
-        throw new BadRequestException('Cả latitude và longitude phải được cung cấp cùng nhau');
-      }
+    // Process location with geocoding if coordinates are not provided
+    let processedLocation = { ...createLocationDto };
+
+    // If coordinates are already provided, use them
+    if (createLocationDto.latitude !== undefined && createLocationDto.longitude !== undefined) {
+      // Validate provided coordinates
       if (createLocationDto.latitude < -90 || createLocationDto.latitude > 90) {
         throw new BadRequestException('Latitude phải nằm trong khoảng từ -90 đến 90 độ');
       }
       if (createLocationDto.longitude < -180 || createLocationDto.longitude > 180) {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
       }
+    } else if (createLocationDto.autoGeocode !== false) {
+      // Try to get coordinates from GoongAPI using complete address function
+      try {
+        const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
+          createLocationDto.address,
+          createLocationDto.district,
+          createLocationDto.ward,
+          createLocationDto.city,
+          createLocationDto.province
+        );
+
+        if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+          processedLocation.latitude = completeAddressResult.latitude;
+          processedLocation.longitude = completeAddressResult.longitude;
+        }
+      } catch (error) {
+        // If geocoding fails, continue without coordinates
+        console.warn(`Failed to get complete address: ${createLocationDto.address}. Error: ${error.message}`);
+      }
     }
 
     const location = this.locationRepository.create({
-      ...createLocationDto,
+      ...processedLocation,
       vendor,
     });
 
     return this.locationRepository.save(location);
   }
   //#endregion create
+
+  /**
+   * Take a vendor ID and return all locations associated with that vendor.
+   * @param vendor_id 
+   * @returns 
+   */
+  async findByVendorId(vendor_id: string, status?: VendorStatus): Promise<Location[]> {
+    if (!vendor_id) {
+      throw new BadRequestException('ID vendor không được để trống');
+    }
+
+    const whereCondition: any = { id: vendor_id };
+    if (status) {
+      if (!Object.values(VendorStatus).includes(status)) {
+        throw new BadRequestException('Trạng thái vendor không hợp lệ');
+      }
+      whereCondition.status = status;
+    }
+
+    const vendor = await this.vendorRepository.findOne({
+      where: whereCondition,
+      relations: ['locations'],
+    });
+    if (!vendor) {
+      throw new NotFoundException(`Không tìm thấy vendor với ID ${vendor_id}`);
+    }
+    return vendor.locations;
+  }
+  //----------------------End----------------------//
 
   //#region findAll
   async findAll(query: FindLocationDto): Promise<{
@@ -162,16 +213,36 @@ export class LocationService {
   async updateLocation(id: string, updateLocationDto: UpdateLocationDto): Promise<Location> {
     const location = await this.findOne(id);
 
-    // Validate coordinates if provided
-    if (updateLocationDto.latitude !== undefined || updateLocationDto.longitude !== undefined) {
-      if (updateLocationDto.latitude === undefined || updateLocationDto.longitude === undefined) {
-        throw new BadRequestException('Cả latitude và longitude phải được cung cấp cùng nhau');
-      }
+    // Process location with geocoding if coordinates are not provided
+    let processedLocation = { ...updateLocationDto };
+
+    // If coordinates are already provided, use them
+    if (updateLocationDto.latitude !== undefined && updateLocationDto.longitude !== undefined) {
+      // Validate provided coordinates
       if (updateLocationDto.latitude < -90 || updateLocationDto.latitude > 90) {
         throw new BadRequestException('Latitude phải nằm trong khoảng từ -90 đến 90 độ');
       }
       if (updateLocationDto.longitude < -180 || updateLocationDto.longitude > 180) {
         throw new BadRequestException('Longitude phải nằm trong khoảng từ -180 đến 180 độ');
+      }
+    } else if (updateLocationDto.autoGeocode !== false && (updateLocationDto.address || updateLocationDto.district || updateLocationDto.ward || updateLocationDto.city || updateLocationDto.province)) {
+      // Try to get coordinates from GoongAPI using complete address function if address components are being updated
+      try {
+        const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
+          updateLocationDto.address || location.address,
+          updateLocationDto.district || location.district,
+          updateLocationDto.ward || location.ward,
+          updateLocationDto.city || location.city,
+          updateLocationDto.province || location.province
+        );
+
+        if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+          processedLocation.latitude = completeAddressResult.latitude;
+          processedLocation.longitude = completeAddressResult.longitude;
+        }
+      } catch (error) {
+        // If geocoding fails, continue without coordinates
+        console.warn(`Failed to get complete address: ${updateLocationDto.address || location.address}. Error: ${error.message}`);
       }
     }
 
@@ -191,7 +262,7 @@ export class LocationService {
       }
     }
 
-    Object.assign(location, updateLocationDto);
+    Object.assign(location, processedLocation);
     return this.locationRepository.save(location);
   }
   //#endregion updateLocation
@@ -219,7 +290,7 @@ export class LocationService {
   async searchLocations(searchDto: SearchLocationDto) {
     try {
       const { keyword, address, district, ward, city, province } = searchDto;
-      
+
       // Build where conditions
       const whereConditions: any[] = [];
 
@@ -396,4 +467,240 @@ export class LocationService {
     };
   }
   //#endregion getUserLocation
+
+  //#region getAllCities
+  async getAllCities(getCitiesDto: GetCitiesDto): Promise<{
+    data: string[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      const { current, pageSize, sortDirection, filterField } = getCitiesDto;
+
+      const currentPage = current ? Number(current) : 1;
+      const limit = pageSize ? Number(pageSize) : 10;
+      const skip = (currentPage - 1) * limit;
+
+      // Validate pagination parameters
+      if (currentPage < 1) {
+        throw new BadRequestException('Trang hiện tại phải lớn hơn 0');
+      }
+      if (limit < 1 || limit > 100) {
+        throw new BadRequestException('Số lượng item trên trang phải từ 1 đến 100');
+      }
+
+      // Validate filter field
+      const allowedFilterFields = ['city', 'ward', 'district', 'province'];
+      const fieldToFilter = allowedFilterFields.includes(filterField) ? filterField : 'city';
+
+      // Get total count
+      const totalResult = await this.locationRepository
+        .createQueryBuilder('location')
+        .select(`COUNT(DISTINCT location.${fieldToFilter})`, 'total')
+        .where(`location.${fieldToFilter} IS NOT NULL`)
+        .andWhere(`location.${fieldToFilter} != :emptyString`, { emptyString: '' })
+        .getRawOne();
+
+      const totalItem = Number(totalResult.total);
+
+      // Get filtered data with pagination
+      const results = await this.locationRepository
+        .createQueryBuilder('location')
+        .select(`DISTINCT location.${fieldToFilter}`, fieldToFilter)
+        .where(`location.${fieldToFilter} IS NOT NULL`)
+        .andWhere(`location.${fieldToFilter} != :emptyString`, { emptyString: '' })
+        .orderBy(`location.${fieldToFilter}`, sortDirection === 'desc' ? 'DESC' : 'ASC')
+        .limit(limit)
+        .offset(skip)
+        .getRawMany();
+
+      const totalPage = Math.ceil(totalItem / limit);
+
+      return {
+        data: results.map((result) => result[fieldToFilter]),
+        pagination: {
+          current: currentPage,
+          pageSize: limit,
+          totalPage,
+          totalItem,
+        },
+      };
+    } catch (error) {
+      throw new BadRequestException('Không thể lấy danh sách: ' + error.message);
+    }
+  }
+  //#endregion getAllCities
+
+  //#region testGoongAPI
+  async testGoongAPI() {
+    try {
+      // Test 1: API Key Validation
+      const isValid = await this.goongService.validateApiKey();
+
+      // Test 2: Complete Address from Input
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
+        '123 Đường ABC',
+        'Quận 1',
+        'Phường Bến Nghé',
+        'TP. Hồ Chí Minh',
+        'Việt Nam'
+      );
+
+      // Test 3: Complete Address from Coordinates
+      const reverseResult = await this.goongService.getCompleteAddressFromCoordinates(
+        10.762622,
+        106.660172
+      );
+
+      // Test 4: Demo Complete Address
+      await this.goongService.demoCompleteAddress();
+
+      return {
+        apiKeyValid: isValid,
+        completeAddressFromInput: completeAddressResult,
+        completeAddressFromCoordinates: reverseResult,
+        message: 'All tests completed. Check logs for demo details.'
+      };
+    } catch (error) {
+      throw new Error(`GoongAPI test failed: ${error.message}`);
+    }
+  }
+  //#endregion testGoongAPI
+
+  // async getSlotBookings(locationId: string, from: string, to: string): Promise<LocationSlotBookingsResponseDto> {
+  //   function parseDDMMYYYY(dateStr: string): Date {
+  //     const [day, month, year] = dateStr.split('/');
+  //     return new Date(`${year}-${month}-${day}`);
+  //   }
+
+  //   const fromDate = parseDDMMYYYY(from);
+  //   const toDate = parseDDMMYYYY(to);
+
+  //   // Lấy tất cả booking của location này trong khoảng ngày
+  //   // (giả sử booking có trường date, time, status, user, serviceConcept, notes, phone, email)
+  //   const bookings = await this.bookingRepository.find({
+  //     where: {
+  //       locationId,
+  //       date: Between(fromDate, toDate),
+  //     },
+  //     relations: ['user', 'serviceConcept'],
+  //     order: { date: 'ASC', time: 'ASC' }
+  //   });
+
+  //   // Gom nhóm theo date + time (slot)
+  //   const slotMap = new Map<string, SlotBookingsDto>();
+  //   for (const booking of bookings) {
+  //     const slotKey = `${booking.date.toISOString().slice(0, 10)}_${booking.time}`;
+  //     if (!slotMap.has(slotKey)) {
+  //       slotMap.set(slotKey, {
+  //         date: booking.date.toISOString().slice(0, 10),
+  //         time: booking.time,
+  //         count: 0,
+  //         bookings: []
+  //       });
+  //     }
+  //     const slot = slotMap.get(slotKey)!;
+  //     slot.count++;
+  //     slot.bookings.push({
+  //       id: booking.id,
+  //       fullName: booking.user?.fullName || '',
+  //       status: booking.status,
+  //       service: booking.serviceConcept?.name || '',
+  //       notes: booking.userNote,
+  //       phone: booking.phone,
+  //       email: booking.email
+  //     });
+  //   }
+  //   return { slots: Array.from(slotMap.values()) };
+  // }
+
+  async getLocationScheduleOverview(locationId: string, from: string, to: string): Promise<{
+    slots: SlotBookingsDto[];
+    stats: {
+      total: number;
+      confirmed: number;
+      pending: number;
+      expectedRevenue: number;
+    };
+    todayBookings: SlotBookingDetailDto[];
+  }> {
+    function parseDDMMYYYY(dateStr: string): Date {
+      const [day, month, year] = dateStr.split('/');
+      return new Date(`${year}-${month}-${day}`);
+    }
+
+    const fromDate = parseDDMMYYYY(from);
+    const toDate = parseDDMMYYYY(to);
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    // Lấy tất cả booking của location này trong khoảng ngày
+    const bookings = await this.bookingRepository.find({
+      where: {
+        locationId,
+        date: Between(fromDate, toDate),
+        status: BookingStatus.PAID, // Chỉ lấy những booking đã thanh toán
+      },
+      relations: ['user', 'serviceConcept', 'invoices'],
+      order: { date: 'ASC', time: 'ASC' }
+    });
+
+    // Gom nhóm theo date + time (slot)
+    const slotMap = new Map<string, SlotBookingsDto>();
+    let total = 0;
+    let confirmed = 0;
+    let pending = 0;
+    let expectedRevenue = 0;
+    const todayBookings: SlotBookingDetailDto[] = [];
+
+    for (const booking of bookings) {
+      const dateObj = booking.date instanceof Date ? booking.date : new Date(booking.date);
+      const slotKey = `${dateObj.toISOString().slice(0, 10)}_${booking.time}`;
+      if (!slotMap.has(slotKey)) {
+        slotMap.set(slotKey, {
+          date: dateObj.toISOString().slice(0, 10),
+          time: booking.time,
+          count: 0,
+          bookings: []
+        });
+      }
+      const slot = slotMap.get(slotKey)!;
+      slot.count++;
+      const bookingDetail: SlotBookingDetailDto = {
+        id: booking.id,
+        fullName: booking.user?.fullName || '',
+        status: booking.status,
+        service: booking.serviceConcept?.name || '',
+        notes: booking.userNote,
+        phone: booking.phone,
+        email: booking.email
+      };
+      slot.bookings.push(bookingDetail);
+
+      // Thống kê
+      total++;
+      if (booking.status === BookingStatus.CONFIRMED) confirmed++;
+      if (booking.status === BookingStatus.PENDING) pending++;
+      if (booking.invoices && booking.invoices.length > 0 && typeof booking.invoices[0].payablePrice === 'number') expectedRevenue += Number(booking.invoices[0].payablePrice);
+
+      // Lịch hôm nay
+      if (dateObj.toISOString().slice(0, 10) === todayStr) {
+        todayBookings.push(bookingDetail);
+      }
+    }
+    return {
+      slots: Array.from(slotMap.values()),
+      stats: {
+        total,
+        confirmed,
+        pending,
+        expectedRevenue
+      },
+      todayBookings
+    };
+  }
 }

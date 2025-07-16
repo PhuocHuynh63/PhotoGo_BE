@@ -3,13 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Refund } from './entities/refund.entity';
 import { RefundHistory } from './entities/refund-history.entity';
-import { CreateRefundDto } from './dto/create-refund.dto';
+import { CreateRefundDto, ManualRefundDto } from './dto/create-refund.dto';
 import { FindAllRefundsDto } from './dto/find-all-refunds.dto';
 import { RefundStatus } from '../../constants/booking.enum';
 import { PaymentStatus } from '../../constants/payment.enum';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common/exceptions';
 import { PayOSService } from 'src/3rdService/payos/payos.service';
 import { PaymentService } from '../payments/payment.service';
+import { MailService } from '../../3rdService/mail/mail.service';
 
 @Injectable()
 export class RefundService {
@@ -20,6 +21,7 @@ export class RefundService {
     private readonly refundHistoryRepository: Repository<RefundHistory>,
     private readonly paymentService: PaymentService,
     private readonly payos: PayOSService,
+    private readonly mailService: MailService,
   ) {}
 
   async create(createRefundDto: CreateRefundDto): Promise<Refund> {
@@ -36,6 +38,110 @@ export class RefundService {
     await this.refundHistoryRepository.save(refundHistory);
 
     return savedRefund;
+  }
+
+  // New method: Create refund for conflict payment
+  async createConflictRefund(paymentId: string, transactionDetails: any): Promise<Refund> {
+    const payment = await this.paymentService.findOne(paymentId);
+    if (!payment) {
+      throw new NotFoundException(`Payment với ID ${paymentId} không tồn tại`);
+    }
+
+    const refund = this.refundRepository.create({
+      invoiceId: payment.invoiceId,
+      paymentId: paymentId,
+      amount: payment.amount,
+      reason: 'Slot thời gian đã được đặt bởi người khác',
+      status: RefundStatus.PENDING,
+      transactionDetails: {
+        bankCode: transactionDetails.bankCode,
+        accountNumber: transactionDetails.accountNumber,
+        accountName: transactionDetails.accountName,
+        transferId: transactionDetails.transferId,
+        transferTime: transactionDetails.transferTime,
+        paymentMethod: transactionDetails.paymentMethod,
+        paymentId: payment.paymentOSId,
+      },
+    });
+
+    const savedRefund = await this.refundRepository.save(refund);
+
+    // Create refund history
+    const refundHistory = this.refundHistoryRepository.create({
+      refundId: savedRefund.id,
+      status: RefundStatus.PENDING,
+    });
+    await this.refundHistoryRepository.save(refundHistory);
+
+    // Update payment status
+    await this.paymentService.update(paymentId, {
+      status: PaymentStatus.REFUND_PENDING
+    });
+
+    return savedRefund;
+  }
+
+  // New method: Get pending refunds for admin
+  async getPendingRefunds(): Promise<Refund[]> {
+    return await this.refundRepository.find({
+      where: { status: RefundStatus.PENDING },
+      relations: ['invoice', 'invoice.booking'],
+      order: { createdAt: 'DESC' }
+    });
+  }
+
+  // New method: Process manual refund
+  async processManualRefund(refundId: string, manualRefundDto: ManualRefundDto, adminId: string): Promise<Refund> {
+    const refund = await this.findOne(refundId);
+    
+    if (refund.status !== RefundStatus.PENDING) {
+      throw new BadRequestException('Refund không ở trạng thái chờ xử lý');
+    }
+
+    // Update refund with manual refund details
+    refund.status = RefundStatus.COMPLETED;
+    refund.manualRefundDetails = {
+      refundMethod: manualRefundDto.refundMethod,
+      refundAmount: manualRefundDto.refundAmount,
+      refundNote: manualRefundDto.refundNote,
+      refundedAt: new Date().toISOString(),
+      refundedBy: adminId,
+      bankAccount: manualRefundDto.bankAccount,
+      bankName: manualRefundDto.bankName,
+    };
+
+    const updatedRefund = await this.refundRepository.save(refund);
+
+    // Update payment status if exists
+    if (refund.paymentId) {
+      await this.paymentService.update(refund.paymentId, {
+        status: PaymentStatus.REFUNDED
+      });
+    }
+
+    // Create refund history
+    const refundHistory = this.refundHistoryRepository.create({
+      refundId: refund.id,
+      status: RefundStatus.COMPLETED,
+    });
+    await this.refundHistoryRepository.save(refundHistory);
+
+    // Send email notification to customer
+    if (refund.invoice?.booking?.email) {
+      try {
+        await this.mailService.sendRefundNotificationEmail(
+          refund.invoice.booking.email,
+          refund.invoice.booking.fullName,
+          refund.amount,
+          refund.manualRefundDetails.refundMethod,
+          refund.manualRefundDetails.refundNote
+        );
+      } catch (error) {
+        console.error('Error sending refund notification email:', error);
+      }
+    }
+
+    return updatedRefund;
   }
 
   async findAll(query: FindAllRefundsDto): Promise<Refund[]> {
@@ -55,7 +161,7 @@ export class RefundService {
   async findOne(id: string): Promise<Refund> {
     const refund = await this.refundRepository.findOne({
       where: { id },
-      relations: ['invoice', 'histories'],
+      relations: ['invoice', 'invoice.booking', 'histories'],
     });
 
     if (!refund) {

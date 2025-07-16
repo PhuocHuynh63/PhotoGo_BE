@@ -10,11 +10,15 @@ import { UploadModule } from '../../3rdService/upload/upload.module'; // Import 
 import { ReviewModule } from '../reviews/reviews.module';
 import { Location } from '../locations/entities/location.entity';
 import { User } from '../users/entities/user.entity';
+import { GoongModule } from '../../3rdService/goong';
+import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
+import { Campaign } from '../campaign/entities/campaign.entity';
+import { ServicePackageModule } from '../service-package/service-package.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, ServicePackage, Location, User]), UploadModule, ReviewModule],
+  imports: [TypeOrmModule.forFeature([Vendor, VendorManager, VendorLike, ServicePackage, Location, User, CampaignVendor, Campaign]), UploadModule, ReviewModule, GoongModule, ServicePackageModule],
   providers: [VendorService],
   controllers: [VendorController],
   exports: [VendorService],
 })
-export class VendorModule {}
+export class VendorModule { }

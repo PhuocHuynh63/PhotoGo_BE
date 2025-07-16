@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagg
 import { AttendanceService } from './attendance.service';
 import { JwtAuthGuard } from 'src/modules/auth/passport/jwt-auth.guard';
 import { Public } from 'src/decorator/custom';
+import { CurrentUserId } from 'src/decorator/user.decorator';
 
 @ApiTags('Attendance')
 @Controller('attendance')
@@ -17,6 +18,15 @@ export class AttendanceController {
   @ApiResponse({ status: 201, description: 'Điểm danh thành công' })
   @ApiResponse({ status: 400, description: 'Đã điểm danh' })
   async checkIn(@Param('userId') userId: string) {
+    return this.attendanceService.checkIn(userId);
+  }
+
+  @Post('check-in')
+  @ApiOperation({ summary: 'Daily check-in for current user' })
+  @ApiResponse({ status: 201, description: 'Điểm danh thành công' })
+  @ApiResponse({ status: 400, description: 'Đã điểm danh' })
+  async checkInCurrentUser(@CurrentUserId() userId: string) {
+    console.log('Current user checking in:', userId);
     return this.attendanceService.checkIn(userId);
   }
 

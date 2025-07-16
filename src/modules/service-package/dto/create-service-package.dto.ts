@@ -1,7 +1,8 @@
 import { IsUUID, IsNotEmpty, IsString, IsOptional, IsEnum, IsArray, IsNumber, Min, IsBoolean } from 'class-validator';
-import { ServicePackageStatus, ServiceConceptStatus } from 'src/constants/servicePackage.enum';
+import { ServicePackageStatus, ServiceConceptStatus, ConceptRangeType } from 'src/constants/servicePackage.enum';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import { ServiceTypeStatus } from 'src/constants/serviceType.enum';
 
 export class CreateServiceConceptDto {
   @ApiProperty({
@@ -9,8 +10,8 @@ export class CreateServiceConceptDto {
     example: 'Chụp ảnh cưới ngoại cảnh',
   })
   @IsString()
-  @IsNotEmpty({ message: 'Tên khái niệm dịch vụ không được để trống' })
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @ApiProperty({
     description: 'Mô tả chi tiết về khái niệm dịch vụ',
@@ -27,15 +28,35 @@ export class CreateServiceConceptDto {
   })
   @IsNumber({}, { message: 'Giá phải là số' })
   @Min(0, { message: 'Giá phải lớn hơn hoặc bằng 0' })
-  price: number;
+  @IsOptional()
+  price?: number;
 
   @ApiProperty({
-    description: 'Thời gian thực hiện (phút)',
+    description: 'Loại phạm vi của concept (1 ngày hoặc nhiều ngày)',
+    enum: ConceptRangeType,
+    example: ConceptRangeType.SINGLE_DAY,
+    required: false,
+  })
+  @IsEnum(ConceptRangeType, { message: 'Loại phạm vi concept không hợp lệ' })
+  @IsOptional()
+  conceptRangeType?: ConceptRangeType;
+
+  @ApiProperty({
+    description: 'Thời gian thực hiện (phút). Phải > 0 cho concept 1 ngày, phải = 0 cho concept nhiều ngày',
     example: 120,
   })
   @IsNumber({}, { message: 'Thời gian phải là số' })
-  @Min(0, { message: 'Thời gian phải lớn hơn hoặc bằng 0' })
-  duration: number;
+  @IsOptional()
+  duration?: number;
+
+  @ApiProperty({
+    description: 'Số ngày concept kéo dài. Phải = 1 cho concept 1 ngày, phải >= 2 cho concept nhiều ngày',
+    example: 1,
+    required: false,
+  })
+  @IsNumber({}, { message: 'Số ngày phải là số' })
+  @IsOptional()
+  numberOfDays?: number;
 
   @ApiProperty({
     description: 'Trạng thái của khái niệm dịch vụ',
@@ -185,4 +206,14 @@ export class CreateServiceTypeDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiProperty({
+    example: 'active',
+    description: 'Trạng thái của loại dịch vụ',
+    enum: ServiceTypeStatus,  
+    required: false
+  })
+  @IsEnum(ServiceTypeStatus)
+  @IsOptional()
+  status?: ServiceTypeStatus;
 }

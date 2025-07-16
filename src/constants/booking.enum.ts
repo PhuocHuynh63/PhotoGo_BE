@@ -3,6 +3,15 @@ export enum BookingStatus {
   CONFIRMED = 'đã xác nhận',
   CANCELLED = 'đã hủy',
   COMPLETED = 'đã hoàn thành',
+  PAID = 'đã thanh toán',
+}
+
+export enum BookingScheduleStatus {
+  SCHEDULED = 'đã lên lịch',
+  POSTPONED = 'đã hoãn',
+  COMPLETED = 'đã hoàn thành',
+  CANCELLED = 'đã hủy',
+  CONTINUED = 'đã tiếp tục',
 }
 
 export enum BookingSourceType {
@@ -16,6 +25,11 @@ export enum BookingSourceType {
 
 export enum BookingDepositType {
   PERCENTAGE = 'phần trăm',
+}
+
+export enum BookingType {
+  SINGLE_DAY = 'một ngày',
+  MULTI_DAY = 'nhiều ngày',
 }
 
 export enum RefundStatus {

@@ -49,4 +49,10 @@ export class VendorResponseDto {
 
   @ApiProperty({ type: () => User })
   user_id: User;
+
+  @ApiProperty({ description: 'Vendor có tham gia campaign với ít nhất 5 user không' })
+  isRemarkable: boolean;
+
+  @ApiProperty({ description: 'Vendor có subscription plan giá cao nhất không' })
+  priority: boolean;
 }

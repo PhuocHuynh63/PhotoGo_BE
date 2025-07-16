@@ -3,28 +3,31 @@ import { LocationService } from './location.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { Location } from './entities/location.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiProperty, ApiParam } from '@nestjs/swagger';
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { SearchLocationDto } from './dto/search-location.dto';
 import { PaginationDto } from './dto/pagination.dto';
+import { GetCitiesDto } from './dto/get-cities.dto';
+import { LocationSlotBookingsResponseDto } from './dto/location-slot-bookings.dto';
+import { VendorStatus } from 'src/constants/vendor.enum';
 @ApiTags('Locations')
 @Controller('locations')
 @ApiBearerAuth('access-token')
 export class LocationController {
-  constructor(private readonly locationService: LocationService) {}
+  constructor(private readonly locationService: LocationService) { }
 
   @Post(':vendor_id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Tạo địa điểm mới (Protected)',
-    description: 'Tạo một địa điểm mới với thông tin vendor và địa chỉ'
+    description: 'Tạo một địa điểm mới với thông tin vendor và địa chỉ. Tọa độ sẽ được tự động lấy từ Google Maps nếu không cung cấp.'
   })
   @ApiBody({
     type: CreateLocationDto,
     description: 'Thông tin địa điểm cần tạo',
     examples: {
       example1: {
-        summary: 'Tạo địa điểm với đầy đủ thông tin',
+        summary: 'Tạo địa điểm với tọa độ thủ công',
         value: {
           address: '321 Phạm Văn Đồng',
           district: 'Thủ Đức',
@@ -35,13 +38,23 @@ export class LocationController {
           longitude: 106.772400
         }
       },
+      example2: {
+        summary: 'Tạo địa điểm với tự động lấy tọa độ',
+        value: {
+          address: '321 Phạm Văn Đồng',
+          district: 'Thủ Đức',
+          ward: 'Linh Tây',
+          city: 'Hồ Chí Minh',
+          province: 'Hồ Chí Minh'
+        }
+      },
     }
   })
   @ApiResponse({ status: 201, description: 'Địa điểm được tạo thành công', type: Location })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy vendor' })
-  @ResponseMessage('Tạo địa điểm thành công') 
+  @ResponseMessage('Tạo địa điểm thành công')
   async create(@Param('vendor_id') vendor_id: string, @Body() createLocationDto: CreateLocationDto): Promise<Location> {
     try {
       return await this.locationService.create(vendor_id, createLocationDto);
@@ -51,6 +64,29 @@ export class LocationController {
       }
       throw new HttpException('Lỗi khi tạo địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @ResponseMessage('Lấy danh sách địa điểm thành công')
+  @Get('vendor/:vendor_id')
+  @ApiOperation({ summary: 'Lấy danh sách địa điểm theo vendor_id (Protected)' })
+  @ApiResponse({ status: 200, description: 'Danh sách địa điểm của vendor', type: [Location] })
+  @ApiResponse({ status: 400, description: 'Tham số không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy vendor' })
+  @ApiParam({
+    name: 'vendor_id',
+    description: 'ID của vendor để lấy danh sách địa điểm',
+    type: String,
+    example: 'vendor123',
+  })
+  @ApiQuery({
+    name: 'status',
+    description: 'Trạng thái của vendor (active, inactive, pending)',
+    enum: VendorStatus,
+    example: 'active',
+    required: false,
+  })
+  async findByVendorId(@Param('vendor_id') vendor_id: string, @Query('status') status: VendorStatus): Promise<Location[]> {
+    return this.locationService.findByVendorId(vendor_id, status);
   }
 
   @Public()
@@ -85,8 +121,8 @@ export class LocationController {
   @Get('search')
   @Public()
   @ApiOperation({ summary: 'Tìm kiếm địa điểm' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Danh sách địa điểm tìm được',
     schema: {
       type: 'object',
@@ -102,6 +138,55 @@ export class LocationController {
   @ResponseMessage('Tìm kiếm địa điểm thành công')
   async searchLocations(@Query() searchDto: SearchLocationDto) {
     return await this.locationService.searchLocations(searchDto);
+  }
+
+  @Get('cities')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách tất cả thành phố unique' })
+  @ApiQuery({ name: 'current', required: false, description: 'Trang hiện tại (mặc định: 1)' })
+  @ApiQuery({ name: 'pageSize', required: false, description: 'Số lượng item trên trang (mặc định: 10, tối đa: 100)' })
+  @ApiQuery({ name: 'sortDirection', required: false, description: 'Thứ tự sắp xếp (asc/desc, mặc định: asc)' })
+  @ApiQuery({ name: 'filterField', required: false, description: 'Field để filter (city, ward, district, province, mặc định: city)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách thành phố unique với phân trang',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { type: 'string' }
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            current: { type: 'number' },
+            pageSize: { type: 'number' },
+            totalPage: { type: 'number' },
+            totalItem: { type: 'number' }
+          }
+        }
+      }
+    }
+  })
+  @ResponseMessage('Lấy danh sách thành phố thành công')
+  async getAllCities(@Query() getCitiesDto: GetCitiesDto): Promise<{
+    data: string[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      return await this.locationService.getAllCities(getCitiesDto);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy danh sách', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Get(':vendor_id/:latitude/:longitude')
@@ -138,7 +223,10 @@ export class LocationController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Cập nhật địa điểm theo ID' })
+  @ApiOperation({
+    summary: 'Cập nhật địa điểm theo ID',
+    description: 'Cập nhật thông tin địa điểm. Tọa độ sẽ được tự động cập nhật từ Google Maps nếu thay đổi địa chỉ và không cung cấp tọa độ mới.'
+  })
   @ApiResponse({ status: 200, description: 'Địa điểm được cập nhật thành công', type: Location })
   @ApiResponse({ status: 400, description: 'Dữ liệu cập nhật không hợp lệ' })
   @ApiResponse({ status: 401, description: 'Không được phép truy cập' })
@@ -181,5 +269,34 @@ export class LocationController {
     }
   }
 
-  
+  // Test endpoint để kiểm tra GoongAPI
+  @Get('test-goong')
+  async testGoongAPI() {
+    try {
+      const result = await this.locationService.testGoongAPI();
+      return {
+        success: true,
+        message: 'GoongAPI test completed',
+        data: result
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'GoongAPI test failed',
+        error: error.message
+      };
+    }
+  }
+
+  @Get(':locationId/location-overview')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách slot và booking theo slot cho 1 location trong khoảng ngày' })
+  @ApiResponse({ status: 200, type: LocationSlotBookingsResponseDto })
+  async getLocationScheduleOverview(
+    @Param('locationId') locationId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ): Promise<LocationSlotBookingsResponseDto> {
+    return this.locationService.getLocationScheduleOverview(locationId, from, to);
+  }
 }

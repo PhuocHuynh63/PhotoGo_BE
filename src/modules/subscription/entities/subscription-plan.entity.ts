@@ -1,9 +1,11 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { SubscriptionVendor } from './subscription-vendor.entity';
+import { Subscription } from './subscription.entity';
 
 @Entity('subscription_plan')
 export class SubscriptionPlan {
 
-  @PrimaryColumn({ type: 'varchar', length: 10 })  
+  @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'varchar', length: 100 })
@@ -20,6 +22,12 @@ export class SubscriptionPlan {
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  @OneToMany(() => SubscriptionVendor, subscriptionVendor => subscriptionVendor.plan)
+  subscriptionVendors: SubscriptionVendor[];
+
+  @OneToMany(() => Subscription, subscription => subscription.plan)
+  subscriptions: Subscription[];
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;

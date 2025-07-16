@@ -5,6 +5,8 @@ export enum SortableFields {
     EMAIL = 'email',
     PHONE_NUMBER = 'phoneNumber',
     STATUS = 'status',
+    LAST_LOGIN_AT = 'lastLoginAt',
+    ROLE = 'role',
     RANK = 'rank',
 }
 

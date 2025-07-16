@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { UserModule } from './modules/users/user.module';
 import { TransformInterceptor } from './core/transform.interceptor';
+import { TimezoneInterceptor } from './core/timezone.interceptor';
 import { JwtAuthGuard } from './modules/auth/passport/jwt-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoleModule } from './modules/roles/role.module';
@@ -49,6 +50,9 @@ import { CheckoutSessionModule } from './modules/checkout-session/checkout-sessi
 import { AttendanceModule } from './modules/attendances/attendance/attendance.module';
 import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
 import { CampaignModule } from './modules/campaign/campaign.module';
+import { GoongModule } from './3rdService/goong/goong.module';
+import { AttendanceLogModule } from './modules/attendances/attendance-log/attendance-log.module';
+import { AlbumModule } from './modules/album/album.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -58,6 +62,15 @@ Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
 Handlebars.registerHelper('formatPrice', (price: number) => {
   return price.toLocaleString('vi-VN');
 });
+
+Handlebars.registerHelper('formatCurrency', (value: number) => {
+  if (value === undefined || value === null) return '';
+  return Number(value).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+});
+
+Handlebars.registerHelper('gt', (a, b) => a > b);
+Handlebars.registerHelper('eq', (a, b) => a === b);
+
 
 Handlebars.registerHelper('split', function (value: string) {
   if (typeof value === 'string') {
@@ -117,8 +130,27 @@ if (!fs.existsSync(templateDir)) {
           adapter: new HandlebarsAdapter(),
           options: {
             strict: true,
-          },
-        },
+            helpers: {
+              formatDate: (date, format = 'DD/MM/YYYY') => {
+                if (typeof format !== 'string') {
+                  format = 'DD/MM/YYYY';
+                }
+                if (!date) return '';
+                return moment(date).format(format);
+              },
+              formatCurrency: (value) => {
+                if (value === undefined || value === null) return '';
+                return Number(value).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+              },
+              formatPrice: (price) => {
+                if (price === undefined || price === null) return '';
+                return Number(price).toLocaleString('vi-VN');
+              },
+              gt: (a, b) => a > b,
+              eq: (a, b) => a === b,
+            }
+          }
+        }
       }),
       inject: [ConfigService],
     }),
@@ -138,6 +170,7 @@ if (!fs.existsSync(templateDir)) {
     PaymentModule,
     ReviewModule,
     AttendanceModule,
+    AttendanceLogModule,
     CategoryModule,
     LocationModule,
     LocationAvailabilityModule,
@@ -153,6 +186,8 @@ if (!fs.existsSync(templateDir)) {
     WishlistModule,
     SupportTicketsModule,
     NotificationModule,
+    GoongModule,
+    AlbumModule
 
   ],
   controllers: [AppController],
@@ -165,6 +200,10 @@ if (!fs.existsSync(templateDir)) {
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TimezoneInterceptor,
     },
   ],
 })

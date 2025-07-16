@@ -9,6 +9,8 @@ import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { RestPasswordhDto } from './dto/rest-password.dto';
 import { CartService } from 'src/modules/carts/cart.service';
 import { WishlistService } from 'src/modules/wishlists/wishlist.service';
+import { CampaignService } from 'src/modules/campaign/campaign.service';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -19,6 +21,7 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly cartService: CartService,
     private readonly wishlistService: WishlistService,
+    private readonly campaignService: CampaignService,
   ) { }
 
   //#region Validate User
@@ -45,6 +48,7 @@ export class AuthService {
 
     // Lấy cart của user
     const cart = await this.cartService.findCartByUserId(user.id);
+    const wishlist = await this.wishlistService.findWishlistByUserId(user.id);
     return {
       user: {
         id: user.id,
@@ -53,6 +57,7 @@ export class AuthService {
         image: user.image,
         role: user.role,
         cartId: cart?.id || null, // Thêm cartId vào đây
+        wishlistId: wishlist?.id || null, // Thêm wishlistId vào đây
       },
       access_token: this.jwtService.sign(payload, {
         expiresIn: '365d', // 1 year
@@ -91,10 +96,6 @@ export class AuthService {
 
     // Send email
     this.mailService.generateAndSendOtp(registerEmailLowerCase, template, content, body);
-    // create cart for user
-    await this.cartService.createCart(user.id);
-    // create wishlist for user
-    await this.wishlistService.createWishlist(user.id);
 
     return user;
   }
@@ -107,6 +108,24 @@ export class AuthService {
       throw new BadRequestException('Mã OTP không hợp lệ');
     }
     const emailLower = email.toLowerCase();
+    const user = await this.userService.findOneByEmail(emailLower);
+    if (!user) {
+      throw new NotFoundException('Email không tồn tại');
+    }
+    
+    // create cart for user
+    await this.cartService.createCart(user.id);
+    // create wishlist for user
+    await this.wishlistService.createWishlist(user.id);
+    // join welcome campaign
+    try {
+      await this.campaignService.joinWelcomeCampaign(user.id, 'User mới đăng ký');
+      this.logger.log(`User ${user.id} đã được thêm vào campaign "Chào Bạn Mới"`);
+    } catch (error) {
+      this.logger.warn(`Không thể thêm user ${user.id} vào campaign "Chào Bạn Mới": ${error.message}`);
+      // Không throw error để không ảnh hưởng đến quá trình kích hoạt tài khoản
+    }
+    
     return await this.userService.activeAccount(emailLower)
   }
   //#endregion

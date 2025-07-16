@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { FindVendorDto } from './dto/find-vendor.dto';
 import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
+import { FilterVendorAdminDto } from './dto/admin/filter-vendor-admin.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
 import { Location } from '../locations/entities/location.entity';
@@ -58,9 +59,9 @@ export class VendorController {
         user_id: { type: 'uuid', example: 'uuid_of_user' },
         description: { type: 'string', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), nullable: true },
-        locations: {
+        location: {
           type: 'string',
-          example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724}]',
+          example: '{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":10.762622,"longitude":106.660172}',
         },
         logo: { type: 'string', format: 'binary' },
         banner: { type: 'string', format: 'binary' },
@@ -88,24 +89,22 @@ export class VendorController {
         throw new HttpException('ID người dùng không hợp lệ', HttpStatus.BAD_REQUEST);
       }
 
-      // Validate locations if provided
-      if (createVendorDto.locations) {
-        try {
-          const locations = JSON.parse(createVendorDto.locations as unknown as string);
-          if (!Array.isArray(locations)) {
-            throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+      // Validate location if provided (location is already transformed by DTO)
+      if (createVendorDto.location) {
+        if (!createVendorDto.location.address?.trim()) {
+          throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
+        }
+        // Validate coordinates if provided manually
+        if (createVendorDto.location.latitude !== undefined && createVendorDto.location.longitude !== undefined) {
+          if (typeof createVendorDto.location.latitude !== 'number' || typeof createVendorDto.location.longitude !== 'number') {
+            throw new HttpException('Tọa độ không hợp lệ', HttpStatus.BAD_REQUEST);
           }
-          for (const location of locations) {
-            if (!location.address?.trim()) {
-              throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
-            }
-            if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
-              throw new HttpException('Tọa độ không hợp lệ', HttpStatus.BAD_REQUEST);
-            }
+          if (createVendorDto.location.latitude < -90 || createVendorDto.location.latitude > 90) {
+            throw new HttpException('Vĩ độ phải từ -90 đến 90', HttpStatus.BAD_REQUEST);
           }
-          createVendorDto.locations = locations as unknown as CreateLocationDto[];
-        } catch (error) {
-          throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+          if (createVendorDto.location.longitude < -180 || createVendorDto.location.longitude > 180) {
+            throw new HttpException('Kinh độ phải từ -180 đến 180', HttpStatus.BAD_REQUEST);
+          }
         }
       }
 
@@ -154,6 +153,53 @@ export class VendorController {
     }
   }
 
+  //region get filter for admin page
+  @Public()
+  @Get('admin/filter')
+  @ApiOperation({ summary: 'Lấy danh sách nhà cung cấp (Admin)' })
+  @ApiResponse({ status: 200, description: 'Danh sách nhà cung cấp đã được lọc' })
+  @ApiResponse({ status: 400, description: 'Tham số lọc không hợp lệ' })
+  async getAdminFilterVendors(@Query() filterDto: FilterVendorAdminDto) {
+    try {
+      // Validate filter parameters
+      if (filterDto.minBranches && filterDto.maxBranches && filterDto.minBranches > filterDto.maxBranches) {
+        throw new HttpException('Số chi nhánh tối thiểu không được lớn hơn số chi nhánh tối đa', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.minPackages && filterDto.maxPackages && filterDto.minPackages > filterDto.maxPackages) {
+        throw new HttpException('Số package tối thiểu không được lớn hơn số package tối đa', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.minOrders && filterDto.maxOrders && filterDto.minOrders > filterDto.maxOrders) {
+        throw new HttpException('Số order tối thiểu không được lớn hơn số order tối đa', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.minRating && filterDto.maxRating && filterDto.minRating > filterDto.maxRating) {
+        throw new HttpException('Đánh giá tối thiểu không được lớn hơn đánh giá tối đa', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.minPriority && filterDto.maxPriority && filterDto.minPriority > filterDto.maxPriority) {
+        throw new HttpException('Độ ưu tiên tối thiểu không được lớn hơn độ ưu tiên tối đa', HttpStatus.BAD_REQUEST);
+      }
+
+      if (filterDto.joinDateFrom && filterDto.joinDateTo && filterDto.joinDateFrom > filterDto.joinDateTo) {
+        throw new HttpException('Ngày tham gia từ không được lớn hơn ngày tham gia đến', HttpStatus.BAD_REQUEST);
+      }
+
+      const result = await this.vendorService.filterVendorsAdmin(filterDto);
+      return {
+        message: 'Danh sách nhà cung cấp đã được lọc thành công',
+        ...result,
+      };
+    } catch (error) {
+      this.logger.error(`Error filtering vendors for admin: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lọc nhà cung cấp', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Public()
   @Get('remarkable')
   @ApiOperation({ summary: 'Lấy danh sách nhà cung cấp nổi bật (Public)' })
@@ -163,7 +209,7 @@ export class VendorController {
     try {
       const result = await this.vendorService.filterVendors({
         ...remarkableDto,
-        sortBy: remarkableDto.sortBy || VendorSortField.SUBSCRIPTION_COUNT,
+        sortBy: remarkableDto.sortBy || VendorSortField.CREATED_AT,
         sortDirection: remarkableDto.sortDirection || 'desc',
         pageSize: remarkableDto.pageSize || '10',
       });
@@ -361,9 +407,9 @@ export class VendorController {
         category_id: { type: 'string', example: 'C003' },
         description: { type: 'string', nullable: true },
         status: { type: 'string', enum: Object.values(VendorStatus), nullable: true },
-        locations: {
+        location: {
           type: 'string',
-          example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724}]',
+          example: '{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724}',
         },
         logo: { type: 'string', format: 'binary' },
         banner: { type: 'string', format: 'binary' },
@@ -380,24 +426,22 @@ export class VendorController {
         throw new HttpException('ID không hợp lệ', HttpStatus.BAD_REQUEST);
       }
 
-      // Validate locations if provided
-      if (updateVendorDto.locations) {
-        try {
-          const locations = JSON.parse(updateVendorDto.locations as unknown as string);
-          if (!Array.isArray(locations)) {
-            throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+      // Validate location if provided (location is already transformed by DTO)
+      if (updateVendorDto.location) {
+        if (!updateVendorDto.location.address?.trim()) {
+          throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
+        }
+        // Validate coordinates if provided manually
+        if (updateVendorDto.location.latitude !== undefined && updateVendorDto.location.longitude !== undefined) {
+          if (typeof updateVendorDto.location.latitude !== 'number' || typeof updateVendorDto.location.longitude !== 'number') {
+            throw new HttpException('Tọa độ không hợp lệ', HttpStatus.BAD_REQUEST);
           }
-          for (const location of locations) {
-            if (!location.address?.trim()) {
-              throw new HttpException('Địa chỉ không được để trống', HttpStatus.BAD_REQUEST);
-            }
-            if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
-              throw new HttpException('Tọa độ không hợp lệ', HttpStatus.BAD_REQUEST);
-            }
+          if (updateVendorDto.location.latitude < -90 || updateVendorDto.location.latitude > 90) {
+            throw new HttpException('Vĩ độ phải từ -90 đến 90', HttpStatus.BAD_REQUEST);
           }
-          updateVendorDto.locations = locations as unknown as CreateLocationDto[];
-        } catch (error) {
-          throw new HttpException('Định dạng vị trí không hợp lệ', HttpStatus.BAD_REQUEST);
+          if (updateVendorDto.location.longitude < -180 || updateVendorDto.location.longitude > 180) {
+            throw new HttpException('Kinh độ phải từ -180 đến 180', HttpStatus.BAD_REQUEST);
+          }
         }
       }
 

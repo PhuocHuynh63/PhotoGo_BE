@@ -18,9 +18,10 @@ import { Voucher } from '../vouchers/entities/voucher.entity';
 import { Campaign } from '../campaign/entities/campaign.entity';
 import { RolesGuard } from '../auth/passport/roles.guard';
 import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
+import { Point } from '../points/entities/point.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserCampaign, CampaignVoucher, VoucherUser, Voucher, Campaign]),
+    TypeOrmModule.forFeature([User, UserCampaign, CampaignVoucher, VoucherUser, Voucher, Campaign, Point]),
     RoleModule,
     UploadModule,
     MailModule,

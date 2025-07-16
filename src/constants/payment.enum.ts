@@ -1,13 +1,17 @@
 export enum PaymentType {
   DEPOSIT = 'đặt cọc',
-  REMAINING = 'còn lại'
+  RENEWAL = 'gia hạn',
+  REMAINING = 'còn lại',
+  FULL_PAYMENT = 'thanh toán đầy đủ'
 }
 
 export enum PaymentStatus {
   PENDING = 'chờ xử lý',
   PAID = 'đã hoàn thành',
   FAILED = 'thất bại',
-  REFUNDED = 'hoàn trả'
+  REFUNDED = 'hoàn trả',
+  REFUND_PENDING = 'chờ hoàn tiền',
+  REFUND_PROCESSING = 'đang xử lý hoàn tiền'
 }
 
 export enum InvoiceStatus {
@@ -19,4 +23,9 @@ export enum InvoiceStatus {
 
 export enum PaymentMethod {
   PAYOS = 'PAYOS'
+}
+
+export enum PayerType {
+  CUSTOMER = 'khách hàng',
+  VENDOR = 'nhà cung cấp'
 }

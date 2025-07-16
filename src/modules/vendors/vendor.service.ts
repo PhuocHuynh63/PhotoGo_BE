@@ -18,6 +18,10 @@ import { VendorSortField } from 'src/constants/vendor.enum';
 import { User } from '../users/entities/user.entity';
 import { FilterVendorDto, RemarkableVendorDto } from './dto/filter-vendor.dto';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
+import { GoongService } from 'src/3rdService/goong/goong.service';
+import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
+import { Campaign } from '../campaign/entities/campaign.entity';
+import { ServicePackageService } from '../service-package/service-package.service';
 
 
 @Injectable()
@@ -35,9 +39,15 @@ export class VendorService {
     private readonly locationRepository: Repository<Location>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(CampaignVendor)
+    private readonly campaignVendorRepository: Repository<CampaignVendor>,
+    @InjectRepository(Campaign)
+    private readonly campaignRepository: Repository<Campaign>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly reviewService: ReviewService,
+    private readonly goongService: GoongService,
+    private readonly servicePackageService: ServicePackageService,
   ) { }
 
   //#region CreateVendor
@@ -69,7 +79,7 @@ export class VendorService {
       this.logger.error(`User ${createVendorDto.user_id} đã có nhà cung cấp`);
       throw new BadRequestException('User đã có nhà cung cấp, không thể tạo thêm');
     }
-    
+
     // Upload file trước khi bắt đầu transaction
     const vendorData: Partial<Vendor> = {
       name: createVendorDto.name,
@@ -109,6 +119,8 @@ export class VendorService {
         const categoryRepo = manager.getRepository(Category);
         const vendorRepo = manager.getRepository(Vendor);
         const locationRepo = manager.getRepository(Location);
+        const campaignVendorRepo = manager.getRepository(CampaignVendor);
+        const campaignRepo = manager.getRepository(Campaign);
 
         this.logger.log('Fetching category');
         const category = await categoryRepo.findOne({
@@ -130,31 +142,32 @@ export class VendorService {
         this.logger.log('Saving vendor');
         const savedVendor = await vendorRepo.save(vendor);
 
-        if (createVendorDto.locations && Array.isArray(createVendorDto.locations) && createVendorDto.locations.length > 0) {
-          this.logger.log('Saving locations');
-          this.logger.log(`Parsed locations: ${JSON.stringify(createVendorDto.locations)}`);
+        if (createVendorDto.location) {
+          this.logger.log('Processing location with geocoding');
+          this.logger.log(`Parsed location: ${JSON.stringify(createVendorDto.location)}`);
 
-          const locations = createVendorDto.locations.map((locationDto, index) => {
-            if (!locationDto.address) {
-              throw new BadRequestException(`Địa chỉ là bắt buộc cho vị trí thứ ${index}`);
-            }
-            const location = locationRepo.create({
-              address: locationDto.address,
-              district: locationDto.district,
-              ward: locationDto.ward,
-              city: locationDto.city,
-              province: locationDto.province,
-              latitude: locationDto.latitude,
-              longitude: locationDto.longitude,
-              vendor: savedVendor,
-            });
-            return location;
+          if (!createVendorDto.location.address) {
+            throw new BadRequestException('Địa chỉ là bắt buộc cho vị trí');
+          }
+
+          // Process location with geocoding
+          const processedLocation = await this.processLocationWithGeocoding(createVendorDto.location);
+
+          const location = locationRepo.create({
+            address: processedLocation.address,
+            district: processedLocation.district,
+            ward: processedLocation.ward,
+            city: processedLocation.city,
+            province: processedLocation.province,
+            latitude: processedLocation.latitude,
+            longitude: processedLocation.longitude,
+            vendor: savedVendor,
           });
 
-          this.logger.log(`Mapped locations for saving: ${JSON.stringify(locations)}`);
-          await locationRepo.save(locations);
+          this.logger.log(`Saving location: ${JSON.stringify(location)}`);
+          await locationRepo.save(location);
         } else {
-          this.logger.warn('Không có vị trí hợp lệ được cung cấp');
+          this.logger.warn('Không có vị trí được cung cấp');
         }
 
         this.logger.log('Fetching saved vendor with relations');
@@ -164,6 +177,21 @@ export class VendorService {
         });
 
         this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
+
+        // Gán campaign chào bạn mới tự động khi tạo vendor mới
+        const campaign = await campaignRepo.findOne({ where: { name: 'Chào bạn mới' } });
+        if (campaign) {
+          let campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaign.id } }, relations: ['vendor'] });
+          if (campaignVendor) {
+            campaignVendor.vendor = savedVendor;
+            campaignVendor.isAvailable = true;
+            await campaignVendorRepo.save(campaignVendor);
+          } else {
+            campaignVendor = campaignVendorRepo.create({ campaign, vendor: savedVendor, isAvailable: true });
+            await campaignVendorRepo.save(campaignVendor);
+          }
+        }
+
         return result;
       } catch (error) {
         this.logger.error(`Giao dịch thất bại: ${error.message}`);
@@ -213,13 +241,25 @@ export class VendorService {
   //#region getvendorResponse
   async getVendorResponse(id: string, reviewService: ReviewService): Promise<VendorResponseDto> {
     const vendor = await this.findOne(id);
-  
-    const totalPrice = vendor.servicePackages.reduce(
-      (acc, pkg) => acc + Number(pkg.serviceConcepts.reduce((acc, concept) => acc + Number(concept.price), 0)), 0,
-    );
-  
+
+    // Calculate total price using the new pricing logic
+    let totalPrice = 0;
+    for (const pkg of vendor.servicePackages) {
+      for (const concept of pkg.serviceConcepts) {
+        // Get the final price (what customer sees) using service package service
+        try {
+          const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(concept.id);
+          totalPrice += conceptWithFinalPrice.price; // This is already the final price
+        } catch (error) {
+          this.logger.warn(`Could not get final price for concept ${concept.id}: ${error.message}`);
+          // Fallback to original price if service fails
+          totalPrice += concept.price;
+        }
+      }
+    }
+
     const averageRating = await reviewService.getAverageRatingByVendorId(id);
-  
+
     const response = new VendorResponseDto();
     response.id = vendor.id;
     response.name = vendor.name;
@@ -240,32 +280,87 @@ export class VendorService {
       latitude: loc.latitude,
       longitude: loc.longitude,
     }));
-    response.servicePackages = vendor.servicePackages.map(pkg => ({
+
+    // Map service packages with final prices
+    response.servicePackages = await Promise.all(vendor.servicePackages.map(async pkg => ({
       id: pkg.id,
       name: pkg.name,
       description: pkg.description,
       image: pkg.image,
       status: pkg.status,
       vendorId: pkg.vendorId,
-      serviceConcepts: pkg.serviceConcepts.map(concept => ({
-        id: concept.id,
-        name: concept.name,
-        description: concept.description,
-        images: concept.images.map(img => img.imageUrl),
-        price: concept.price,
-        duration: concept.duration,
-        serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
-          id: sct.serviceType.id,
-          name: sct.serviceType.name,
-          description: sct.serviceType.description
-        }))
+      serviceConcepts: await Promise.all(pkg.serviceConcepts.map(async concept => {
+        // Get the final price for each concept
+        let finalPrice = concept.price; // Fallback to original price
+        try {
+          const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(concept.id);
+          finalPrice = conceptWithFinalPrice.price; // This is the final price customer sees
+        } catch (error) {
+          this.logger.warn(`Could not get final price for concept ${concept.id}: ${error.message}`);
+        }
+
+        return {
+          id: concept.id,
+          name: concept.name,
+          description: concept.description,
+          images: concept.images.map(img => img.imageUrl),
+          price: finalPrice,
+          duration: concept.duration,
+          conceptRangeType: concept.conceptRangeType,
+          numberOfDays: concept.numberOfDays,
+          serviceTypes: concept.serviceConceptServiceTypes.map(sct => ({
+            id: sct.serviceType.id,
+            name: sct.serviceType.name,
+            description: sct.serviceType.description
+          }))
+        };
       })),
       created_at: pkg.created_at,
       updated_at: pkg.updated_at
-    }));
+    })));
+
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
-  
+
+    // Get priority status
+    const subscriptionData = await this.dataSource.query(`
+      SELECT 
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM subscription_vendor sv2 
+            JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+            WHERE sv2.vendor_id = $1 
+            AND sv2.is_active = true
+            AND sp.price = (
+              SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+            )
+          ) THEN true 
+          ELSE false 
+        END as priority
+    `, [id]);
+
+    // Get isRemarkable status
+    const campaignData = await this.dataSource.query(`
+      SELECT 
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM campaign_vendor cv
+            JOIN campaign c ON c.id = cv.campaign_id
+            JOIN user_campaign uc ON uc.campaign_id = c.id
+            WHERE cv.vendor_id = $1 
+            AND cv.is_available = true
+            AND c.status = true
+            AND uc.isavailable = true
+            GROUP BY cv.campaign_id
+            HAVING COUNT(uc.user_id) >= 5
+          ) THEN true 
+          ELSE false 
+        END as is_remarkable
+    `, [id]);
+
+    response.priority = subscriptionData[0]?.priority === true;
+    response.isRemarkable = campaignData[0]?.is_remarkable === true;
+
     return response;
   }
   //#endregion getvendorResponse  
@@ -497,50 +592,29 @@ export class VendorService {
         Object.assign(existingVendor, vendorData);
         const updatedVendor = await vendorRepo.save(existingVendor);
 
-        // Update locations if provided
-        if (updateVendorDto.locations && Array.isArray(updateVendorDto.locations)) {
-          this.logger.log('Cập nhật vị trí');
-          
-          // Remove locations that are not in the update list
-          const locationIds = updateVendorDto.locations
-            .filter(loc => loc.id)
-            .map(loc => loc.id);
-          
+        // Update location if provided
+        if (updateVendorDto.location) {
+          this.logger.log('Processing location with geocoding');
+
+          // Remove existing locations
           await locationRepo.delete({
-            vendor: { id: updatedVendor.id },
-            id: Not(In(locationIds))
+            vendor: { id: updatedVendor.id }
           });
 
-          // Update or create locations
-          const locations = await Promise.all(updateVendorDto.locations.map(async loc => {
-            if (loc.id) {
-              // Update existing location
-              const existingLocation = await locationRepo.findOne({
-                where: { id: loc.id, vendor: { id: updatedVendor.id } }
-              });
-              
-              if (existingLocation) {
-                Object.assign(existingLocation, {
-                  address: loc.address,
-                  district: loc.district,
-                  ward: loc.ward,
-                  city: loc.city,
-                  province: loc.province,
-                  latitude: loc.latitude,
-                  longitude: loc.longitude,
-                });
-                return existingLocation;
-              }
-            }
-            
-            // Create new location
-            return locationRepo.create({
-              ...loc,
-              vendor: updatedVendor
-            });
-          }));
+          // Create new location with geocoding
+          const processedLocation = await this.processUpdateLocationWithGeocoding(updateVendorDto.location);
+          const location = locationRepo.create({
+            address: processedLocation.address,
+            district: processedLocation.district,
+            ward: processedLocation.ward,
+            city: processedLocation.city,
+            province: processedLocation.province,
+            latitude: processedLocation.latitude,
+            longitude: processedLocation.longitude,
+            vendor: updatedVendor
+          });
 
-          await locationRepo.save(locations);
+          await locationRepo.save(location);
         }
 
         // Fetch and return updated vendor with all relations
@@ -556,7 +630,7 @@ export class VendorService {
         throw error;
       }
     });
-  }  
+  }
   //#endregion update
 
   //#region remove
@@ -657,8 +731,98 @@ export class VendorService {
 
     return `${baseSlug}-${maxSuffix + 1}`;
   }
+
+  private async processLocationWithGeocoding(locationDto: CreateLocationDto): Promise<CreateLocationDto> {
+    // If coordinates are already provided, use them
+    if (locationDto.latitude !== undefined && locationDto.longitude !== undefined) {
+      this.logger.log(`Using provided coordinates: ${locationDto.latitude}, ${locationDto.longitude}`);
+      return locationDto;
+    }
+
+    // If autoGeocode is disabled, return as is
+    if (locationDto.autoGeocode === false) {
+      this.logger.log('Auto geocoding is disabled for this location');
+      return locationDto;
+    }
+
+    // Try to get coordinates from GoongAPI using complete address function
+    try {
+      this.logger.log(`Attempting to get complete address: ${locationDto.address}`);
+
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
+        locationDto.address,
+        locationDto.district,
+        locationDto.ward,
+        locationDto.city,
+        locationDto.province
+      );
+
+      if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+        this.logger.log(`Successfully got coordinates: ${completeAddressResult.latitude}, ${completeAddressResult.longitude}`);
+        return {
+          ...locationDto,
+          latitude: completeAddressResult.latitude,
+          longitude: completeAddressResult.longitude,
+        };
+      } else {
+        this.logger.warn(`Failed to get coordinates for address: ${locationDto.address}. Using provided coordinates or null.`);
+        return locationDto;
+      }
+    } catch (error) {
+      this.logger.error(`Error during complete address lookup: ${error.message}`);
+      return locationDto;
+    }
+  }
+
+  private async processUpdateLocationWithGeocoding(locationDto: any): Promise<any> {
+    // If coordinates are already provided, use them
+    if (locationDto.latitude !== undefined && locationDto.longitude !== undefined) {
+      this.logger.log(`Using provided coordinates: ${locationDto.latitude}, ${locationDto.longitude}`);
+      return locationDto;
+    }
+
+    // If autoGeocode is disabled, return as is
+    if (locationDto.autoGeocode === false) {
+      this.logger.log('Auto geocoding is disabled for this location');
+      return locationDto;
+    }
+
+    // If no address provided, return as is
+    if (!locationDto.address) {
+      this.logger.log('No address provided for geocoding');
+      return locationDto;
+    }
+
+    // Try to get coordinates from GoongAPI using complete address function
+    try {
+      this.logger.log(`Attempting to get complete address: ${locationDto.address}`);
+
+      const completeAddressResult = await this.goongService.getCompleteAddressFromInput(
+        locationDto.address,
+        locationDto.district,
+        locationDto.ward,
+        locationDto.city,
+        locationDto.province
+      );
+
+      if (completeAddressResult && completeAddressResult.latitude && completeAddressResult.longitude) {
+        this.logger.log(`Successfully got coordinates: ${completeAddressResult.latitude}, ${completeAddressResult.longitude}`);
+        return {
+          ...locationDto,
+          latitude: completeAddressResult.latitude,
+          longitude: completeAddressResult.longitude,
+        };
+      } else {
+        this.logger.warn(`Failed to get coordinates for address: ${locationDto.address}. Using provided coordinates or null.`);
+        return locationDto;
+      }
+    } catch (error) {
+      this.logger.error(`Error during complete address lookup: ${error.message}`);
+      return locationDto;
+    }
+  }
   //#endregion Utility
-  
+
   //#region getConceptImage
   async getConceptImage(
     vendorId: string,
@@ -804,11 +968,38 @@ export class VendorService {
       vendor_subscriptions AS (
         SELECT 
           v.id,
-          COUNT(s.id) as subscription_count,
-          RANK() OVER (ORDER BY COUNT(s.id) DESC) as subscription_rank
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM subscription_vendor sv2 
+              JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+              WHERE sv2.vendor_id = v.id 
+              AND sv2.is_active = true
+              AND sp.price = (
+                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              )
+            ) THEN true 
+            ELSE false 
+          END as priority
         FROM vendors v
-        LEFT JOIN subscription s ON s.vendor_id = v.id AND s.status = 'hoạt động'
-        GROUP BY v.id
+      ),
+      vendor_campaigns AS (
+        SELECT 
+          v.id,
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM campaign_vendor cv
+              JOIN campaign c ON c.id = cv.campaign_id
+              JOIN user_campaign uc ON uc.campaign_id = c.id
+              WHERE cv.vendor_id = v.id 
+              AND cv.is_available = true
+              AND c.status = true
+              AND uc.isavailable = true
+              GROUP BY cv.campaign_id
+              HAVING COUNT(uc.user_id) >= 5
+            ) THEN true 
+            ELSE false 
+          END as is_remarkable
+        FROM vendors v
       ),
       filtered_vendors AS (
         SELECT DISTINCT v.id
@@ -817,6 +1008,7 @@ export class VendorService {
         LEFT JOIN category c ON c.id = v.category_id
         LEFT JOIN vendor_stats vs ON vs.id = v.id
         LEFT JOIN vendor_prices vp ON vp.id = v.id
+        LEFT JOIN vendor_campaigns vc ON vc.id = v.id
         WHERE v.status = 'hoạt động'
         ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
         ${params.location ? `AND EXISTS (
@@ -858,8 +1050,8 @@ export class VendorService {
         vs.review_count,
         vp.min_price,
         vp.max_price,
-        vsub.subscription_count,
-        vsub.subscription_rank,
+        vsub.priority,
+        vc.is_remarkable,
         c.id as category_id,
         c.name as category_name,
         l.id as location_id,
@@ -887,9 +1079,10 @@ export class VendorService {
       LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN vendor_prices vp ON vp.id = v.id
       LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
+      LEFT JOIN vendor_campaigns vc ON vc.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
-    
+
 
     // Add parameters in the correct order
     if (params.name) {
@@ -942,9 +1135,6 @@ export class VendorService {
 
     // Add sorting
     switch (params.sortBy) {
-      case VendorSortField.SUBSCRIPTION_COUNT:
-        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST`;
-        break;
       case VendorSortField.PRICE:
         baseQuery += ` ORDER BY vp.min_price ${sortDirection} NULLS LAST`;
         break;
@@ -958,7 +1148,7 @@ export class VendorService {
         if (params.userLatitude && params.userLongitude) {
           baseQuery += ` ORDER BY distance ${sortDirection} NULLS LAST`;
         } else {
-          baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
+          baseQuery += ` ORDER BY v.created_at DESC`;
         }
         break;
       default:
@@ -1049,7 +1239,7 @@ export class VendorService {
       countParams.push(params.minPrice);
       countParamIndex++;
     }
-    
+
     if (params.maxPrice !== undefined) {
       countQuery += ` AND vp.max_price <= $${countParamIndex}`;
       countParams.push(params.maxPrice);
@@ -1062,7 +1252,7 @@ export class VendorService {
       countParams.push(params.minRating);
       countParamIndex++;
     }
-    
+
     if (params.maxRating !== undefined) {
       countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
       countParams.push(params.maxRating);
@@ -1113,17 +1303,36 @@ export class VendorService {
         ORDER BY created_at DESC
       `, [vendorIds])
     ]);
-  
+
+    // Convert origin prices to final prices for service concepts
+    const servicePackagesWithFinalPrices = await Promise.all(
+      servicePackages.map(async (row: any) => {
+        if (row.service_concept_id) {
+          try {
+            const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(row.service_concept_id);
+            return {
+              ...row,
+              service_concept_price: conceptWithFinalPrice.price // Final price that customer sees
+            };
+          } catch (error) {
+            this.logger.warn(`Could not get final price for concept ${row.service_concept_id}: ${error.message}`);
+            return row; // Keep original price as fallback
+          }
+        }
+        return row;
+      })
+    );
+
     // Group service packages and reviews by vendor
     const servicePackagesByVendor = new Map();
     const reviewsByVendor = new Map();
-  
-    servicePackages.forEach((row: any) => {
+
+    servicePackagesWithFinalPrices.forEach((row: any) => {
       if (!servicePackagesByVendor.has(row.vendor_id)) {
         servicePackagesByVendor.set(row.vendor_id, new Map());
       }
       const vendorPackages = servicePackagesByVendor.get(row.vendor_id);
-      
+
       if (!vendorPackages.has(row.id)) {
         vendorPackages.set(row.id, {
           id: row.id,
@@ -1133,7 +1342,7 @@ export class VendorService {
           serviceConcepts: []
         });
       }
-  
+
       if (row.service_concept_id) {
         const pkg = vendorPackages.get(row.id);
         pkg.serviceConcepts.push({
@@ -1146,7 +1355,7 @@ export class VendorService {
         });
       }
     });
-  
+
     reviews.forEach((review: any) => {
       if (!reviewsByVendor.has(review.vendor_id)) {
         reviewsByVendor.set(review.vendor_id, []);
@@ -1158,7 +1367,7 @@ export class VendorService {
         created_at: review.created_at
       });
     });
-  
+
     // Group locations by vendor ID before mapping
     const locationsByVendor = new Map();
     vendorData.forEach((row: any) => {
@@ -1178,7 +1387,7 @@ export class VendorService {
         });
       }
     });
-  
+
     // Map vendors without filtering duplicates
     const vendorMap = new Map();
 
@@ -1196,10 +1405,10 @@ export class VendorService {
           updatedAt: row.updated_at,
           averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
           reviewCount: parseInt(row.review_count) || 0,
-          minPrice: row.min_price ? Number(parseFloat(row.min_price).toFixed(2)) : null,
-          maxPrice: row.max_price ? Number(parseFloat(row.max_price).toFixed(2)) : null,
-          subscriptionCount: parseInt(row.subscription_count) || 0,
-          isRemarkable: row.subscription_rank <= 3,
+          minPrice: row.min_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null,
+          maxPrice: row.max_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
+          isRemarkable: row.is_remarkable === true,
+          priority: row.priority === true,
           distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
           locations: [],
           servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
@@ -1226,9 +1435,9 @@ export class VendorService {
     });
 
     const vendors = Array.from(vendorMap.values());
-  
+
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
-  
+
     return {
       data: vendors,
       pagination: {
@@ -1241,8 +1450,533 @@ export class VendorService {
   }
   //#endregion filterVendors
 
+  //#region filterVendorsAdmin
+  async filterVendorsAdmin(params: {
+    name?: string;
+    contact?: string;
+    status?: string;
+    minBranches?: number;
+    maxBranches?: number;
+    minPackages?: number;
+    maxPackages?: number;
+    minOrders?: number;
+    maxOrders?: number;
+    minRating?: number;
+    maxRating?: number;
+    minPriority?: number;
+    maxPriority?: number;
+    joinDateFrom?: string;
+    joinDateTo?: string;
+    category?: string;
+    hasLogo?: boolean;
+    current?: string;
+    pageSize?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+  }): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = params.current ? Number(params.current) : 1;
+    const pageSize = params.pageSize ? Number(params.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+    const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
+    let paramIndex = 1;
+    const baseParams: any[] = [];
+
+    // Base query for admin vendor filtering
+    let baseQuery = `
+      WITH vendor_stats AS (
+        SELECT 
+          v.id,
+          COALESCE(AVG(r.rating), 0) as avg_rating,
+          COUNT(r.id) as review_count
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_packages AS (
+        SELECT 
+          v.id,
+          COUNT(sp.id) as package_count
+        FROM vendors v
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_branches AS (
+        SELECT 
+          v.id,
+          COUNT(l.id) as branch_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_orders AS (
+        SELECT 
+          v.id,
+          COUNT(b.id) as order_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        LEFT JOIN booking b ON b.location_id = l.id
+        GROUP BY v.id
+      ),
+      vendor_subscriptions_admin AS (
+        SELECT 
+          v.id,
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM subscription_vendor sv2 
+              JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+              WHERE sv2.vendor_id = v.id 
+              AND sv2.is_active = true
+              AND sp.price = (
+                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              )
+            ) THEN true 
+            ELSE false 
+          END as priority
+        FROM vendors v
+      ),
+      vendor_campaigns_admin AS (
+        SELECT 
+          v.id,
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM campaign_vendor cv
+              JOIN campaign c ON c.id = cv.campaign_id
+              JOIN user_campaign uc ON uc.campaign_id = c.id
+              WHERE cv.vendor_id = v.id 
+              AND cv.is_available = true
+              AND c.status = true
+              AND uc.isavailable = true
+              GROUP BY cv.campaign_id
+              HAVING COUNT(uc.user_id) >= 5
+            ) THEN true 
+            ELSE false 
+          END as is_remarkable
+        FROM vendors v
+      ),
+      filtered_vendors AS (
+        SELECT DISTINCT v.id
+        FROM vendors v
+        LEFT JOIN category c ON c.id = v.category_id
+        LEFT JOIN vendor_stats vs ON vs.id = v.id
+        LEFT JOIN vendor_packages vp ON vp.id = v.id
+        LEFT JOIN vendor_branches vb ON vb.id = v.id
+        LEFT JOIN vendor_orders vo ON vo.id = v.id
+        LEFT JOIN vendor_subscriptions_admin vsa ON vsa.id = v.id
+        LEFT JOIN vendor_campaigns_admin vca ON vca.id = v.id
+        LEFT JOIN users u ON u.id = v.user_id
+        WHERE 1=1
+        ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
+        ${params.contact ? `AND (unaccent(u.phone_number) ILIKE unaccent($${paramIndex + (params.name ? 1 : 0)}) OR unaccent(u.email) ILIKE unaccent($${paramIndex + (params.name ? 1 : 0)}))` : ''}
+        ${params.status ? `AND v.status = $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0)}` : ''}
+        ${params.category ? `AND v.category_id = $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0)}` : ''}
+        ${params.hasLogo !== undefined ? `AND v.logo IS ${params.hasLogo ? 'NOT NULL' : 'NULL'}` : ''}
+        ${params.minBranches !== undefined ? `AND vb.branch_count >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0)}` : ''}
+        ${params.maxBranches !== undefined ? `AND vb.branch_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0)}` : ''}
+        ${params.minPackages !== undefined ? `AND vp.package_count >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0)}` : ''}
+        ${params.maxPackages !== undefined ? `AND vp.package_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0)}` : ''}
+        ${params.minOrders !== undefined ? `AND vo.order_count >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0)}` : ''}
+        ${params.maxOrders !== undefined ? `AND vo.order_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0)}` : ''}
+        ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0)}` : ''}
+        ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0)}` : ''}
+        ${params.minPriority !== undefined ? `AND vsa.priority = true` : ''}
+        ${params.maxPriority !== undefined ? `AND vsa.priority = true` : ''}
+        ${params.joinDateFrom ? `AND DATE(v.created_at) >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0)}` : ''}
+        ${params.joinDateTo ? `AND DATE(v.created_at) <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0) + (params.joinDateFrom ? 1 : 0)}` : ''}
+      )
+      SELECT 
+        v.id,
+        v.name,
+        v.description,
+        v.logo,
+        v.banner,
+        v.status,
+        v.slug,
+        v.created_at,
+        v.updated_at,
+        vsa.priority,
+        vca.is_remarkable,
+        vs.avg_rating,
+        vs.review_count,
+        vp.package_count,
+        vb.branch_count,
+        vo.order_count,
+        c.id as category_id,
+        c.name as category_name,
+        u.id as user_id,
+        u.phone_number as contact_phone,
+        u.email as contact_email
+      FROM filtered_vendors fv
+      JOIN vendors v ON v.id = fv.id
+      LEFT JOIN locations l ON l.vendor_id = v.id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_packages vp ON vp.id = v.id
+      LEFT JOIN vendor_branches vb ON vb.id = v.id
+      LEFT JOIN vendor_orders vo ON vo.id = v.id
+      LEFT JOIN vendor_subscriptions_admin vsa ON vsa.id = v.id
+      LEFT JOIN vendor_campaigns_admin vca ON vca.id = v.id
+      LEFT JOIN category c ON c.id = v.category_id
+      LEFT JOIN users u ON u.id = v.user_id
+    `;
+
+    // Add parameters in the correct order
+    if (params.name) {
+      baseParams.push(`%${params.name}%`);
+      paramIndex++;
+    }
+
+    if (params.contact) {
+      baseParams.push(`%${params.contact}%`);
+      paramIndex++;
+    }
+
+    if (params.status) {
+      baseParams.push(params.status);
+      paramIndex++;
+    }
+
+    if (params.category) {
+      baseParams.push(params.category);
+      paramIndex++;
+    }
+
+    if (params.minBranches !== undefined) {
+      baseParams.push(params.minBranches);
+      paramIndex++;
+    }
+
+    if (params.maxBranches !== undefined) {
+      baseParams.push(params.maxBranches);
+      paramIndex++;
+    }
+
+    if (params.minPackages !== undefined) {
+      baseParams.push(params.minPackages);
+      paramIndex++;
+    }
+
+    if (params.maxPackages !== undefined) {
+      baseParams.push(params.maxPackages);
+      paramIndex++;
+    }
+
+    if (params.minOrders !== undefined) {
+      baseParams.push(params.minOrders);
+      paramIndex++;
+    }
+
+    if (params.maxOrders !== undefined) {
+      baseParams.push(params.maxOrders);
+      paramIndex++;
+    }
+
+    if (params.minRating !== undefined) {
+      baseParams.push(params.minRating);
+      paramIndex++;
+    }
+
+    if (params.maxRating !== undefined) {
+      baseParams.push(params.maxRating);
+      paramIndex++;
+    }
+
+    if (params.minPriority !== undefined) {
+      baseParams.push(params.minPriority);
+      paramIndex++;
+    }
+
+    if (params.maxPriority !== undefined) {
+      baseParams.push(params.maxPriority);
+      paramIndex++;
+    }
+
+    if (params.joinDateFrom) {
+      baseParams.push(params.joinDateFrom);
+      paramIndex++;
+    }
+
+    if (params.joinDateTo) {
+      baseParams.push(params.joinDateTo);
+      paramIndex++;
+    }
+
+    // Add sorting
+    let sortField = 'v.created_at'; // default sort field
+
+    // Map DTO sortBy values to SQL field names
+    switch (params.sortBy) {
+      case 'createdAt':
+        sortField = 'v.created_at';
+        break;
+      case 'updatedAt':
+        sortField = 'v.updated_at';
+        break;
+      case 'name':
+        sortField = 'v.name';
+        break;
+      case 'category':
+        sortField = 'c.name';
+        break;
+      case 'priority':
+        sortField = 'v.priority';
+        break;
+      case 'order_count':
+        sortField = 'vo.order_count';
+        break;
+      case 'package_count':
+        sortField = 'vp.package_count';
+        break;
+      case 'branch_count':
+        sortField = 'vb.branch_count';
+        break;
+      default:
+        sortField = 'v.created_at';
+    }
+
+    baseQuery += ` ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
+
+    // Add pagination
+    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    baseParams.push(pageSize, skip);
+
+    // Get total count query
+    let countQuery = `
+      WITH vendor_stats AS (
+        SELECT 
+          v.id,
+          COALESCE(AVG(r.rating), 0) as avg_rating
+        FROM vendors v
+        LEFT JOIN review r ON r.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_packages AS (
+        SELECT 
+          v.id,
+          COUNT(sp.id) as package_count
+        FROM vendors v
+        LEFT JOIN service_package sp ON sp.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_branches AS (
+        SELECT 
+          v.id,
+          COUNT(l.id) as branch_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        GROUP BY v.id
+      ),
+      vendor_orders AS (
+        SELECT 
+          v.id,
+          COUNT(b.id) as order_count
+        FROM vendors v
+        LEFT JOIN locations l ON l.vendor_id = v.id
+        LEFT JOIN booking b ON b.location_id = l.id
+        GROUP BY v.id
+      )
+      SELECT COUNT(DISTINCT v.id)
+      FROM vendors v
+      LEFT JOIN category c ON c.id = v.category_id
+      LEFT JOIN vendor_stats vs ON vs.id = v.id
+      LEFT JOIN vendor_packages vp ON vp.id = v.id
+      LEFT JOIN vendor_branches vb ON vb.id = v.id
+      LEFT JOIN vendor_orders vo ON vo.id = v.id
+      LEFT JOIN users u ON u.id = v.user_id
+      WHERE 1=1
+    `;
+
+    const countParams: any[] = [];
+    let countParamIndex = 1;
+
+    // Add filters to count query
+    if (params.name) {
+      countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
+      countParams.push(`%${params.name}%`);
+      countParamIndex++;
+    }
+
+    if (params.contact) {
+      countQuery += ` AND (unaccent(u.phone_number) ILIKE unaccent($${countParamIndex}) OR unaccent(u.email) ILIKE unaccent($${countParamIndex}))`;
+      countParams.push(`%${params.contact}%`);
+      countParamIndex++;
+    }
+
+    if (params.status) {
+      countQuery += ` AND v.status = $${countParamIndex}`;
+      countParams.push(params.status);
+      countParamIndex++;
+    }
+
+    if (params.category) {
+      countQuery += ` AND v.category_id = $${countParamIndex}`;
+      countParams.push(params.category);
+      countParamIndex++;
+    }
+
+    if (params.hasLogo !== undefined) {
+      countQuery += ` AND v.logo IS ${params.hasLogo ? 'NOT NULL' : 'NULL'}`;
+    }
+
+    if (params.minBranches !== undefined) {
+      countQuery += ` AND vb.branch_count >= $${countParamIndex}`;
+      countParams.push(params.minBranches);
+      countParamIndex++;
+    }
+
+    if (params.maxBranches !== undefined) {
+      countQuery += ` AND vb.branch_count <= $${countParamIndex}`;
+      countParams.push(params.maxBranches);
+      countParamIndex++;
+    }
+
+    if (params.minPackages !== undefined) {
+      countQuery += ` AND vp.package_count >= $${countParamIndex}`;
+      countParams.push(params.minPackages);
+      countParamIndex++;
+    }
+
+    if (params.maxPackages !== undefined) {
+      countQuery += ` AND vp.package_count <= $${countParamIndex}`;
+      countParams.push(params.maxPackages);
+      countParamIndex++;
+    }
+
+    if (params.minOrders !== undefined) {
+      countQuery += ` AND vo.order_count >= $${countParamIndex}`;
+      countParams.push(params.minOrders);
+      countParamIndex++;
+    }
+
+    if (params.maxOrders !== undefined) {
+      countQuery += ` AND vo.order_count <= $${countParamIndex}`;
+      countParams.push(params.maxOrders);
+      countParamIndex++;
+    }
+
+    if (params.minRating !== undefined) {
+      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
+      countParams.push(params.minRating);
+      countParamIndex++;
+    }
+
+    if (params.maxRating !== undefined) {
+      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
+      countParams.push(params.maxRating);
+      countParamIndex++;
+    }
+
+    if (params.minPriority !== undefined) {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM subscription_vendor sv2 
+        JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+        WHERE sv2.vendor_id = v.id 
+        AND sv2.is_active = true
+        AND sp.price = (
+          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        )
+      )`;
+    }
+
+    if (params.maxPriority !== undefined) {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM subscription_vendor sv2 
+        JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+        WHERE sv2.vendor_id = v.id 
+        AND sv2.is_active = true
+        AND sp.price = (
+          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        )
+      )`;
+    }
+
+    if (params.joinDateFrom) {
+      countQuery += ` AND DATE(v.created_at) >= $${countParamIndex}`;
+      countParams.push(params.joinDateFrom);
+      countParamIndex++;
+    }
+
+    if (params.joinDateTo) {
+      countQuery += ` AND DATE(v.created_at) <= $${countParamIndex}`;
+      countParams.push(params.joinDateTo);
+      countParamIndex++;
+    }
+
+    // Execute queries
+    const [vendorData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, baseParams),
+      this.dataSource.query(countQuery, countParams),
+    ]);
+
+    if (vendorData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Map vendors for admin response
+    const vendors = vendorData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      logo: row.logo || null,
+      banner: row.banner || null,
+      status: row.status,
+      slug: row.slug,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      priority: row.priority === true,
+      isRemarkable: row.is_remarkable === true,
+      averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
+      reviewCount: parseInt(row.review_count) || 0,
+      packageCount: parseInt(row.package_count) || 0,
+      branchCount: parseInt(row.branch_count) || 0,
+      orderCount: parseInt(row.order_count) || 0,
+      category: row.category_id ? {
+        id: row.category_id,
+        name: row.category_name
+      } : null,
+      contact: {
+        phone: row.contact_phone || '',
+        email: row.contact_email || ''
+      }
+    }));
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    return {
+      data: vendors,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
+  }
+  //#endregion filterVendorsAdmin
+
   // Helper function to convert degrees to radians
   private deg2rad(deg: number): number {
     return deg * (Math.PI / 180);
+  }
+
+  // Helper function to convert origin price to final price (for customer display)
+  private convertOriginPriceToFinalPrice(originPrice: number): number {
+    // Final price = Origin price * (1 + commission + tax)
+    // Commission = 30%, Tax = 5%
+    return originPrice * 1.35;
   }
 }

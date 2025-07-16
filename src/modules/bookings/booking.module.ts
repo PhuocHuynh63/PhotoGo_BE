@@ -2,8 +2,11 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BookingService } from './booking.service';
 import { BookingController } from './booking.controller';
+import { BookingScheduleService } from './booking-schedule.service';
+import { BookingScheduleController } from './booking-schedule.controller';
 import { Booking } from './entities/booking.entity';
 import { BookingHistory } from './entities/booking-history.entity';
+import { BookingSchedule } from './entities/booking-schedule.entity';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { ServicePackageModule } from '../service-package/service-package.module';
@@ -16,11 +19,18 @@ import { LocationSlotTimeWorkingDate } from '../locations/entities/location-slot
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 import { Location } from '../locations/entities/location.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
+import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
+import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
+import { MailModule } from '../../3rdService/mail/mail.module';
+import { AuthModule } from '../auth/auth.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Booking,
       BookingHistory,
+      BookingSchedule,
       ServiceConcept,
       Voucher,
       Dispute,
@@ -28,15 +38,20 @@ import { Invoice } from '../invoices/entities/invoice.entity';
       LocationSlotTimeWorkingDate,
       LocationWorkingDate,
       Invoice,
+      CampaignVoucher,
+      VoucherUser,
     ]),
     ServicePackageModule,
     VoucherModule,
-    PaymentModule,
+    forwardRef(() => PaymentModule),
     InvoiceModule,
     LocationAvailabilityModule,
+    MailModule,
+    AuthModule,
+    SubscriptionModule,
   ],
-  controllers: [BookingController],
-  providers: [BookingService],
-  exports: [BookingService],
+  controllers: [BookingController, BookingScheduleController],
+  providers: [BookingService, BookingScheduleService],
+  exports: [BookingService, BookingScheduleService],
 })
 export class BookingModule {}

@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, ValueTransformer } from 'typeorm';
 import { ServiceConcept } from './service-concept.entity';
+import { ServiceConceptImage } from './service-concept-image.entity';
 
 export const VectorTransformer: ValueTransformer = {
     to: (value: number[] | null) => {
@@ -24,8 +25,8 @@ export class ConceptVector {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ name: 'concept_id', type: 'uuid' })
-    conceptId: string;
+    @Column({ name: 'concept_image_id', type: 'uuid' })
+    concept_image_id: string;
 
     @Column('text', { array: true, nullable: true })
     keywords: string[];
@@ -39,7 +40,7 @@ export class ConceptVector {
     @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
     updatedAt: Date;
 
-    @ManyToOne(() => ServiceConcept, (serviceConcept) => serviceConcept.id)
-    @JoinColumn({ name: 'concept_id' })
-    serviceConcept: ServiceConcept;
+    @ManyToOne(() => ServiceConceptImage, (image) => image.id, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'concept_image_id' })
+    serviceConceptImage: ServiceConceptImage;
 }

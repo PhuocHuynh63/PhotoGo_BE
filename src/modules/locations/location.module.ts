@@ -10,6 +10,8 @@ import { Vendor } from '../vendors/entities/vendor.entity';
 import { LocationWorkingDate } from './entities/location-workingdate.entity';
 import { LocationSlotTime } from './entities/location-slot-time.entity';
 import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-working-date.entity';
+import { GoongModule } from 'src/3rdService/goong';
+import { Booking } from '../bookings/entities/booking.entity';
 
 @Module({
   imports: [
@@ -20,10 +22,12 @@ import { LocationSlotTimeWorkingDate } from './entities/location-slot-time-worki
       LocationWorkingDate,
       LocationSlotTime,
       LocationSlotTimeWorkingDate,
+      Booking,
     ]),
+    GoongModule,
   ],
   controllers: [LocationController, LocationAvailabilityController],
   providers: [LocationService, LocationAvailabilityService],
   exports: [LocationService, LocationAvailabilityService],
 })
-export class LocationModule {}
+export class LocationModule { }

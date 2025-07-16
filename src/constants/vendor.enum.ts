@@ -1,7 +1,7 @@
 export enum VendorStatus {
   ACTIVE = 'hoạt động',
   INACTIVE = 'không hoạt động',
-  SUSPENDED = 'tạm ngưng',
+  // SUSPENDED = 'tạm ngưng',
 }
 
 export enum VendorManagerRole {
@@ -16,6 +16,5 @@ export enum VendorSortField {
   NAME = 'name',
   PRICE = 'price',
   RATING = 'rating',
-  SUBSCRIPTION_COUNT = 'subscription_count',
   DISTANCE = 'distance'
 }

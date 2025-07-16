@@ -7,10 +7,14 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { FindVoucherDto } from './dto/find-voucher.dto';
 import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { User } from '../users/entities/user.entity';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
+import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
+import { Point } from '../points/entities/point.entity';
+import { PointTransactionType } from 'src/constants/point.enum';
+import { PointTransaction } from '../points/entities/point-transaction.entity';
 
 @Injectable()
 export class VoucherService {
@@ -23,6 +27,12 @@ export class VoucherService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserCampaign)
     private readonly userCampaignRepository: Repository<UserCampaign>,
+    @InjectRepository(CampaignVoucher)
+    private readonly campaignVoucherRepository: Repository<CampaignVoucher>,
+    @InjectRepository(Point)
+    private readonly pointRepository: Repository<Point>,
+    @InjectRepository(PointTransaction)
+    private readonly pointTransactionRepository: Repository<PointTransaction>,
   ) { }
 
   //#region Voucher Operations
@@ -47,17 +57,48 @@ export class VoucherService {
     const queryBuilder = this.voucherRepository.createQueryBuilder('voucher');
 
     if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
+    }
+
+    // Thêm filter theo status
+    const currentDate = new Date();
+    if (query.status) {
+      if (query.status === VoucherStatusEnum.ACTIVE) {
+        queryBuilder.andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE })
+          .andWhere('voucher.start_date <= :currentDate', { currentDate })
+          .andWhere('voucher.end_date >= :currentDate', { currentDate });
+      } else if (query.status === VoucherStatusEnum.EXPIRED) {
+        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: VoucherStatusEnum.ACTIVE, currentDate });
+      } else if (query.status === VoucherStatusEnum.INACTIVE) {
+        queryBuilder.andWhere('voucher.status != :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE });
+      }
     }
 
     const allowedSortFields = ['created_at', 'updated_at', 'code', 'discount_value', 'status'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
-    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
-    queryBuilder.orderBy(`voucher.${sortField}`, sortDirection);
+    // Xử lý sắp xếp theo maxPrice
+    if (query.sortBy === 'maxPrice') {
+      queryBuilder.orderBy('voucher.maxPrice', sortDirection);
+    } else {
+      queryBuilder.orderBy(`voucher.${sortField}`, sortDirection);
+    }
     queryBuilder.skip(skip).take(pageSize);
 
     const [data, totalItem] = await queryBuilder.getManyAndCount();
@@ -102,6 +143,15 @@ export class VoucherService {
       throw new NotFoundException(`Mã giảm giá với ID ${voucherId} không tồn tại`);
     }
 
+    // Check if voucher is already in a campaign
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { voucherId: voucherId, isAvailable: true },
+      relations: ['campaign'],
+    });
+    if (campaignVoucher) {
+      throw new BadRequestException(`Mã giảm giá đã được sử dụng trong chiến dịch "${campaignVoucher.campaign.name}"`);
+    }
+
     // Check if voucher has available quantity
     if (voucher.quantity <= 0) {
       throw new BadRequestException('Mã giảm giá đã hết số lượng');
@@ -123,7 +173,8 @@ export class VoucherService {
       user_id: userId,
       voucher_id: voucherId,
       status: VoucherUserStatusEnum.AVAILABLE,
-      assigned_at: createVoucherUserDto.assigned_at || currentDate,
+      from: createVoucherUserDto.from || null,
+      assigned_at: createVoucherUserDto.assigned_at || new Date(),
       used_at: null,
     });
     return this.voucherUserRepository.save(voucherUser);
@@ -150,24 +201,55 @@ export class VoucherService {
       queryBuilder.andWhere('voucherUser.user_id = :user_id', { user_id: query.user_id });
     }
 
-    const currentDate = new Date();
-    if (query.status) {
-      if (query.status === 'active') {
-        queryBuilder.andWhere('voucherUser.status = :status', { status: 'available' })
-          .andWhere('voucher.status = :voucherStatus', { voucherStatus: 'active' })
-          .andWhere('voucher.start_date <= :currentDate', { currentDate })
-          .andWhere('voucher.end_date >= :currentDate', { currentDate });
-      } else if (query.status === 'expired') {
-        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: 'active', currentDate });
-      } else if (query.status === 'used') {
-        queryBuilder.andWhere('voucherUser.status = :status', { status: 'used' });
+    // Thêm filter theo from
+    if (query.from) {
+      queryBuilder.andWhere('voucherUser.from = :from', { from: query.from });
+    }
+
+    // Thêm filter theo term (tìm kiếm)
+    if (query.term) {
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
       }
     }
 
-    const allowedSortFields = ['assigned_at'];
-    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
-    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
-    queryBuilder.orderBy(`voucherUser.${sortField}`, sortDirection);
+    const currentDate = new Date();
+    if (query.status) {
+      if (query.status === VoucherUserStatusEnum.AVAILABLE) {
+        queryBuilder.andWhere('voucherUser.status = :status', { status: VoucherUserStatusEnum.AVAILABLE })
+          .andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE })
+          .andWhere('voucher.start_date <= :currentDate', { currentDate })
+          .andWhere('voucher.end_date >= :currentDate', { currentDate });
+      } else if (query.status === VoucherUserStatusEnum.USED) {
+        queryBuilder.andWhere('voucherUser.status = :status', { status: VoucherUserStatusEnum.USED });
+      } else if (query.status === VoucherUserStatusEnum.EXPIRED) {
+        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: VoucherStatusEnum.ACTIVE, currentDate });
+      }
+    }
+
+    const allowedSortFields = ['assigned_at', 'used_at', 'created_at', 'updated_at'];
+    let sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
+    
+    // Xử lý sắp xếp theo maxPrice của voucher
+    if (query.sortBy === 'maxPrice') {
+      queryBuilder.orderBy('voucher.maxPrice', sortDirection);
+    } else {
+      queryBuilder.orderBy(`voucherUser.${sortField}`, sortDirection);
+    }
 
     queryBuilder.skip(skip).take(pageSize);
 
@@ -185,26 +267,101 @@ export class VoucherService {
     };
   }
 
-  async findAllVoucherUser(userId: string): Promise<any[]> {
-    const voucherUsers = await this.voucherUserRepository.find({
-      where: { user_id: userId },
-      relations: ['user', 'voucher'],
-    });
+  async findAllVoucherUser(userId: string, query: FindVoucherUserDto): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query.current ? Number(query.current) : 1;
+    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
 
-    if (!voucherUsers.length) {
-      throw new NotFoundException(`Bản ghi voucher-user với user_id ${userId} không tồn tại`);
+    const queryBuilder = this.voucherUserRepository.createQueryBuilder('voucherUser')
+      .leftJoinAndSelect('voucherUser.user', 'user')
+      .leftJoinAndSelect('voucherUser.voucher', 'voucher')
+      .addSelect('voucher.maxprice')
+      .where('voucherUser.user_id = :userId', { userId });
+
+    if (query.from) {
+      queryBuilder.andWhere('voucherUser.from = :from', { from: query.from });
     }
 
-    const currentDate = new Date();
+    // Thêm filter theo term (tìm kiếm)
+    if (query.term) {
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
+    }
 
-    // Trả về danh sách voucher kèm trạng thái is_valid cho từng voucher
-    return voucherUsers.map(vu => ({
+    // Thêm filter theo trạng thái voucher user
+    const currentDate = new Date();
+    if (query.status) {
+      if (query.status === VoucherUserStatusEnum.AVAILABLE) {
+        queryBuilder.andWhere('voucherUser.status = :status', { status: VoucherUserStatusEnum.AVAILABLE })
+          .andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE })
+          .andWhere('voucher.start_date <= :currentDate', { currentDate })
+          .andWhere('voucher.end_date >= :currentDate', { currentDate });
+      } else if (query.status === VoucherUserStatusEnum.USED) {
+        queryBuilder.andWhere('voucherUser.status = :status', { status: VoucherUserStatusEnum.USED });
+      } else if (query.status === VoucherUserStatusEnum.EXPIRED) {
+        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: VoucherStatusEnum.ACTIVE, currentDate });
+      }
+    }
+
+    // Sắp xếp
+    const allowedSortFields = ['assigned_at', 'used_at', 'created_at', 'updated_at'];
+    let sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
+    
+    // Xử lý sắp xếp theo maxPrice của voucher
+    if (query.sortBy === 'maxPrice') {
+      queryBuilder.orderBy('voucher.maxPrice', sortDirection);
+    } else {
+      queryBuilder.orderBy(`voucherUser.${sortField}`, sortDirection);
+    }
+
+    // Phân trang
+    queryBuilder.skip(skip).take(pageSize);
+
+    // Thực hiện query
+    const [voucherUsers, totalItem] = await queryBuilder.getManyAndCount();
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    // Thêm trạng thái is_valid cho từng voucher
+    const data = voucherUsers.map(vu => ({
       ...vu,
       is_valid:
         currentDate >= new Date(vu.voucher.start_date) &&
         currentDate <= new Date(vu.voucher.end_date) &&
         vu.status === VoucherUserStatusEnum.AVAILABLE
     }));
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
+    };
   }
 
   async useVoucher(voucherId: string, userId: string): Promise<VoucherUser> {
@@ -261,29 +418,240 @@ export class VoucherService {
 
     await this.voucherRepository.save(voucher);
   }
+
+  /**
+   * Đổi thưởng: user dùng điểm để đổi lấy voucher
+   */
+  async exchangeVoucherByPoint(userId: string, voucherId: string): Promise<VoucherUser> {
+    // 1. Lấy thông tin voucher
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    if (!voucher) throw new NotFoundException('Voucher không tồn tại');
+    if (voucher.status !== VoucherStatusEnum.ACTIVE) throw new BadRequestException('Voucher không còn hiệu lực');
+    if (voucher.quantity <= 0) throw new BadRequestException('Voucher đã hết số lượng');
+    if (!voucher.point || voucher.point <= 0) throw new BadRequestException('Voucher này không hỗ trợ đổi điểm');
+
+    // 2. Lấy thông tin user và điểm
+    const user = await this.userRepository.findOne({ where: { id: userId }, relations: ['points'] });
+    if (!user) throw new NotFoundException('User không tồn tại');
+    const totalPoint = user.points?.reduce((sum, p) => sum + p.balance, 0) || 0;
+    if (totalPoint < voucher.point) throw new BadRequestException('Bạn không đủ điểm để đổi voucher này');
+
+    // 3. Trừ điểm (ưu tiên trừ ở Point đầu tiên, hoặc phân bổ nếu cần)
+    let remaining = voucher.point;
+    for (const point of user.points) {
+      if (remaining <= 0) break;
+      const deduct = Math.min(point.balance, remaining);
+      point.balance -= deduct;
+      remaining -= deduct;
+      await this.pointRepository.save(point);
+      const pointTransaction = this.pointTransactionRepository.create({
+        point: point,
+        amount: deduct,
+        type: PointTransactionType.REDEEM,
+        description: `Đổi voucher`,
+      });
+      await this.pointTransactionRepository.save(pointTransaction);
+    }
+
+    // 4. Gán voucher cho user với from = 'đổi điểm'
+    const existingVoucherUser = await this.voucherUserRepository.findOne({ where: { user_id: userId, voucher_id: voucherId } });
+    if (existingVoucherUser) throw new BadRequestException('Bạn đã sở hữu voucher này');
+    const voucherUser = this.voucherUserRepository.create({
+      user_id: userId,
+      voucher_id: voucherId,
+      status: VoucherUserStatusEnum.AVAILABLE,
+      from: VoucherUserFromEnum.POINT_REDEEM,
+      assigned_at: new Date(),
+      used_at: null,
+    });
+    await this.voucherUserRepository.save(voucherUser);
+
+    // 5. Giảm số lượng voucher
+    voucher.quantity -= 1;
+    await this.voucherRepository.save(voucher);
+
+    return voucherUser;
+  }
   //#endregion VoucherUser Operations
 
   //#region VoucherUser Campaign Operations
-  async findVoucherByCampaign(userId: string): Promise<Voucher[]> {
-    // 1. Kiểm tra user tồn tại
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async findVoucherByCampaign(userId: string, query: FindVoucherDto): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query.current ? Number(query.current) : 1;
+    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    // 1. Lấy thông tin user
+    const user = await this.userRepository.findOne({ 
+      where: { id: userId },
+      select: ['id', 'email', 'fullName', 'phoneNumber', 'avatarUrl', 'status', 'rank', 'multiplier', 'lastLoginAt', 'createdAt', 'updatedAt']
+    });
+
     if (!user) {
       throw new NotFoundException(`Người dùng với ID ${userId} không tồn tại`);
     }
 
-    // 2. Kiểm tra userCampaign tồn tại
-    const userCampaign = await this.userCampaignRepository.findOne({
-      where: { user: { id: userId } },
-      relations: ['campaign', 'campaign.campaignVouchers', 'campaign.campaignVouchers.voucher'],
-    });
-    if (!userCampaign) {
-      throw new NotFoundException(`Chiến dịch của người dùng với ID ${userId} không tồn tại`);
+    // 2. Tạo query builder cho voucher từ campaign
+    const queryBuilder = this.voucherRepository.createQueryBuilder('voucher')
+      .innerJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
+      .innerJoin('campaign', 'c', 'c.id = cv.campaignId')
+      .innerJoin('user_campaign', 'uc', 'uc.campaignId = c.id')
+      .addSelect([
+        'cv.assigned_at as campaign_assigned_at',
+        'cv.isavailable as campaign_is_available',
+        'uc.joined_at as user_joined_at',
+        'uc.isavailable as user_campaign_available'
+      ])
+      .where('uc.userId = :userId', { userId })
+      .andWhere('cv.isavailable = :isAvailable', { isAvailable: true })
+      .andWhere('uc.isavailable = :userCampaignAvailable', { userCampaignAvailable: true });
+
+    // 3. Thêm filter theo term (tìm kiếm)
+    if (query.term) {
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
     }
 
-    // 3. Lấy danh sách voucher từ campaign
-    const vouchers = userCampaign.campaign.campaignVouchers.map(cv => cv.voucher);
+    // 4. Thêm filter theo trạng thái voucher
+    const currentDate = new Date();
+    if (query.status) {
+      if (query.status === VoucherStatusEnum.ACTIVE) {
+        queryBuilder.andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE })
+          .andWhere('voucher.start_date <= :currentDate', { currentDate })
+          .andWhere('voucher.end_date >= :currentDate', { currentDate });
+      } else if (query.status === VoucherStatusEnum.EXPIRED) {
+        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: VoucherStatusEnum.ACTIVE, currentDate });
+      } else if (query.status === VoucherStatusEnum.INACTIVE) {
+        queryBuilder.andWhere('voucher.status != :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE });
+      }
+    }
 
-    return vouchers;
+    // 5. Sắp xếp
+    const allowedSortFields = ['createdAt', 'updatedAt', 'code', 'discount_value', 'status', 'start_date', 'end_date'];
+    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
+    
+    // Xử lý sắp xếp theo maxPrice
+    if (query.sortBy === 'maxPrice') {
+      queryBuilder.orderBy('voucher.maxPrice', sortDirection);
+    } else {
+      queryBuilder.orderBy(`voucher.${sortField}`, sortDirection);
+    }
+
+    // 6. Phân trang
+    queryBuilder.skip(skip).take(pageSize);
+
+    // 7. Thực hiện query
+    const rawData = await queryBuilder.getRawMany();
+    const totalItem = await queryBuilder.getCount();
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    // 8. Transform data để có cấu trúc tương tự VoucherUser
+    const data = rawData.map((row: any) => {
+      const currentDate = new Date();
+      const is_valid = 
+        currentDate >= new Date(row.voucher_start_date) &&
+        currentDate <= new Date(row.voucher_end_date) &&
+        row.voucher_status === VoucherStatusEnum.ACTIVE;
+
+      return {
+        voucher_id: row.voucher_id,
+        user_id: user.id,
+        status: 'có sẵn', // Campaign vouchers luôn có sẵn cho user đã join
+        assigned_at: row.campaign_assigned_at,
+        used_at: null, // Campaign vouchers chưa được sử dụng
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          phoneNumber: user.phoneNumber,
+          avatarUrl: user.avatarUrl,
+          status: user.status,
+          rank: user.rank,
+          multiplier: user.multiplier,
+          lastLoginAt: user.lastLoginAt,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        },
+        voucher: {
+          id: row.voucher_id,
+          code: row.voucher_code,
+          description: row.voucher_description,
+          discount_type: row.voucher_discount_type,
+          discount_value: row.voucher_discount_value,
+          minPrice: row.voucher_minprice,
+          maxPrice: row.voucher_maxprice,
+          quantity: row.voucher_quantity,
+          usedCount: row.voucher_usedcount,
+          type: row.voucher_type,
+          point: row.voucher_point,
+          start_date: row.voucher_start_date,
+          end_date: row.voucher_end_date,
+          status: row.voucher_status,
+          created_at: row.voucher_created_at,
+          updated_at: row.voucher_updated_at
+        },
+        is_valid,
+        campaign_info: {
+          campaign_assigned_at: row.campaign_assigned_at,
+          campaign_is_available: row.campaign_is_available,
+          user_joined_at: row.user_joined_at,
+          user_campaign_available: row.user_campaign_available
+        }
+      };
+    });
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
+    };
+  }
+
+  /**
+   * Check if a voucher is from a campaign and if the user has joined that campaign
+   * @param voucherId string
+   * @param userId string
+   * @returns {Promise<boolean>} true if voucher is from a campaign and user joined, false otherwise
+   */
+  async isVoucherFromCampaignAndUserJoined(voucherId: string, userId: string): Promise<boolean> {
+    // Check if voucher is in a campaign
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { voucherId, isAvailable: true },
+      relations: ['campaign'],
+    });
+    if (!campaignVoucher) return false;
+
+    // Check if user joined the campaign
+    const userCampaign = await this.userCampaignRepository.findOne({
+      where: { userId, campaignId: campaignVoucher.campaignId, isAvailable: true },
+    });
+    return !!userCampaign;
   }
   //#endregion VoucherUser Campaign Operations
 }

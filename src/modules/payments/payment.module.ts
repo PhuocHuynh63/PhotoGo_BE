@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment } from './entities/payment.entity';
 import { PaymentService } from './payment.service';
@@ -9,13 +9,25 @@ import { VoucherModule } from '../vouchers/voucher.module';
 import { AuthModule } from '../auth/auth.module';
 import { Booking } from '../bookings/entities/booking.entity';
 import { BookingHistory } from '../bookings/entities/booking-history.entity';
+import { Point } from '../points/entities/point.entity';
+import { PointTransaction } from '../points/entities/point-transaction.entity';
+import { MailModule } from 'src/3rdService/mail/mail.module';
+import { BookingModule } from '../bookings/booking.module';
+import { RefundModule } from '../refunds/refund.module';
+import { LocationAvailabilityModule } from '../locations/location-availability.module';
+import { Voucher } from '../vouchers/entities/voucher.entity';
+import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory]),
+    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction, Voucher, LocationWorkingDate]),
     VoucherModule,
     PayosModule,
-    AuthModule
+    AuthModule,
+    MailModule,
+    forwardRef(() => BookingModule),
+    forwardRef(() => RefundModule),
+    LocationAvailabilityModule,
   ],
   controllers: [PaymentController],
   providers: [PaymentService],

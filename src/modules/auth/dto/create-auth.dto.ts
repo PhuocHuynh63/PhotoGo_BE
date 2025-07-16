@@ -17,6 +17,7 @@ export class CreateAuthDto {
   @ApiProperty({
     format: 'binary',
     description: 'Avatar URL of the user',
+    required: false
   })
   avatarUrl?: string;
 

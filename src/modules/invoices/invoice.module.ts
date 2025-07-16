@@ -10,6 +10,7 @@ import { AuthModule } from '../auth/auth.module';
 import { Booking } from '../bookings/entities/booking.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { Commission } from '../commission/entities/commission.entity';
+import { MailModule } from 'src/3rdService/mail/mail.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { Commission } from '../commission/entities/commission.entity';
     ServicePackageModule,
     VoucherModule,
     AuthModule,
+    MailModule,
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService],

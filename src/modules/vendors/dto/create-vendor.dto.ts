@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsOptional, Length, IsArray, ValidateNested , IsUUID, IsDate, IsBoolean} from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, Length, IsArray, ValidateNested , IsUUID, IsDate, IsBoolean, IsNumber, Min, Max} from 'class-validator';
 import { Type } from 'class-transformer';
 import { Transform } from 'class-transformer';
 import { VendorStatus } from 'src/constants/vendor.enum';
@@ -59,52 +59,60 @@ export class CreateVendorDto {
   })
   status?: VendorStatus;
 
-  @IsArray()
-  @ValidateNested({ each: true, message: 'Mỗi vị trí phải hợp lệ' })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(10)
+  @Type(() => Number)
+  @ApiProperty({
+    description: 'Độ ưu tiên của nhà cung cấp (0-10)',
+    example: 5,
+    required: false,
+  })
+  priority?: number;
+
+  @ValidateNested()
   @Type(() => CreateLocationDto)
   @Transform(({ value }) => {
     const logger = new Logger('CreateVendorDto');
-    logger.log(`Raw locations value: ${value}`);
+    logger.log(`Raw location value: ${value}`);
 
     if (!value) {
-      return [];
+      return null;
     }
 
     if (typeof value === 'string') {
       try {
         const parsed = JSON.parse(value);
-        if (!Array.isArray(parsed)) {
-          throw new Error('locations phải là một mảng');
-        }
-        logger.log(`Parsed locations before transform: ${JSON.stringify(parsed)}`);
-        const transformed = parsed.map((item: any) => {
-          const location = new CreateLocationDto();
-          location.address = item.address;
-          location.district = item.district;
-          location.ward = item.ward;
-          location.city = item.city;
-          location.province = item.province;
-          location.latitude = item.latitude;
-          location.longitude = item.longitude;
-          return location;
-        });
-        logger.log(`Transformed locations: ${JSON.stringify(transformed)}`);
-        return transformed;
+        logger.log(`Parsed location before transform: ${JSON.stringify(parsed)}`);
+        const location = new CreateLocationDto();
+        location.address = parsed.address;
+        location.district = parsed.district;
+        location.ward = parsed.ward;
+        location.city = parsed.city;
+        location.province = parsed.province;
+        // Latitude và longitude sẽ được tự động lấy từ Google Maps nếu không cung cấp
+        location.latitude = parsed.latitude;
+        location.longitude = parsed.longitude;
+        location.autoGeocode = parsed.autoGeocode !== false; // default to true
+        logger.log(`Transformed location: ${JSON.stringify(location)}`);
+        return location;
       } catch (e) {
-        logger.error(`Failed to parse locations: ${e.message}`);
-        throw new Error(`locations phải là một mảng JSON hợp lệ: ${e.message}`);
+        logger.error(`Failed to parse location: ${e.message}`);
+        throw new Error(`location phải là một object JSON hợp lệ: ${e.message}`);
       }
     }
 
-    logger.log(`Parsed locations (non-string): ${JSON.stringify(value)}`);
+    logger.log(`Parsed location (non-string): ${JSON.stringify(value)}`);
     return value;
   })
   @ApiProperty({
     type: 'string',
-    description: 'Một chuỗi JSON biểu diễn một mảng vị trí',
-    example: '[{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8491,"longitude":106.7724},{"address":"456 Lê Văn Việt","district":"Thủ Đức","ward":"Tăng Nhơn Phú A","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":18.8432,"longitude":106.7793}]',
+    description: 'Thông tin vị trí (có thể cung cấp tọa độ thủ công hoặc để tự động lấy từ Google Maps)',
+    example: '{"address":"321 Phạm Văn Đồng","district":"Thủ Đức","ward":"Linh Tây","city":"Hồ Chí Minh","province":"Hồ Chí Minh","latitude":10.762622,"longitude":106.660172}',
+    required: false,
   })
-  locations: CreateLocationDto[];
+  location?: CreateLocationDto;
 }
 
 

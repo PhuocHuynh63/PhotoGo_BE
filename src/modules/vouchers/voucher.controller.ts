@@ -47,21 +47,37 @@ export class VoucherController {
 
   @Public()
   @Get('user/:userId')
-  @ApiOperation({ summary: 'Voucher của user từ đổi điểm' })
+  @ApiOperation({ summary: 'Tất cả voucher của user (Public)' })
   @ApiResponse({ status: 200, description: 'VoucherUser đã được tìm thấy', type: VoucherUser })
   @ApiResponse({ status: 404, description: 'VoucherUser không tồn tại' })
-  async findAllVoucherUser(@Param('userId') userId: string): Promise<VoucherUser[]> {
-    return this.voucherService.findAllVoucherUser(userId);
+  async findAllVoucherUser(@Param('userId') userId: string, @Query() query: FindVoucherUserDto): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    return this.voucherService.findAllVoucherUser(userId, query);
   }
 
-  @Public()
-  @Get('user/:userId/campaign')
-  @ApiOperation({ summary: 'Voucher của user từ campaign' })
-  @ApiResponse({ status: 200, description: 'Mã giảm giá lấy từ chiến dịch', type: VoucherUser })
-  @ApiResponse({ status: 404, description: 'Mã giảm giá không tồn tại' })
-  async findVoucherByCampaign(@Param('userId') userId: string): Promise<Voucher[]> {
-    return this.voucherService.findVoucherByCampaign(userId);
-  }
+  // @Public()
+  // @Get('user/:userId/campaign')
+  // @ApiOperation({ summary: 'Voucher của user từ campaign' })
+  // @ApiResponse({ status: 200, description: 'Mã giảm giá lấy từ chiến dịch', type: VoucherUser })
+  // @ApiResponse({ status: 404, description: 'Mã giảm giá không tồn tại' })
+  // async findVoucherByCampaign(@Param('userId') userId: string, @Query() query: FindVoucherDto): Promise<{
+  //   data: any[];
+  //   pagination: {
+  //     current: number;
+  //     pageSize: number;
+  //     totalPage: number;
+  //     totalItem: number;
+  //   };
+  // }> {
+  //   return this.voucherService.findVoucherByCampaign(userId, query);
+  // }
 
   @Public()
   @Get()
@@ -127,6 +143,14 @@ export class VoucherController {
     return this.voucherService.useVoucher(voucherId, userId);
   }
 
+  @Post('user/:userId/exchange/:voucherId')
+  @ApiOperation({ summary: 'User đổi điểm lấy voucher' })
+  @ApiResponse({ status: 201, description: 'Đổi điểm lấy voucher thành công', type: VoucherUser })
+  @ApiResponse({ status: 400, description: 'Không đủ điểm hoặc điều kiện không hợp lệ' })
+  async exchangeVoucherByPoint(@Param('userId') userId: string, @Param('voucherId') voucherId: string): Promise<VoucherUser> {
+    return this.voucherService.exchangeVoucherByPoint(userId, voucherId);
+  }
+
   @Delete('user/:voucherId/:userId')
   @ApiOperation({ summary: 'Xóa bản ghi voucher-user bằng voucherId và userId (Protected)' })
   @ApiResponse({ status: 200, description: 'Bản ghi voucher-user đã được xóa thành công' })
@@ -134,5 +158,6 @@ export class VoucherController {
   async deleteVoucherUser(@Param('voucherId') voucherId: string, @Param('userId') userId: string): Promise<void> {
     return this.voucherService.deleteVoucherUser(voucherId, userId);
   }
+  
   //#endregion VoucherUser Endpoints
 }

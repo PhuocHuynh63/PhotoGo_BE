@@ -25,6 +25,31 @@ export class Refund {
   @Column({ type: 'enum', enum: RefundStatus, default: RefundStatus.PENDING })
   status: RefundStatus;
 
+  @Column({ type: 'jsonb', nullable: true, name: 'transaction_details' })
+  transactionDetails: {
+    bankCode?: string;
+    accountNumber?: string;
+    accountName?: string;
+    transferId?: string;
+    transferTime?: string;
+    paymentMethod?: string;
+    paymentId?: string;
+  };
+
+  @Column({ type: 'jsonb', nullable: true, name: 'manual_refund_details' })
+  manualRefundDetails: {
+    refundMethod?: string;
+    refundAmount?: number;
+    refundNote?: string;
+    refundedAt?: string;
+    refundedBy?: string;
+    bankAccount?: string;
+    bankName?: string;
+  };
+
+  @Column({ type: 'uuid', nullable: true, name: 'payment_id' })
+  paymentId: string;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

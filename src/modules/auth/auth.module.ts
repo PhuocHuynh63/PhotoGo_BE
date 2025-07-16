@@ -13,6 +13,8 @@ import { MailModule } from 'src/3rdService/mail/mail.module';
 import { CloudinaryModule } from 'src/3rdService/upload/cloudinary/cloudinary.module';
 import { CartModule } from 'src/modules/carts/cart.module';
 import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
+import { CampaignModule } from 'src/modules/campaign/campaign.module';
+
 @Module({
   imports: [
     UserModule,
@@ -38,6 +40,7 @@ import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
     MailModule,
     CartModule,
     WishlistModule,
+    CampaignModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard],

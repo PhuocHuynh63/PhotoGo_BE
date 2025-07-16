@@ -33,6 +33,9 @@ export class Vendor {
   @Column({ type: 'enum', enum: VendorStatus, default: VendorStatus.ACTIVE })
   status: VendorStatus;
 
+  @Column({ type: 'int', default: 0, nullable: true })
+  priority: number;
+
   @CreateDateColumn({ type: 'timestamptz', default: () => 'NOW()' })
   created_at: Date;
 
