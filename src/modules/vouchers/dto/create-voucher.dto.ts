@@ -23,14 +23,14 @@ export class CreateVoucherDto {
   description?: string;
 
 
-  @IsString()
+  @IsEnum(VoucherTypeDiscount)
   @IsNotEmpty()
   @Length(1, 20)
   @ApiProperty({
     description: 'Loại giảm giá (phần trăm, cố định)',
     example: VoucherTypeDiscount.PERCENTAGE,
   })
-  discount_type: string;
+  discount_type: VoucherTypeDiscount;
 
   @IsNumber()
   @IsNotEmpty()

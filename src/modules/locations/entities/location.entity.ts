@@ -2,6 +2,7 @@ import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateCol
 import { Vendor } from '../../vendors/entities/vendor.entity';
 import { TeamMember } from '../../team-members/entities/team-member.entity';
 import { LocationAvailability } from './location-availability.entity';
+import { VendorAlbum } from 'src/modules/album/entities/vendor-album.entity';
 
 @Entity('locations')
 export class Location {
@@ -44,4 +45,7 @@ export class Location {
 
   @OneToOne(() => TeamMember, (teamMember) => teamMember.location, { cascade: true })
   teamMember: TeamMember;
+
+  @OneToOne(() => VendorAlbum, (vendorAlbum) => vendorAlbum.location, { cascade: true })
+  vendorAlbum: VendorAlbum;
 }

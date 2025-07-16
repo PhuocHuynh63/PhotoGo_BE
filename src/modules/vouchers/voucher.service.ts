@@ -57,17 +57,48 @@ export class VoucherService {
     const queryBuilder = this.voucherRepository.createQueryBuilder('voucher');
 
     if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
+    }
+
+    // Thêm filter theo status
+    const currentDate = new Date();
+    if (query.status) {
+      if (query.status === VoucherStatusEnum.ACTIVE) {
+        queryBuilder.andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE })
+          .andWhere('voucher.start_date <= :currentDate', { currentDate })
+          .andWhere('voucher.end_date >= :currentDate', { currentDate });
+      } else if (query.status === VoucherStatusEnum.EXPIRED) {
+        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: VoucherStatusEnum.ACTIVE, currentDate });
+      } else if (query.status === VoucherStatusEnum.INACTIVE) {
+        queryBuilder.andWhere('voucher.status != :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE });
+      }
     }
 
     const allowedSortFields = ['created_at', 'updated_at', 'code', 'discount_value', 'status'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
-    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
-    queryBuilder.orderBy(`voucher.${sortField}`, sortDirection);
+    // Xử lý sắp xếp theo maxPrice
+    if (query.sortBy === 'maxPrice') {
+      queryBuilder.orderBy('voucher.maxPrice', sortDirection);
+    } else {
+      queryBuilder.orderBy(`voucher.${sortField}`, sortDirection);
+    }
     queryBuilder.skip(skip).take(pageSize);
 
     const [data, totalItem] = await queryBuilder.getManyAndCount();
@@ -170,12 +201,29 @@ export class VoucherService {
       queryBuilder.andWhere('voucherUser.user_id = :user_id', { user_id: query.user_id });
     }
 
+    // Thêm filter theo from
+    if (query.from) {
+      queryBuilder.andWhere('voucherUser.from = :from', { from: query.from });
+    }
+
     // Thêm filter theo term (tìm kiếm)
     if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
     }
 
     const currentDate = new Date();
@@ -194,7 +242,7 @@ export class VoucherService {
 
     const allowedSortFields = ['assigned_at', 'used_at', 'created_at', 'updated_at'];
     let sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
-    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
     
     // Xử lý sắp xếp theo maxPrice của voucher
     if (query.sortBy === 'maxPrice') {
@@ -244,10 +292,22 @@ export class VoucherService {
 
     // Thêm filter theo term (tìm kiếm)
     if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
     }
 
     // Thêm filter theo trạng thái voucher user
@@ -268,7 +328,7 @@ export class VoucherService {
     // Sắp xếp
     const allowedSortFields = ['assigned_at', 'used_at', 'created_at', 'updated_at'];
     let sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
-    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
     
     // Xử lý sắp xếp theo maxPrice của voucher
     if (query.sortBy === 'maxPrice') {
@@ -455,10 +515,22 @@ export class VoucherService {
 
     // 3. Thêm filter theo term (tìm kiếm)
     if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(voucher.code) ILIKE unaccent(:term) OR unaccent(voucher.discount_type) ILIKE unaccent(:term) OR unaccent(voucher.status) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
+      // Tách từ khóa tìm kiếm thành các từ riêng biệt
+      const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
+      
+      if (searchTerms.length > 0) {
+        const conditions = searchTerms.map((term, index) => {
+          const paramName = `term${index}`;
+          return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
+        });
+        
+        const params = {};
+        searchTerms.forEach((term, index) => {
+          params[`term${index}`] = `%${term}%`;
+        });
+        
+        queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
+      }
     }
 
     // 4. Thêm filter theo trạng thái voucher
@@ -478,7 +550,7 @@ export class VoucherService {
     // 5. Sắp xếp
     const allowedSortFields = ['createdAt', 'updatedAt', 'code', 'discount_value', 'status', 'start_date', 'end_date'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
-    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+    const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
     
     // Xử lý sắp xếp theo maxPrice
     if (query.sortBy === 'maxPrice') {

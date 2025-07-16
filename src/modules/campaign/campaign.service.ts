@@ -185,7 +185,7 @@ export class CampaignService {
   }
 
   async createCampaign(createCampaignDto: CreateCampaignDto): Promise<Campaign> {
-    const { startDate, endDate, status, ...rest } = createCampaignDto;
+    const { startDate, endDate, ...rest } = createCampaignDto;
 
     // Validate dates
     if (new Date(this.convertDateFormat(startDate)) > new Date(this.convertDateFormat(endDate))) {

@@ -322,6 +322,45 @@ export class VendorService {
     response.totalPrice = totalPrice;
     response.averageRating = averageRating;
 
+    // Get priority status
+    const subscriptionData = await this.dataSource.query(`
+      SELECT 
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM subscription_vendor sv2 
+            JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+            WHERE sv2.vendor_id = $1 
+            AND sv2.is_active = true
+            AND sp.price = (
+              SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+            )
+          ) THEN true 
+          ELSE false 
+        END as priority
+    `, [id]);
+
+    // Get isRemarkable status
+    const campaignData = await this.dataSource.query(`
+      SELECT 
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM campaign_vendor cv
+            JOIN campaign c ON c.id = cv.campaign_id
+            JOIN user_campaign uc ON uc.campaign_id = c.id
+            WHERE cv.vendor_id = $1 
+            AND cv.is_available = true
+            AND c.status = true
+            AND uc.isavailable = true
+            GROUP BY cv.campaign_id
+            HAVING COUNT(uc.user_id) >= 5
+          ) THEN true 
+          ELSE false 
+        END as is_remarkable
+    `, [id]);
+
+    response.priority = subscriptionData[0]?.priority === true;
+    response.isRemarkable = campaignData[0]?.is_remarkable === true;
+
     return response;
   }
   //#endregion getvendorResponse  
@@ -929,11 +968,38 @@ export class VendorService {
       vendor_subscriptions AS (
         SELECT 
           v.id,
-          COUNT(s.id) as subscription_count,
-          RANK() OVER (ORDER BY COUNT(s.id) DESC) as subscription_rank
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM subscription_vendor sv2 
+              JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+              WHERE sv2.vendor_id = v.id 
+              AND sv2.is_active = true
+              AND sp.price = (
+                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              )
+            ) THEN true 
+            ELSE false 
+          END as priority
         FROM vendors v
-        LEFT JOIN subscription s ON s.vendor_id = v.id AND s.status = 'hoạt động'
-        GROUP BY v.id
+      ),
+      vendor_campaigns AS (
+        SELECT 
+          v.id,
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM campaign_vendor cv
+              JOIN campaign c ON c.id = cv.campaign_id
+              JOIN user_campaign uc ON uc.campaign_id = c.id
+              WHERE cv.vendor_id = v.id 
+              AND cv.is_available = true
+              AND c.status = true
+              AND uc.isavailable = true
+              GROUP BY cv.campaign_id
+              HAVING COUNT(uc.user_id) >= 5
+            ) THEN true 
+            ELSE false 
+          END as is_remarkable
+        FROM vendors v
       ),
       filtered_vendors AS (
         SELECT DISTINCT v.id
@@ -942,6 +1008,7 @@ export class VendorService {
         LEFT JOIN category c ON c.id = v.category_id
         LEFT JOIN vendor_stats vs ON vs.id = v.id
         LEFT JOIN vendor_prices vp ON vp.id = v.id
+        LEFT JOIN vendor_campaigns vc ON vc.id = v.id
         WHERE v.status = 'hoạt động'
         ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
         ${params.location ? `AND EXISTS (
@@ -983,8 +1050,8 @@ export class VendorService {
         vs.review_count,
         vp.min_price,
         vp.max_price,
-        vsub.subscription_count,
-        vsub.subscription_rank,
+        vsub.priority,
+        vc.is_remarkable,
         c.id as category_id,
         c.name as category_name,
         l.id as location_id,
@@ -1012,6 +1079,7 @@ export class VendorService {
       LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN vendor_prices vp ON vp.id = v.id
       LEFT JOIN vendor_subscriptions vsub ON vsub.id = v.id
+      LEFT JOIN vendor_campaigns vc ON vc.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
 
@@ -1067,9 +1135,6 @@ export class VendorService {
 
     // Add sorting
     switch (params.sortBy) {
-      case VendorSortField.SUBSCRIPTION_COUNT:
-        baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST`;
-        break;
       case VendorSortField.PRICE:
         baseQuery += ` ORDER BY vp.min_price ${sortDirection} NULLS LAST`;
         break;
@@ -1083,7 +1148,7 @@ export class VendorService {
         if (params.userLatitude && params.userLongitude) {
           baseQuery += ` ORDER BY distance ${sortDirection} NULLS LAST`;
         } else {
-          baseQuery += ` ORDER BY vsub.subscription_count ${sortDirection} NULLS LAST, v.created_at DESC`;
+          baseQuery += ` ORDER BY v.created_at DESC`;
         }
         break;
       default:
@@ -1342,8 +1407,8 @@ export class VendorService {
           reviewCount: parseInt(row.review_count) || 0,
           minPrice: row.min_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null,
           maxPrice: row.max_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
-          subscriptionCount: parseInt(row.subscription_count) || 0,
-          isRemarkable: row.subscription_rank <= 3,
+          isRemarkable: row.is_remarkable === true,
+          priority: row.priority === true,
           distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
           locations: [],
           servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
@@ -1460,6 +1525,42 @@ export class VendorService {
         LEFT JOIN booking b ON b.location_id = l.id
         GROUP BY v.id
       ),
+      vendor_subscriptions_admin AS (
+        SELECT 
+          v.id,
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM subscription_vendor sv2 
+              JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+              WHERE sv2.vendor_id = v.id 
+              AND sv2.is_active = true
+              AND sp.price = (
+                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              )
+            ) THEN true 
+            ELSE false 
+          END as priority
+        FROM vendors v
+      ),
+      vendor_campaigns_admin AS (
+        SELECT 
+          v.id,
+          CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM campaign_vendor cv
+              JOIN campaign c ON c.id = cv.campaign_id
+              JOIN user_campaign uc ON uc.campaign_id = c.id
+              WHERE cv.vendor_id = v.id 
+              AND cv.is_available = true
+              AND c.status = true
+              AND uc.isavailable = true
+              GROUP BY cv.campaign_id
+              HAVING COUNT(uc.user_id) >= 5
+            ) THEN true 
+            ELSE false 
+          END as is_remarkable
+        FROM vendors v
+      ),
       filtered_vendors AS (
         SELECT DISTINCT v.id
         FROM vendors v
@@ -1468,6 +1569,8 @@ export class VendorService {
         LEFT JOIN vendor_packages vp ON vp.id = v.id
         LEFT JOIN vendor_branches vb ON vb.id = v.id
         LEFT JOIN vendor_orders vo ON vo.id = v.id
+        LEFT JOIN vendor_subscriptions_admin vsa ON vsa.id = v.id
+        LEFT JOIN vendor_campaigns_admin vca ON vca.id = v.id
         LEFT JOIN users u ON u.id = v.user_id
         WHERE 1=1
         ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
@@ -1483,8 +1586,8 @@ export class VendorService {
         ${params.maxOrders !== undefined ? `AND vo.order_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0)}` : ''}
         ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0)}` : ''}
         ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0)}` : ''}
-        ${params.minPriority !== undefined ? `AND COALESCE(v.priority, 0) >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0)}` : ''}
-        ${params.maxPriority !== undefined ? `AND COALESCE(v.priority, 0) <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0)}` : ''}
+        ${params.minPriority !== undefined ? `AND vsa.priority = true` : ''}
+        ${params.maxPriority !== undefined ? `AND vsa.priority = true` : ''}
         ${params.joinDateFrom ? `AND DATE(v.created_at) >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0)}` : ''}
         ${params.joinDateTo ? `AND DATE(v.created_at) <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0) + (params.joinDateFrom ? 1 : 0)}` : ''}
       )
@@ -1498,7 +1601,8 @@ export class VendorService {
         v.slug,
         v.created_at,
         v.updated_at,
-        COALESCE(v.priority, 0) as priority,
+        vsa.priority,
+        vca.is_remarkable,
         vs.avg_rating,
         vs.review_count,
         vp.package_count,
@@ -1516,6 +1620,8 @@ export class VendorService {
       LEFT JOIN vendor_packages vp ON vp.id = v.id
       LEFT JOIN vendor_branches vb ON vb.id = v.id
       LEFT JOIN vendor_orders vo ON vo.id = v.id
+      LEFT JOIN vendor_subscriptions_admin vsa ON vsa.id = v.id
+      LEFT JOIN vendor_campaigns_admin vca ON vca.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
       LEFT JOIN users u ON u.id = v.user_id
     `;
@@ -1767,15 +1873,27 @@ export class VendorService {
     }
 
     if (params.minPriority !== undefined) {
-      countQuery += ` AND COALESCE(v.priority, 0) >= $${countParamIndex}`;
-      countParams.push(params.minPriority);
-      countParamIndex++;
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM subscription_vendor sv2 
+        JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+        WHERE sv2.vendor_id = v.id 
+        AND sv2.is_active = true
+        AND sp.price = (
+          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        )
+      )`;
     }
 
     if (params.maxPriority !== undefined) {
-      countQuery += ` AND COALESCE(v.priority, 0) <= $${countParamIndex}`;
-      countParams.push(params.maxPriority);
-      countParamIndex++;
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM subscription_vendor sv2 
+        JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+        WHERE sv2.vendor_id = v.id 
+        AND sv2.is_active = true
+        AND sp.price = (
+          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        )
+      )`;
     }
 
     if (params.joinDateFrom) {
@@ -1819,7 +1937,8 @@ export class VendorService {
       slug: row.slug,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      priority: Number(parseFloat(row.priority || 0).toFixed(1)),
+      priority: row.priority === true,
+      isRemarkable: row.is_remarkable === true,
       averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
       reviewCount: parseInt(row.review_count) || 0,
       packageCount: parseInt(row.package_count) || 0,

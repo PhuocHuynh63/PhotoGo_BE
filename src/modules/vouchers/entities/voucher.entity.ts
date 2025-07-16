@@ -1,6 +1,6 @@
 import { Invoice } from 'src/modules/invoices/entities/invoice.entity';
 import { Column, Entity, CreateDateColumn, UpdateDateColumn, PrimaryGeneratedColumn, OneToMany, OneToOne } from 'typeorm';
-import { VoucherStatusEnum, VoucherTypePoint } from '../../../constants/voucher.enum';
+import { VoucherStatusEnum, VoucherTypeDiscount, VoucherTypePoint } from '../../../constants/voucher.enum';
 import { CampaignVoucher } from 'src/modules/campaign/entities/campaign-voucher.entity';
 
 @Entity('voucher')
@@ -14,8 +14,8 @@ export class Voucher {
   @Column({ type: 'varchar', length: 255, nullable: true })
   description?: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: false })
-  discount_type: string;
+  @Column({ type: 'enum', enum: VoucherTypeDiscount, nullable: false })
+  discount_type: VoucherTypeDiscount;
 
   @Column({ type: 'decimal', precision: 10, nullable: false })
   discount_value: number;

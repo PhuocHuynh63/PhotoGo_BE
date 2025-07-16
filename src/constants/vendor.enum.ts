@@ -16,6 +16,5 @@ export enum VendorSortField {
   NAME = 'name',
   PRICE = 'price',
   RATING = 'rating',
-  SUBSCRIPTION_COUNT = 'subscription_count',
   DISTANCE = 'distance'
 }

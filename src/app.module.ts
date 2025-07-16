@@ -52,6 +52,7 @@ import { LocationAvailabilityModule } from './modules/locations/location-availab
 import { CampaignModule } from './modules/campaign/campaign.module';
 import { GoongModule } from './3rdService/goong/goong.module';
 import { AttendanceLogModule } from './modules/attendances/attendance-log/attendance-log.module';
+import { AlbumModule } from './modules/album/album.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -185,7 +186,8 @@ if (!fs.existsSync(templateDir)) {
     WishlistModule,
     SupportTicketsModule,
     NotificationModule,
-    GoongModule
+    GoongModule,
+    AlbumModule
 
   ],
   controllers: [AppController],

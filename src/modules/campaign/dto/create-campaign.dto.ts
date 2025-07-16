@@ -41,12 +41,12 @@ export class CreateCampaignDto {
   })
   endDate: string;
 
-  @ApiProperty({
-    description: 'Trạng thái của campaign',
-    example: true,
-    default: true,
-  })
-  @IsBoolean()
-  @IsOptional()
-  status?: boolean = true;
+  // @ApiProperty({
+  //   description: 'Trạng thái của campaign',
+  //   example: true,
+  //   default: true,
+  // })
+  // @IsBoolean()
+  // @IsOptional()
+  // status?: boolean = true;
 } 

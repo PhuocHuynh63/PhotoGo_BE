@@ -614,6 +614,7 @@ export class LocationService {
       where: {
         locationId,
         date: Between(fromDate, toDate),
+        status: BookingStatus.PAID, // Chỉ lấy những booking đã thanh toán
       },
       relations: ['user', 'serviceConcept', 'invoices'],
       order: { date: 'ASC', time: 'ASC' }

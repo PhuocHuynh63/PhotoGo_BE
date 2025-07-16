@@ -209,7 +209,7 @@ export class VendorController {
     try {
       const result = await this.vendorService.filterVendors({
         ...remarkableDto,
-        sortBy: remarkableDto.sortBy || VendorSortField.SUBSCRIPTION_COUNT,
+        sortBy: remarkableDto.sortBy || VendorSortField.CREATED_AT,
         sortDirection: remarkableDto.sortDirection || 'desc',
         pageSize: remarkableDto.pageSize || '10',
       });

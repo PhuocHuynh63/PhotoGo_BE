@@ -23,4 +23,5 @@ export enum VoucherTypePoint {
 export enum VoucherUserFromEnum {
     CAMPAIGN = 'chiến dịch',
     POINT_REDEEM = 'đổi điểm',
+    WHEEL_OF_FORTUNE = 'vòng quay may mắn',
 }
