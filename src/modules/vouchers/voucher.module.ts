@@ -9,11 +9,15 @@ import { User } from '../users/entities/user.entity';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
 import { Point } from '../points/entities/point.entity';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
+import { PointModule } from '../points/point.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Voucher, VoucherUser, CampaignVoucher, User, UserCampaign, Point, PointTransaction])],
+  imports: [
+    TypeOrmModule.forFeature([Voucher, VoucherUser, CampaignVoucher, User, UserCampaign, Point, PointTransaction]),
+    PointModule
+  ],
   providers: [VoucherService],
   controllers: [VoucherController],
   exports: [VoucherService],
 })
-export class VoucherModule {}
+export class VoucherModule { }

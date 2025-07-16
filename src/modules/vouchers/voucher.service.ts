@@ -15,6 +15,7 @@ import { CampaignVoucher } from '../campaign/entities/campaign-voucher.entity';
 import { Point } from '../points/entities/point.entity';
 import { PointTransactionType } from 'src/constants/point.enum';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
+import { PointHelperService } from '../points/point-helper.service';
 
 @Injectable()
 export class VoucherService {
@@ -33,6 +34,7 @@ export class VoucherService {
     private readonly pointRepository: Repository<Point>,
     @InjectRepository(PointTransaction)
     private readonly pointTransactionRepository: Repository<PointTransaction>,
+    private readonly pointHelperService: PointHelperService,
   ) { }
 
   //#region Voucher Operations
@@ -59,18 +61,18 @@ export class VoucherService {
     if (query.term) {
       // Tách từ khóa tìm kiếm thành các từ riêng biệt
       const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
-      
+
       if (searchTerms.length > 0) {
         const conditions = searchTerms.map((term, index) => {
           const paramName = `term${index}`;
           return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
         });
-        
+
         const params = {};
         searchTerms.forEach((term, index) => {
           params[`term${index}`] = `%${term}%`;
         });
-        
+
         queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
       }
     }
@@ -163,7 +165,7 @@ export class VoucherService {
     }
 
     const existingVoucherUser = await this.voucherUserRepository.findOne({
-      where: { user_id: userId, voucher_id: voucherId},
+      where: { user_id: userId, voucher_id: voucherId },
     });
     if (existingVoucherUser) {
       throw new BadRequestException('Người dùng đã có mã giảm giá này');
@@ -210,18 +212,18 @@ export class VoucherService {
     if (query.term) {
       // Tách từ khóa tìm kiếm thành các từ riêng biệt
       const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
-      
+
       if (searchTerms.length > 0) {
         const conditions = searchTerms.map((term, index) => {
           const paramName = `term${index}`;
           return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
         });
-        
+
         const params = {};
         searchTerms.forEach((term, index) => {
           params[`term${index}`] = `%${term}%`;
         });
-        
+
         queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
       }
     }
@@ -243,7 +245,7 @@ export class VoucherService {
     const allowedSortFields = ['assigned_at', 'used_at', 'created_at', 'updated_at'];
     let sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
     const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
-    
+
     // Xử lý sắp xếp theo maxPrice của voucher
     if (query.sortBy === 'maxPrice') {
       queryBuilder.orderBy('voucher.maxPrice', sortDirection);
@@ -294,18 +296,18 @@ export class VoucherService {
     if (query.term) {
       // Tách từ khóa tìm kiếm thành các từ riêng biệt
       const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
-      
+
       if (searchTerms.length > 0) {
         const conditions = searchTerms.map((term, index) => {
           const paramName = `term${index}`;
           return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
         });
-        
+
         const params = {};
         searchTerms.forEach((term, index) => {
           params[`term${index}`] = `%${term}%`;
         });
-        
+
         queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
       }
     }
@@ -329,7 +331,7 @@ export class VoucherService {
     const allowedSortFields = ['assigned_at', 'used_at', 'created_at', 'updated_at'];
     let sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'assigned_at';
     const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
-    
+
     // Xử lý sắp xếp theo maxPrice của voucher
     if (query.sortBy === 'maxPrice') {
       queryBuilder.orderBy('voucher.maxPrice', sortDirection);
@@ -430,32 +432,27 @@ export class VoucherService {
     if (voucher.quantity <= 0) throw new BadRequestException('Voucher đã hết số lượng');
     if (!voucher.point || voucher.point <= 0) throw new BadRequestException('Voucher này không hỗ trợ đổi điểm');
 
-    // 2. Lấy thông tin user và điểm
-    const user = await this.userRepository.findOne({ where: { id: userId }, relations: ['points'] });
+    // 2. Kiểm tra user có đủ điểm và chưa sở hữu voucher này
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User không tồn tại');
-    const totalPoint = user.points?.reduce((sum, p) => sum + p.balance, 0) || 0;
-    if (totalPoint < voucher.point) throw new BadRequestException('Bạn không đủ điểm để đổi voucher này');
 
-    // 3. Trừ điểm (ưu tiên trừ ở Point đầu tiên, hoặc phân bổ nếu cần)
-    let remaining = voucher.point;
-    for (const point of user.points) {
-      if (remaining <= 0) break;
-      const deduct = Math.min(point.balance, remaining);
-      point.balance -= deduct;
-      remaining -= deduct;
-      await this.pointRepository.save(point);
-      const pointTransaction = this.pointTransactionRepository.create({
-        point: point,
-        amount: deduct,
-        type: PointTransactionType.REDEEM,
-        description: `Đổi voucher`,
-      });
-      await this.pointTransactionRepository.save(pointTransaction);
+    const hasEnoughPoints = await this.pointHelperService.checkUserBalance(userId, voucher.point);
+    if (!hasEnoughPoints) {
+      const currentBalance = await this.pointHelperService.getUserBalance(userId);
+      throw new BadRequestException(`Bạn không đủ điểm để đổi voucher này. Hiện tại: ${currentBalance}, cần: ${voucher.point}`);
     }
 
-    // 4. Gán voucher cho user với from = 'đổi điểm'
     const existingVoucherUser = await this.voucherUserRepository.findOne({ where: { user_id: userId, voucher_id: voucherId } });
     if (existingVoucherUser) throw new BadRequestException('Bạn đã sở hữu voucher này');
+
+    // 3. Trừ điểm sử dụng PointHelperService
+    await this.pointHelperService.handleVoucherRedemption(
+      userId,
+      voucher.point,
+      `${voucher.code} - ${voucher.description}`
+    );
+
+    // 4. Gán voucher cho user với from = 'đổi điểm'
     const voucherUser = this.voucherUserRepository.create({
       user_id: userId,
       voucher_id: voucherId,
@@ -489,7 +486,7 @@ export class VoucherService {
     const skip = (currentPage - 1) * pageSize;
 
     // 1. Lấy thông tin user
-    const user = await this.userRepository.findOne({ 
+    const user = await this.userRepository.findOne({
       where: { id: userId },
       select: ['id', 'email', 'fullName', 'phoneNumber', 'avatarUrl', 'status', 'rank', 'multiplier', 'lastLoginAt', 'createdAt', 'updatedAt']
     });
@@ -517,18 +514,18 @@ export class VoucherService {
     if (query.term) {
       // Tách từ khóa tìm kiếm thành các từ riêng biệt
       const searchTerms = query.term.trim().split(/\s+/).filter(term => term.length > 0);
-      
+
       if (searchTerms.length > 0) {
         const conditions = searchTerms.map((term, index) => {
           const paramName = `term${index}`;
           return `(voucher.code ILIKE :${paramName} OR voucher.discount_type::text ILIKE :${paramName} OR voucher.status::text ILIKE :${paramName})`;
         });
-        
+
         const params = {};
         searchTerms.forEach((term, index) => {
           params[`term${index}`] = `%${term}%`;
         });
-        
+
         queryBuilder.andWhere(`(${conditions.join(' AND ')})`, params);
       }
     }
@@ -551,7 +548,7 @@ export class VoucherService {
     const allowedSortFields = ['createdAt', 'updatedAt', 'code', 'discount_value', 'status', 'start_date', 'end_date'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'createdAt';
     const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';
-    
+
     // Xử lý sắp xếp theo maxPrice
     if (query.sortBy === 'maxPrice') {
       queryBuilder.orderBy('voucher.maxPrice', sortDirection);
@@ -570,7 +567,7 @@ export class VoucherService {
     // 8. Transform data để có cấu trúc tương tự VoucherUser
     const data = rawData.map((row: any) => {
       const currentDate = new Date();
-      const is_valid = 
+      const is_valid =
         currentDate >= new Date(row.voucher_start_date) &&
         currentDate <= new Date(row.voucher_end_date) &&
         row.voucher_status === VoucherStatusEnum.ACTIVE;
