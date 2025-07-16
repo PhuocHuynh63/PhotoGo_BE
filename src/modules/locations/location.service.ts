@@ -103,6 +103,35 @@ export class LocationService {
   }
   //#endregion create
 
+  /**
+   * Take a vendor ID and return all locations associated with that vendor.
+   * @param vendor_id 
+   * @returns 
+   */
+  async findByVendorId(vendor_id: string, status?: VendorStatus): Promise<Location[]> {
+    if (!vendor_id) {
+      throw new BadRequestException('ID vendor không được để trống');
+    }
+
+    const whereCondition: any = { id: vendor_id };
+    if (status) {
+      if (!Object.values(VendorStatus).includes(status)) {
+        throw new BadRequestException('Trạng thái vendor không hợp lệ');
+      }
+      whereCondition.status = status;
+    }
+
+    const vendor = await this.vendorRepository.findOne({
+      where: whereCondition,
+      relations: ['locations'],
+    });
+    if (!vendor) {
+      throw new NotFoundException(`Không tìm thấy vendor với ID ${vendor_id}`);
+    }
+    return vendor.locations;
+  }
+  //----------------------End----------------------//
+
   //#region findAll
   async findAll(query: FindLocationDto): Promise<{
     data: Location[];

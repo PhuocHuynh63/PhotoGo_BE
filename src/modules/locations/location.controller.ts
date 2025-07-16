@@ -3,13 +3,14 @@ import { LocationService } from './location.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { Location } from './entities/location.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiProperty, ApiParam } from '@nestjs/swagger';
 import { FindLocationDto } from './dto/find-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { SearchLocationDto } from './dto/search-location.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetCitiesDto } from './dto/get-cities.dto';
 import { LocationSlotBookingsResponseDto } from './dto/location-slot-bookings.dto';
+import { VendorStatus } from 'src/constants/vendor.enum';
 @ApiTags('Locations')
 @Controller('locations')
 @ApiBearerAuth('access-token')
@@ -63,6 +64,29 @@ export class LocationController {
       }
       throw new HttpException('Lỗi khi tạo địa điểm', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @ResponseMessage('Lấy danh sách địa điểm thành công')
+  @Get('vendor/:vendor_id')
+  @ApiOperation({ summary: 'Lấy danh sách địa điểm theo vendor_id (Protected)' })
+  @ApiResponse({ status: 200, description: 'Danh sách địa điểm của vendor', type: [Location] })
+  @ApiResponse({ status: 400, description: 'Tham số không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy vendor' })
+  @ApiParam({
+    name: 'vendor_id',
+    description: 'ID của vendor để lấy danh sách địa điểm',
+    type: String,
+    example: 'vendor123',
+  })
+  @ApiQuery({
+    name: 'status',
+    description: 'Trạng thái của vendor (active, inactive, pending)',
+    enum: VendorStatus,
+    example: 'active',
+    required: false,
+  })
+  async findByVendorId(@Param('vendor_id') vendor_id: string, @Query('status') status: VendorStatus): Promise<Location[]> {
+    return this.locationService.findByVendorId(vendor_id, status);
   }
 
   @Public()
