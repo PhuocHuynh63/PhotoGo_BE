@@ -56,7 +56,8 @@ export class ServicePackageService {
    * Origin Price = Final Price / (1 + Commission Rate + Tax Rate)
    */
   private calculateOriginPrice(finalPrice: number): number {
-    return Math.round(finalPrice / this.TOTAL_MULTIPLIER);
+    // Không làm tròn, chỉ chia bình thường
+    return finalPrice / this.TOTAL_MULTIPLIER;
   }
 
   /**
@@ -106,7 +107,7 @@ export class ServicePackageService {
    * Get final price (customer price) from origin price
    */
   private getFinalPrice(originPrice: number): number {
-    return this.calculateFinalPrice(originPrice);
+    return Math.round(originPrice * this.TOTAL_MULTIPLIER);
   }
 
   /**
@@ -297,7 +298,7 @@ export class ServicePackageService {
     if (servicePackage.serviceConcepts) {
       servicePackage.serviceConcepts = servicePackage.serviceConcepts.map(concept => ({
         ...concept,
-        price: this.getFinalPrice(concept.price)
+        price: Math.round(this.getFinalPrice(concept.price))
       }));
     }
 
@@ -894,7 +895,7 @@ export class ServicePackageService {
     this.logger.log(`- Tax: ${pricingBreakdown.taxAmount}`);
 
     // Store the origin price in the database (not the final price)
-    serviceConceptData.price = pricingBreakdown.originPrice;
+    serviceConceptData.price = this.calculateOriginPrice(createServiceConceptDto.price);
 
     // Create the service concept first
     const serviceConcept = this.serviceConceptRepository.create(serviceConceptData);
@@ -1006,10 +1007,9 @@ export class ServicePackageService {
 
     // Add counts to each concept and convert origin price to final price for customer display
     const conceptsWithCounts = data.map(concept => {
-      const finalPrice = this.getFinalPrice(concept.price);
       return {
         ...concept,
-        price: finalPrice, // Show final price to customer
+        price: Math.round(this.getFinalPrice(concept.price)), // Show rounded final price to customer
         countConceptUsed: countMap.get(concept.id) || 0
       };
     }) as (ServiceConcept & { countConceptUsed: number })[];
@@ -1042,10 +1042,10 @@ export class ServicePackageService {
       AND status = 'đã hoàn thành'
     `, [id]);
 
-    const finalPrice = this.getFinalPrice(serviceConcept.price);
+    const finalPrice = Math.round(this.getFinalPrice(serviceConcept.price));
     return {
       ...serviceConcept,
-      price: finalPrice, // Show final price to customer
+      price: finalPrice, // Show rounded final price to customer
       countConceptUsed: Number(countResult[0].count) || 0
     } as ServiceConcept & { countConceptUsed: number };
   }
@@ -1126,7 +1126,7 @@ export class ServicePackageService {
       }
 
       // Store the origin price in the database (not the final price)
-      serviceConcept.price = pricingBreakdown.originPrice;
+      serviceConcept.price = this.calculateOriginPrice(updateServiceConceptDto.price);
     }
     if (updateServiceConceptDto.duration !== undefined) {
       serviceConcept.duration = updateServiceConceptDto.duration;
