@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Album } from './entities/album.entity';
@@ -6,6 +6,9 @@ import { VendorAlbum } from './entities/vendor-album.entity';
 import { CreateAlbumDto } from './dto/create-album.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
 import { AlbumPaginationDto } from './dto/pagination.dto';
+import { UploadService } from '../../3rdService/upload/upload.service';
+import { CreateAlbumMultipartDto } from './dto/create-album-multipart.dto';
+import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
 
 @Injectable()
 export class AlbumService {
@@ -14,6 +17,7 @@ export class AlbumService {
     private readonly albumRepository: Repository<Album>,
     @InjectRepository(VendorAlbum)
     private readonly vendorAlbumRepository: Repository<VendorAlbum>,
+    private readonly uploadService: UploadService,
   ) {}
 
   async createVendorAlbum(locationId: string) {
@@ -53,6 +57,53 @@ export class AlbumService {
     return this.albumRepository.save(album);
   }
 
+  async createAlbumWithUpload(
+    dto: CreateAlbumMultipartDto,
+    photoFiles?: Express.Multer.File[],
+    behindTheSceneFiles?: Express.Multer.File[],
+  ) {
+    // Validate file count
+    if (photoFiles && photoFiles.length > 3) {
+      throw new BadRequestException('Chỉ được upload tối đa 3 ảnh cho photos');
+    }
+    if (behindTheSceneFiles && behindTheSceneFiles.length > 3) {
+      throw new BadRequestException('Chỉ được upload tối đa 3 ảnh cho behind the scenes');
+    }
+
+    // Upload photos
+    let photoUrls: string[] = [];
+    if (photoFiles && photoFiles.length > 0) {
+      photoUrls = await this.uploadService.uploadImages(photoFiles, 'album/photos');
+    }
+
+    // Upload behind the scenes
+    let behindTheSceneUrls: string[] = [];
+    if (behindTheSceneFiles && behindTheSceneFiles.length > 0) {
+      behindTheSceneUrls = await this.uploadService.uploadImages(behindTheSceneFiles, 'album/behind-the-scenes');
+    }
+
+    // Create vendor album first
+    const vendorAlbum = this.vendorAlbumRepository.create({ locationId: dto.locationId });
+    const savedVendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
+
+    // Create album with uploaded URLs
+    const album = this.albumRepository.create({
+      userId: dto.userId,
+      driveLink: dto.driveLink,
+      photos: photoUrls,
+      behindTheScenes: behindTheSceneUrls,
+      vendorAlbum: savedVendorAlbum,
+    });
+
+    const savedAlbum = await this.albumRepository.save(album);
+
+    // Return both vendor album and album
+    return {
+      vendorAlbum: savedVendorAlbum,
+      album: savedAlbum,
+    };
+  }
+
   async updateAlbum(albumId: string, dto: UpdateAlbumDto) {
     const album = await this.albumRepository.findOne({ where: { id: albumId }, relations: ['vendorAlbum'] });
     if (!album) throw new NotFoundException('Không tìm thấy album');
@@ -65,6 +116,49 @@ export class AlbumService {
       throw new Error('Chỉ được lưu tối đa 3 ảnh');
     }
     this.albumRepository.merge(album, dto);
+    return this.albumRepository.save(album);
+  }
+
+  async updateAlbumWithUpload(
+    albumId: string,
+    dto: UpdateAlbumMultipartDto,
+    photoFiles?: Express.Multer.File[],
+    behindTheSceneFiles?: Express.Multer.File[],
+  ) {
+    // Find existing album
+    const album = await this.albumRepository.findOne({ where: { id: albumId }, relations: ['vendorAlbum'] });
+    if (!album) throw new NotFoundException('Không tìm thấy album');
+
+    // Validate file count
+    if (photoFiles && photoFiles.length > 3) {
+      throw new BadRequestException('Chỉ được upload tối đa 3 ảnh cho photos');
+    }
+    if (behindTheSceneFiles && behindTheSceneFiles.length > 3) {
+      throw new BadRequestException('Chỉ được upload tối đa 3 ảnh cho behind the scenes');
+    }
+
+    // Upload new photos if provided
+    let photoUrls: string[] = album.photos || [];
+    if (photoFiles && photoFiles.length > 0) {
+      const newPhotoUrls = await this.uploadService.uploadImages(photoFiles, 'album/photos');
+      photoUrls = [...photoUrls, ...newPhotoUrls];
+    }
+
+    // Upload new behind the scenes if provided
+    let behindTheSceneUrls: string[] = album.behindTheScenes || [];
+    if (behindTheSceneFiles && behindTheSceneFiles.length > 0) {
+      const newBehindTheSceneUrls = await this.uploadService.uploadImages(behindTheSceneFiles, 'album/behind-the-scenes');
+      behindTheSceneUrls = [...behindTheSceneUrls, ...newBehindTheSceneUrls];
+    }
+
+    // Update album with new data
+    this.albumRepository.merge(album, {
+      userId: dto.userId,
+      driveLink: dto.driveLink,
+      photos: photoUrls,
+      behindTheScenes: behindTheSceneUrls,
+    });
+
     return this.albumRepository.save(album);
   }
 

@@ -39,9 +39,15 @@ export class SlotBookingsDto {
   @IsDateString()
   date: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String, nullable: true })
+  @IsOptional()
   @IsString()
-  time: string;
+  from: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  @IsOptional()
+  @IsString()
+  to: string | null;
 
   @ApiProperty()
   count: number;

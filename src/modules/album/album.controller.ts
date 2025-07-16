@@ -1,8 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, BadRequestException, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, BadRequestException, Query, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { AlbumService } from './album.service';
 import { CreateAlbumDto } from './dto/create-album.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
-import { ApiTags, ApiBody, ApiResponse, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiBadRequestResponse, ApiNotFoundResponse, ApiQuery } from '@nestjs/swagger';
+import { CreateAlbumMultipartDto } from './dto/create-album-multipart.dto';
+import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
+import { ApiTags, ApiBody, ApiResponse, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiBadRequestResponse, ApiNotFoundResponse, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { AlbumPaginationDto } from './dto/pagination.dto';
 
 @ApiTags('Vendor Album')
@@ -28,7 +31,7 @@ export class AlbumController {
   }
 
   @Post('album')
-  @ApiOperation({ summary: 'Tạo album cho vendor-album' })
+  @ApiOperation({ summary: 'Tạo album cho vendor-album (JSON)' })
   @ApiBody({ type: CreateAlbumDto })
   @ApiCreatedResponse({ description: 'Tạo album thành công' })
   @ApiBadRequestResponse({ description: 'Chỉ được lưu tối đa 3 ảnh hoặc vendorAlbumId không tồn tại' })
@@ -37,6 +40,43 @@ export class AlbumController {
       throw new BadRequestException('Chỉ được lưu tối đa 3 ảnh');
     }
     return this.albumService.createAlbum(body);
+  }
+
+  @Post('album/upload')
+  @ApiOperation({ summary: 'Tạo album với upload ảnh (Multipart Form)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        locationId: { type: 'string', description: 'Location ID' },
+        userId: { type: 'string', description: 'User ID' },
+        driveLink: { type: 'string', format: 'url', description: 'Google Drive link (optional)' },
+        photos: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Photo files (max 3)',
+        },
+        behindTheScenes: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Behind the scene files (max 3)',
+        },
+      },
+      required: ['userId', 'locationId'],
+    },
+  })
+  @ApiCreatedResponse({ description: 'Tạo album thành công' })
+  @ApiBadRequestResponse({ description: 'Lỗi upload ảnh hoặc locationId không tồn tại' })
+  async createAlbumWithUpload(
+    @Body() body: CreateAlbumMultipartDto,
+    @UploadedFiles() files: { photos?: Express.Multer.File[]; behindTheScenes?: Express.Multer.File[] },
+  ) {
+    return this.albumService.createAlbumWithUpload(
+      body, 
+      files?.photos || [], 
+      files?.behindTheScenes || []
+    );
   }
 
   @Get('album/list/:vendorAlbumId')
@@ -65,7 +105,7 @@ export class AlbumController {
   }
 
   @Put('album/:albumId')
-  @ApiOperation({ summary: 'Cập nhật album' })
+  @ApiOperation({ summary: 'Cập nhật album (JSON)' })
   @ApiParam({ name: 'albumId', type: 'string' })
   @ApiBody({ type: UpdateAlbumDto })
   @ApiOkResponse({ description: 'Cập nhật album thành công' })
@@ -76,6 +116,46 @@ export class AlbumController {
       throw new BadRequestException('Chỉ được lưu tối đa 3 ảnh');
     }
     return this.albumService.updateAlbum(albumId, body);
+  }
+
+  @Put('album/:albumId/upload')
+  @ApiOperation({ summary: 'Cập nhật album với upload ảnh (Multipart Form)' })
+  @ApiParam({ name: 'albumId', type: 'string' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'User ID (optional)' },
+        locationId: { type: 'string', description: 'Location ID (optional)' },
+        driveLink: { type: 'string', format: 'url', description: 'Google Drive link (optional)' },
+        photos: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Photo files (max 3)',
+        },
+        behindTheScenes: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Behind the scene files (max 3)',
+        },
+      },
+    },
+  })
+  @ApiOkResponse({ description: 'Cập nhật album thành công' })
+  @ApiBadRequestResponse({ description: 'Lỗi upload ảnh hoặc locationId không tồn tại' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy album' })
+  async updateAlbumWithUpload(
+    @Param('albumId') albumId: string,
+    @Body() body: UpdateAlbumMultipartDto,
+    @UploadedFiles() files: { photos?: Express.Multer.File[]; behindTheScenes?: Express.Multer.File[] },
+  ) {
+    return this.albumService.updateAlbumWithUpload(
+      albumId, 
+      body, 
+      files?.photos || [], 
+      files?.behindTheScenes || []
+    );
   }
 
   @Delete('album/:albumId')

@@ -610,13 +610,14 @@ export class LocationService {
     const todayStr = today.toISOString().slice(0, 10);
 
     // Lấy tất cả booking của location này trong khoảng ngày
+    // (giả sử booking có trường date, time, status, user, serviceConcept, notes, phone, email)
     const bookings = await this.bookingRepository.find({
       where: {
         locationId,
         date: Between(fromDate, toDate),
         status: BookingStatus.PAID, // Chỉ lấy những booking đã thanh toán
       },
-      relations: ['user', 'serviceConcept', 'invoices'],
+      relations: ['user', 'serviceConcept', 'invoices', 'schedules'],
       order: { date: 'ASC', time: 'ASC' }
     });
 
@@ -630,17 +631,6 @@ export class LocationService {
 
     for (const booking of bookings) {
       const dateObj = booking.date instanceof Date ? booking.date : new Date(booking.date);
-      const slotKey = `${dateObj.toISOString().slice(0, 10)}_${booking.time}`;
-      if (!slotMap.has(slotKey)) {
-        slotMap.set(slotKey, {
-          date: dateObj.toISOString().slice(0, 10),
-          time: booking.time,
-          count: 0,
-          bookings: []
-        });
-      }
-      const slot = slotMap.get(slotKey)!;
-      slot.count++;
       const bookingDetail: SlotBookingDetailDto = {
         id: booking.id,
         fullName: booking.user?.fullName || '',
@@ -650,18 +640,69 @@ export class LocationService {
         phone: booking.phone,
         email: booking.email
       };
-      slot.bookings.push(bookingDetail);
-
+      if (booking.time) {
+        // booking 1 ngày
+        let from: string | null = booking.time;
+        let to: string | null = null;
+        const duration = booking.serviceConcept?.duration;
+        if (duration && typeof duration === 'number') {
+          const [hour, minute] = booking.time.split(':').map(Number);
+          const fromDateTime = new Date(dateObj);
+          fromDateTime.setHours(hour, minute, 0, 0);
+          const toDateTime = new Date(fromDateTime.getTime() + duration * 60000);
+          to = toDateTime.toTimeString().slice(0, 8);
+        } else {
+          to = from;
+        }
+        const slotKey = `${dateObj.toISOString().slice(0, 10)}_${from}`;
+        if (!slotMap.has(slotKey)) {
+          slotMap.set(slotKey, {
+            date: dateObj.toISOString().slice(0, 10),
+            from,
+            to,
+            count: 0,
+            bookings: []
+          });
+        }
+        const slot = slotMap.get(slotKey)!;
+        // Cập nhật to = max (so sánh chuỗi HH:mm:ss)
+        if (slot.to === null || (to && to > slot.to)) {
+          slot.to = to;
+        }
+        slot.count++;
+        slot.bookings.push(bookingDetail);
+        // Lịch hôm nay
+        if (dateObj.toISOString().slice(0, 10) === todayStr) {
+          todayBookings.push(bookingDetail);
+        }
+      } else if (booking.schedules && booking.schedules.length > 0) {
+        // booking nhiều ngày
+        for (const schedule of booking.schedules) {
+          const scheduleDate = schedule.date instanceof Date ? schedule.date : new Date(schedule.date);
+          const slotKey = `${scheduleDate.toISOString().slice(0, 10)}_null`;
+          if (!slotMap.has(slotKey)) {
+            slotMap.set(slotKey, {
+              date: scheduleDate.toISOString().slice(0, 10),
+              from: null,
+              to: null,
+              count: 0,
+              bookings: []
+            });
+          }
+          const slot = slotMap.get(slotKey)!;
+          slot.count++;
+          slot.bookings.push(bookingDetail);
+          // Lịch hôm nay
+          if (scheduleDate.toISOString().slice(0, 10) === todayStr) {
+            todayBookings.push(bookingDetail);
+          }
+        }
+      }
       // Thống kê
       total++;
       if (booking.status === BookingStatus.CONFIRMED) confirmed++;
       if (booking.status === BookingStatus.PENDING) pending++;
       if (booking.invoices && booking.invoices.length > 0 && typeof booking.invoices[0].payablePrice === 'number') expectedRevenue += Number(booking.invoices[0].payablePrice);
-
-      // Lịch hôm nay
-      if (dateObj.toISOString().slice(0, 10) === todayStr) {
-        todayBookings.push(bookingDetail);
-      }
     }
     return {
       slots: Array.from(slotMap.values()),
