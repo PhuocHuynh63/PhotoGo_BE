@@ -7,8 +7,9 @@ export class VendorAlbum {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  locationId: string;
+  @OneToOne(() => Location, (location) => location.id)
+  @JoinColumn({ name: 'location_id' })
+  location: Location;
 
   @OneToMany(() => Album, (album) => album.vendorAlbum)
   albums: Album[];
@@ -18,8 +19,4 @@ export class VendorAlbum {
 
   @UpdateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP', precision: 3 })
   updatedAt: Date;
-
-  @OneToOne(() => Location, (location) => location.vendorAlbum)
-  @JoinColumn({ name: 'location_id' })
-  location: Location;
 }

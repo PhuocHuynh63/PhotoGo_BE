@@ -41,19 +41,4 @@ export class AlbumPaginationDto {
   @IsString()
   @IsOptional()
   sortDirection?: string = 'DESC';
-
-  @ApiProperty({ description: 'Lọc theo userId', required: false })
-  @IsUUID()
-  @IsOptional()
-  userId?: string;
-
-  @ApiProperty({ description: 'Lọc theo vendorAlbumId', required: false })
-  @IsUUID()
-  @IsOptional()
-  vendorAlbumId?: string;
-
-  @ApiProperty({ description: 'Lọc theo ngày tạo (YYYY-MM-DD)', required: false })
-  @IsString()
-  @IsOptional()
-  createdAt?: string;
 } 

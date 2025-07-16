@@ -68,6 +68,7 @@ export class LocationController {
 
   @ResponseMessage('Lấy danh sách địa điểm thành công')
   @Get('vendor/:vendor_id')
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách địa điểm theo vendor_id (Protected)' })
   @ApiResponse({ status: 200, description: 'Danh sách địa điểm của vendor', type: [Location] })
   @ApiResponse({ status: 400, description: 'Tham số không hợp lệ' })

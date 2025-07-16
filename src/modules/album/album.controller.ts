@@ -1,15 +1,17 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, BadRequestException, Query, UseInterceptors, UploadedFiles } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { AlbumService } from './album.service';
 import { CreateAlbumDto } from './dto/create-album.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
 import { CreateAlbumMultipartDto } from './dto/create-album-multipart.dto';
 import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
-import { ApiTags, ApiBody, ApiResponse, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiBadRequestResponse, ApiNotFoundResponse, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiBody, ApiResponse, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiBadRequestResponse, ApiNotFoundResponse, ApiQuery, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { AlbumPaginationDto } from './dto/pagination.dto';
+import { Public } from './../../decorator/custom';
 
 @ApiTags('Vendor Album')
 @Controller('vendor-albums')
+@ApiBearerAuth('access-token')
 export class AlbumController {
   constructor(private readonly albumService: AlbumService) {}
 
@@ -23,6 +25,7 @@ export class AlbumController {
   }
 
   @Get(':locationId')
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả vendor-album của vendor' })
   @ApiParam({ name: 'locationId', type: 'string' })
   @ApiOkResponse({ description: 'Danh sách vendor-album' })
@@ -68,6 +71,7 @@ export class AlbumController {
   })
   @ApiCreatedResponse({ description: 'Tạo album thành công' })
   @ApiBadRequestResponse({ description: 'Lỗi upload ảnh hoặc locationId không tồn tại' })
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'photos', maxCount: 3 }, { name: 'behindTheScenes', maxCount: 3 }]))
   async createAlbumWithUpload(
     @Body() body: CreateAlbumMultipartDto,
     @UploadedFiles() files: { photos?: Express.Multer.File[]; behindTheScenes?: Express.Multer.File[] },
@@ -80,6 +84,7 @@ export class AlbumController {
   }
 
   @Get('album/list/:vendorAlbumId')
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách album theo vendor-album-id' })
   @ApiParam({ name: 'vendorAlbumId', type: 'string' })
   @ApiOkResponse({ description: 'Danh sách album' })
@@ -88,6 +93,7 @@ export class AlbumController {
   }
 
   @Get('album/user/:userId')
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách album theo userId' })
   @ApiParam({ name: 'userId', type: 'string' })
   @ApiOkResponse({ description: 'Danh sách album theo userId' })
@@ -96,6 +102,7 @@ export class AlbumController {
   }
 
   @Get('album/:albumId')
+  @Public()
   @ApiOperation({ summary: 'Lấy 1 album theo id' })
   @ApiParam({ name: 'albumId', type: 'string' })
   @ApiOkResponse({ description: 'Thông tin album' })
@@ -145,6 +152,7 @@ export class AlbumController {
   @ApiOkResponse({ description: 'Cập nhật album thành công' })
   @ApiBadRequestResponse({ description: 'Lỗi upload ảnh hoặc locationId không tồn tại' })
   @ApiNotFoundResponse({ description: 'Không tìm thấy album' })
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'photos', maxCount: 3 }, { name: 'behindTheScenes', maxCount: 3 }]))
   async updateAlbumWithUpload(
     @Param('albumId') albumId: string,
     @Body() body: UpdateAlbumMultipartDto,

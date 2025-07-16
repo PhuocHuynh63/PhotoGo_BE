@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Album } from './entities/album.entity';
 import { VendorAlbum } from './entities/vendor-album.entity';
 import { CreateAlbumDto } from './dto/create-album.dto';
@@ -21,7 +21,7 @@ export class AlbumService {
   ) {}
 
   async createVendorAlbum(locationId: string) {
-    const vendorAlbum = this.vendorAlbumRepository.create({ locationId });
+    const vendorAlbum = this.vendorAlbumRepository.create({ location: { id: locationId } });
     return this.vendorAlbumRepository.save(vendorAlbum);
   }
 
@@ -29,7 +29,7 @@ export class AlbumService {
     const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
     const skip = (current - 1) * pageSize;
     const [data, total] = await this.vendorAlbumRepository.findAndCount({
-      where: { locationId },
+      where: { location: { id: locationId } },
       relations: ['albums'],
       skip,
       take: pageSize,
@@ -83,15 +83,16 @@ export class AlbumService {
     }
 
     // Create vendor album first
-    const vendorAlbum = this.vendorAlbumRepository.create({ locationId: dto.locationId });
+    const locationObj = { id: dto.locationId };
+    const vendorAlbum = this.vendorAlbumRepository.create({ location: locationObj });
     const savedVendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
 
     // Create album with uploaded URLs
     const album = this.albumRepository.create({
       userId: dto.userId,
       driveLink: dto.driveLink,
-      photos: photoUrls,
-      behindTheScenes: behindTheSceneUrls,
+      photos: Array.isArray(photoUrls) ? photoUrls : (photoUrls ? [photoUrls] : []),
+      behindTheScenes: Array.isArray(behindTheSceneUrls) ? behindTheSceneUrls : (behindTheSceneUrls ? [behindTheSceneUrls] : []),
       vendorAlbum: savedVendorAlbum,
     });
 
@@ -176,11 +177,9 @@ export class AlbumService {
   }
 
   async getAlbumsByVendorAlbum(vendorAlbumId: string, query: AlbumPaginationDto = {}) {
-    const { current = 1, pageSize = 10, userId, createdAt, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
     const skip = (current - 1) * pageSize;
     const where: any = { vendorAlbum: { id: vendorAlbumId } };
-    if (userId) where.userId = userId;
-    if (createdAt) where.createdAt = Like(`%${createdAt}%`);
     const [data, total] = await this.albumRepository.findAndCount({
       where,
       relations: ['vendorAlbum'],
@@ -201,11 +200,9 @@ export class AlbumService {
   }
 
   async getAlbumsByUserId(userId: string, query: AlbumPaginationDto = {}) {
-    const { current = 1, pageSize = 10, vendorAlbumId, createdAt, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
     const skip = (current - 1) * pageSize;
     const where: any = { userId };
-    if (vendorAlbumId) where.vendorAlbum = { id: vendorAlbumId };
-    if (createdAt) where.createdAt = Like(`%${createdAt}%`);
     const [data, total] = await this.albumRepository.findAndCount({
       where,
       relations: ['vendorAlbum'],
