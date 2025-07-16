@@ -6,10 +6,12 @@ import { UserService } from '../../modules/users/user.service';
 import { Role } from '../../modules/roles/entities/role.entity';
 import { RoleService } from 'src/modules/roles/role.service';
 import { UserStatus } from 'src/constants/user.enum';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class GoogleAuthService {
   private client: OAuth2Client;
+  private readonly logger = new Logger(GoogleAuthService.name);
 
   constructor(
     private readonly configService: ConfigService,
@@ -35,7 +37,6 @@ export class GoogleAuthService {
 
     if (!existingUser) {
       // Nếu không tồn tại, tạo mới
-
       const createAuthDto = {
         fullName: googleAuthDto.name,
         email: googleAuthDto.email,
@@ -48,6 +49,9 @@ export class GoogleAuthService {
 
       existingUser = await this.userService.create(createAuthDto);
     }
+
+    // TODO: Add notification after fixing dependency injection
+    this.logger.log(`Google login successful for user ${existingUser.id}`);
 
     // Tạo JWT token
     const accessToken = this.jwtService.sign({

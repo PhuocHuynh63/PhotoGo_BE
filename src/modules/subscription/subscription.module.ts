@@ -18,6 +18,10 @@ import { PayosModule } from '../../3rdService/payos/payos.module';
 import { MailModule } from '../../3rdService/mail/mail.module';
 import { UserModule } from '../users/user.module';
 import { VendorModule } from '../vendors/vendor.module';
+import { BullQueueModule } from '../../3rdService/bull/bull-queue.module';
+import { SubscriptionProcessor } from './bull/subscription.processor';
+import { NotificationModule } from '../notifications/notification.module';
+import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
@@ -27,12 +31,16 @@ import { VendorModule } from '../vendors/vendor.module';
       SubscriptionVendor,
       SubscriptionInvoice,
       SubscriptionPayment,
-      SubscriptionHistory
+      SubscriptionHistory,
+      User,
     ]),
+    BullQueueModule.registerQueue('subscription-reminders'),
+    BullQueueModule.forRoot(),
     PayosModule,
     MailModule,
     UserModule,
     VendorModule,
+    NotificationModule,
   ],
   controllers: [SubscriptionController, SubscriptionPlanController, SubscriptionVendorController],
   providers: [
@@ -42,7 +50,8 @@ import { VendorModule } from '../vendors/vendor.module';
     SubscriptionPaymentService,
     SubscriptionVendorService,
     SubscriptionHistoryService,
+    SubscriptionProcessor,
   ],
   exports: [SubscriptionService, SubscriptionPlanService, SubscriptionVendorService, SubscriptionPaymentService, SubscriptionHistoryService]
 })
-export class SubscriptionModule {} 
+export class SubscriptionModule { } 
