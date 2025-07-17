@@ -46,6 +46,7 @@ export class ImageAnalysisResponse {
                 },
                 suggestions: ["Gợi ý 1", "Gợi ý 2"]
             },
+            example: "Concept chụp ảnh cún cưng siêu cute:",
             concepts_same: [
                 {
                     id: "concept-123",
@@ -54,7 +55,6 @@ export class ImageAnalysisResponse {
                     relevanceScore: 0.8
                 }
             ],
-            example: "Concept chụp ảnh cún cưng siêu cute:",
             isNoMatch: false,
             suggestion: "Tìm thấy concept phù hợp!"
         }
@@ -69,8 +69,8 @@ export class ImageAnalysisResponse {
             };
             suggestions: string[];
         };
-        concepts_same: any[];
         example: string;
+        concepts_same: any[];
         isNoMatch?: boolean;
         suggestion?: string;
     };

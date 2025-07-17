@@ -724,6 +724,27 @@ ${prompt || ''}`;
 
                 this.logger.debug(`After enhanced semantic filtering: ${concepts_same.length} concepts remaining`);
 
+                // ✅ ENHANCED: Universal semantic mismatch detection
+                concepts_same = concepts_same.filter(c => {
+                    const keywordString = keywords.join(' ').toLowerCase();
+                    const conceptName = (c.name || '').toLowerCase();
+
+                    const imageCategory = this.detectAdvancedImageCategory(keywords);
+                    const conceptCategory = this.detectConceptCategory(c.name || '');
+
+                    // Check for strong mismatches
+                    const mismatchScore = this.calculateMismatchPenalty(imageCategory, conceptCategory);
+
+                    if (mismatchScore > 0.7) { // Strong mismatch
+                        this.logger.debug(`🚫 Rejecting mismatched concept "${c.name}" (${conceptCategory}) for ${imageCategory} image (mismatch: ${mismatchScore})`);
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                this.logger.debug(`After semantic mismatch filtering: ${concepts_same.length} concepts remaining`);
+
                 // Thêm validation: Nếu ảnh rõ ràng là động vật mà không có concept nào phù hợp -> trả về rỗng
                 if (inputImageType === 'animal' && concepts_same.length === 0) {
                     this.logger.debug(`No animal concepts found for animal image. Will use fallback.`);
@@ -731,11 +752,37 @@ ${prompt || ''}`;
             }
 
             if (!concepts_same || concepts_same.length === 0) {
-                // Enhanced fallback logic: tìm concept phù hợp với loại ảnh
+                // ✅ ENHANCED FALLBACK: Better messaging for no matches
                 let fallbackConcepts: any[];
                 let fallbackMessage = '';
 
-                if (inputImageType === 'animal') {
+                // ✅ ENHANCED: Universal fallback for special image categories
+                const imageCategory = this.detectAdvancedImageCategory(keywords);
+
+                const specialCategoryMessages = {
+                    'sci-fi-space': 'Hiện tại PhotoGo chưa có concept chụp ảnh vũ trụ, khoa học viễn tưởng. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'military-vehicle': 'Hiện tại PhotoGo chưa có concept chụp ảnh xe quân sự, vũ khí. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'robot-ai': 'Hiện tại PhotoGo chưa có concept chụp ảnh robot, trí tuệ nhân tạo. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'fantasy': 'Hiện tại PhotoGo chưa có concept chụp ảnh fantasy, thần thoại. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'abstract-art': 'Hiện tại PhotoGo chưa có concept chụp ảnh nghệ thuật trừu tượng. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'extreme-sport': 'Hiện tại PhotoGo chưa có concept chụp ảnh thể thao mạo hiểm. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'advanced-architecture': 'Hiện tại PhotoGo chưa có concept chụp ảnh kiến trúc hiện đại, futuristic. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.'
+                };
+
+                if (specialCategoryMessages[imageCategory]) {
+                    this.logger.debug(`Special category detected: ${imageCategory} - no suitable concepts available`);
+                    fallbackMessage = specialCategoryMessages[imageCategory];
+
+                    // Return general concepts instead of trying to match
+                    const generalConcepts = await this.serviceConceptRepository.find({
+                        relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                        where: { status: ServiceConceptStatus.ACTIVE },
+                        order: { createdAt: 'DESC' },
+                        take: 3
+                    });
+
+                    fallbackConcepts = generalConcepts;
+                } else if (inputImageType === 'animal') {
                     // ✅ FIX: Tìm concept động vật tốt nhất với priority cao hơn
                     this.logger.debug('Looking for animal concepts as fallback');
                     const allConcepts = await this.serviceConceptRepository.find({
@@ -848,14 +895,21 @@ Tone thân thiện, tích cực và khuyến khích.`;
                 const fallbackAnalysis = await this.parseImageAnalysis(fallbackResult.response.text());
 
                 // ✅ Generate dynamic example for fallback flow too
-                const fallbackExample = this.generateExampleText(inputImageType, fallbackConceptsSame, keywords);
+                let fallbackExample: string;
+                const isSpecialCategory = ['sci-fi-space', 'military-vehicle', 'robot-ai', 'fantasy', 'abstract-art', 'extreme-sport', 'advanced-architecture'].includes(imageCategory);
+
+                if (isSpecialCategory) {
+                    fallbackExample = "Một số concept chụp ảnh khác có thể phù hợp:";
+                } else {
+                    fallbackExample = this.generateExampleText(inputImageType, fallbackConceptsSame, keywords);
+                }
 
                 return {
                     success: true,
                     data: {
                         analysis: fallbackAnalysis,
-                        concepts_same: fallbackConceptsSame,
                         example: fallbackExample, // ✅ Dynamic example for fallback too
+                        concepts_same: fallbackConceptsSame,
                         isNoMatch: inputImageType !== 'unknown', // Only mark as no match if we can classify the image
                         suggestion: fallbackMessage
                     },
@@ -874,14 +928,20 @@ Tone thân thiện, tích cực và khuyến khích.`;
             const bestScore = conceptCount > 0 ? Math.max(...concepts_same.map(c => c.relevanceScore)).toFixed(2) : '0';
 
             // ✅ Generate dynamic example text based on image type and concepts
-            const dynamicExample = this.generateExampleText(inputImageType, concepts_same, keywords);
+            // ✅ FIX: Handle special image categories in success flow too
+            const imageCategory = this.detectAdvancedImageCategory(keywords);
+            const isSpecialCategory = ['sci-fi-space', 'military-vehicle', 'robot-ai', 'fantasy', 'abstract-art', 'extreme-sport', 'advanced-architecture'].includes(imageCategory);
+
+            const dynamicExample = isSpecialCategory
+                ? "Concept chụp ảnh tổng hợp:"
+                : this.generateExampleText(inputImageType, concepts_same, keywords);
 
             return {
                 success: true,
                 data: {
                     analysis,
-                    concepts_same,
                     example: dynamicExample, // ✅ Dynamic AI-generated example
+                    concepts_same,
                     isNoMatch: false, // ✅ FIX: Explicitly mark as successful match
                     suggestion: `Tìm thấy ${conceptCount} concept phù hợp với ảnh của bạn! (Điểm tương đồng cao nhất: ${bestScore})`
                 },
@@ -1022,6 +1082,163 @@ Tone thân thiện, tích cực và khuyến khích.`;
         }
 
         return 'Không xác định';
+    }
+
+    /**
+     * ✅ Advanced image category detection for comprehensive filtering
+     */
+    private detectAdvancedImageCategory(keywords: string[]): string {
+        const keywordString = keywords.join(' ').toLowerCase();
+
+        // Sci-fi & Technology
+        if (['vũ trụ', 'space', 'galaxy', 'star', 'planet', 'satellite', 'astronaut', 'rocket', 'cosmos', 'nebula'].some(kw => keywordString.includes(kw))) {
+            return 'sci-fi-space';
+        }
+
+        // Military & Vehicles
+        if (['xe tăng', 'tank', 'military', 'quân sự', 'armor', 'weapon', 'chiến đấu', 'máy bay chiến đấu', 'fighter jet', 'helicopter', 'tàu chiến', 'submarine'].some(kw => keywordString.includes(kw))) {
+            return 'military-vehicle';
+        }
+
+        // Robots & AI
+        if (['robot', 'android', 'cyborg', 'ai', 'artificial intelligence', 'machine', 'mech', 'automation'].some(kw => keywordString.includes(kw))) {
+            return 'robot-ai';
+        }
+
+        // Fantasy & Supernatural
+        if (['dragon', 'rồng', 'magic', 'wizard', 'fairy', 'tiên', 'fantasy', 'supernatural', 'mythical', 'unicorn'].some(kw => keywordString.includes(kw))) {
+            return 'fantasy';
+        }
+
+        // Advanced Architecture
+        if (['skyscraper', 'nhà chọc trời', 'futuristic', 'modern architecture', 'kiến trúc hiện đại', 'high-tech building'].some(kw => keywordString.includes(kw))) {
+            return 'advanced-architecture';
+        }
+
+        // Abstract & Art
+        if (['abstract', 'trừu tượng', 'modern art', 'nghệ thuật hiện đại', 'surreal', 'artistic'].some(kw => keywordString.includes(kw))) {
+            return 'abstract-art';
+        }
+
+        // Sports & Extreme
+        if (['extreme sport', 'thể thao mạo hiểm', 'skydiving', 'bungee', 'racing', 'motorsport'].some(kw => keywordString.includes(kw))) {
+            return 'extreme-sport';
+        }
+
+        // Standard categories (existing logic)
+        if (['mèo', 'chó', 'cat', 'dog', 'pet', 'thú cưng', 'động vật', 'animal'].some(kw => keywordString.includes(kw))) {
+            return 'animal';
+        }
+
+        if (['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình', 'portrait', 'chân dung'].some(kw => keywordString.includes(kw))) {
+            return 'people';
+        }
+
+        if (['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain', 'biển', 'sea', 'thiên nhiên', 'nature'].some(kw => keywordString.includes(kw))) {
+            return 'landscape';
+        }
+
+        if (['đồ ăn', 'food', 'sản phẩm', 'product', 'object', 'still life'].some(kw => keywordString.includes(kw))) {
+            return 'object';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * ✅ Detect concept category for mismatch calculation
+     */
+    private detectConceptCategory(conceptName: string): string {
+        const name = conceptName.toLowerCase();
+
+        if (['con vật', 'animal', 'pet', 'thú cưng', 'mèo', 'chó'].some(kw => name.includes(kw))) {
+            return 'animal';
+        }
+
+        if (['người', 'portrait', 'chân dung', 'family', 'gia đình', 'wedding', 'cưới'].some(kw => name.includes(kw))) {
+            return 'people';
+        }
+
+        if (['thác', 'waterfall', 'cảnh', 'landscape', 'phong cảnh', 'thiên nhiên', 'nature'].some(kw => name.includes(kw))) {
+            return 'landscape';
+        }
+
+        if (['sản phẩm', 'product', 'đồ ăn', 'food', 'object'].some(kw => name.includes(kw))) {
+            return 'object';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * ✅ Calculate mismatch penalty between image and concept categories
+     */
+    private calculateMismatchPenalty(imageCategory: string, conceptCategory: string): number {
+        // Perfect match = no penalty
+        if (imageCategory === conceptCategory) {
+            return 0.0;
+        }
+
+        // Define strong mismatches (high penalty)
+        const strongMismatches = [
+            // Sci-fi/Tech vs Nature
+            { image: 'sci-fi-space', concept: 'animal' },
+            { image: 'sci-fi-space', concept: 'landscape' },
+            { image: 'military-vehicle', concept: 'animal' },
+            { image: 'military-vehicle', concept: 'landscape' },
+            { image: 'robot-ai', concept: 'animal' },
+            { image: 'robot-ai', concept: 'landscape' },
+
+            // Fantasy vs Reality
+            { image: 'fantasy', concept: 'people' },
+            { image: 'fantasy', concept: 'landscape' },
+
+            // Abstract vs Concrete
+            { image: 'abstract-art', concept: 'animal' },
+            { image: 'abstract-art', concept: 'people' },
+
+            // Cross-category mismatches
+            { image: 'animal', concept: 'people' },
+            { image: 'people', concept: 'animal' },
+            { image: 'animal', concept: 'landscape' },
+            { image: 'landscape', concept: 'animal' },
+        ];
+
+        // Check for strong mismatches
+        for (const mismatch of strongMismatches) {
+            if (imageCategory === mismatch.image && conceptCategory === mismatch.concept) {
+                return 0.9; // Very high penalty
+            }
+        }
+
+        // Special categories that rarely match traditional concepts
+        const specialCategories = ['sci-fi-space', 'military-vehicle', 'robot-ai', 'fantasy', 'abstract-art', 'extreme-sport', 'advanced-architecture'];
+
+        if (specialCategories.includes(imageCategory) && ['animal', 'people', 'landscape'].includes(conceptCategory)) {
+            return 0.8; // High penalty for special vs traditional
+        }
+
+        // Moderate mismatches
+        const moderateMismatches = [
+            { image: 'people', concept: 'landscape' },
+            { image: 'landscape', concept: 'people' },
+            { image: 'object', concept: 'animal' },
+            { image: 'object', concept: 'people' },
+        ];
+
+        for (const mismatch of moderateMismatches) {
+            if (imageCategory === mismatch.image && conceptCategory === mismatch.concept) {
+                return 0.6; // Moderate penalty
+            }
+        }
+
+        // Unknown categories get low penalty
+        if (imageCategory === 'unknown' || conceptCategory === 'unknown') {
+            return 0.3;
+        }
+
+        // Default penalty for other mismatches
+        return 0.4;
     }
 
     /**
