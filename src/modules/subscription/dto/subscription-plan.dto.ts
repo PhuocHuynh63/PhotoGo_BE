@@ -12,8 +12,12 @@ export class CreateSubscriptionPlanDto {
   description: string;
 
   @IsNumber()
-  @ApiProperty({ description: 'Giá gói đăng ký' })
-  price: number;
+  @ApiProperty({ description: 'Giá gói đăng ký theo tháng' })
+  priceForMonth: number;
+
+  @IsNumber()
+  @ApiProperty({ description: 'Giá gói đăng ký theo năm' })
+  priceForYear: number;
 
   @IsBoolean()
   @IsOptional()
@@ -42,8 +46,13 @@ export class UpdateSubscriptionPlanDto {
 
   @IsNumber()
   @IsOptional()
-  @ApiProperty({ description: 'Giá gói đăng ký', required: false })
-  price?: number;
+  @ApiProperty({ description: 'Giá gói đăng ký theo tháng', required: false })
+  priceForMonth?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @ApiProperty({ description: 'Giá gói đăng ký theo năm', required: false })
+  priceForYear?: number;
 
   @IsBoolean()
   @IsOptional()
