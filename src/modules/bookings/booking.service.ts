@@ -1597,16 +1597,16 @@ export class BookingService {
     // 4. Validate vendor compatibility for campaign vouchers
     if (campaignVoucher) {
       const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-      const campaignVendor = await campaignVendorRepo.findOne({ 
+      // Lấy tất cả các vendor khả dụng của campaign
+      const campaignVendors = await campaignVendorRepo.find({ 
         where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, 
         relations: ['vendor'] 
       });
-      
-      if (campaignVendor) {
-        const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
-        if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
-          throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
-        }
+      const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
+      // Kiểm tra vendor của dịch vụ có nằm trong danh sách các vendor khả dụng không
+      const isValid = campaignVendors.some(cv => cv.vendor.id === conceptVendorId);
+      if (!isValid) {
+        throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
       }
     }
 
