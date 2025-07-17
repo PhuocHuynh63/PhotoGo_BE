@@ -37,13 +37,15 @@ export function getInitials(fullName: string): string {
 
 export function maskPhoneNumber(phoneNumber: string): string {
     if (!phoneNumber || phoneNumber.length < 4) return phoneNumber;
-    const lastFourDigits = phoneNumber.slice(-4);
-    return '#'.repeat(phoneNumber.length - 4) + lastFourDigits;
+    const firstPart = phoneNumber.slice(0, -4);
+    const maskedLastFour = '#'.repeat(4);
+    return firstPart + maskedLastFour;
 }
 
 export function maskEmail(email: string): string {
     if (!email || !email.includes('@')) return email;
     const [localPart, domain] = email.split('@');
-    const maskedLocalPart = localPart.length > 2 ? localPart[0] + '#'.repeat(localPart.length - 2) + localPart.slice(-1) : localPart;
-    return `${maskedLocalPart}@${domain}`;
+    if (localPart.length <= 2) return email;
+    const masked = localPart[0] + '#'.repeat(localPart.length - 2) + localPart[localPart.length - 1];
+    return `${masked}@${domain}`;
 }
