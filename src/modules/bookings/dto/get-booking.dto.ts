@@ -24,4 +24,8 @@ export class GetDiscountAmountDto {
     @ApiProperty({ description: 'Loại đặt cọc', enum: BookingDepositType, example: BookingDepositType.PERCENTAGE, required: false })
     @IsEnum(BookingDepositType)
     depositType?: BookingDepositType;
+
+    @ApiProperty({ description: 'Ngày booking (DD/MM/YYYY)', example: '21/07/2024', required: true })
+    @IsString()
+    date: string;
 }

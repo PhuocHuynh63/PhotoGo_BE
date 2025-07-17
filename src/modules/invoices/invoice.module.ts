@@ -11,7 +11,8 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { Commission } from '../commission/entities/commission.entity';
 import { MailModule } from 'src/3rdService/mail/mail.module';
-
+import { SubscriptionModule } from '../subscription/subscription.module';
+  
 @Module({
   imports: [
     TypeOrmModule.forFeature([Invoice, Booking, VoucherUser, Commission]),
@@ -20,6 +21,7 @@ import { MailModule } from 'src/3rdService/mail/mail.module';
     VoucherModule,
     AuthModule,
     MailModule,
+    SubscriptionModule,
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService],

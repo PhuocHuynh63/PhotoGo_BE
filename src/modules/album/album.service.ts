@@ -10,6 +10,7 @@ import { UploadService } from '../../3rdService/upload/upload.service';
 import { CreateAlbumMultipartDto } from './dto/create-album-multipart.dto';
 import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
 import { AlbumStatus } from 'src/constants/album.enum';
+import { AlbumFilterDto } from './dto/filter.dto';
 
 @Injectable()
 export class AlbumService {
@@ -273,17 +274,17 @@ export class AlbumService {
     };
   }
 
-  async getAlbumsByLocation(locationId: string, query: AlbumPaginationDto = {}) {
+  async getAlbumsByLocation(locationId: string, date: string, query: AlbumFilterDto = {}) {
     const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
     const skip = (current - 1) * pageSize;
-    const where: any = { vendorAlbum: { location: { id: locationId } } };
+    const where: any = { vendorAlbum: { location: { id: locationId } }, date: this.convertDateToISO(date), status: query.albumStatus };
     const [data, total] = await this.albumRepository.findAndCount({
       where,
       relations: ['vendorAlbum', 'booking', 'booking.user'],
       skip,
       take: pageSize,
       order: { [sortBy]: sortDirection },
-    });
+    }); 
     const totalPage = Math.ceil(total / pageSize);
     return {
       data,
@@ -296,26 +297,26 @@ export class AlbumService {
     };
   }
 
-  async getAlbumsByDate(date: string, query: AlbumPaginationDto = {}) {
-    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
-    const skip = (current - 1) * pageSize;
-    const where: any = { date: this.convertDateToISO(date) };
-    const [data, total] = await this.albumRepository.findAndCount({
-      where,
-      relations: ['vendorAlbum', 'booking', 'booking.user'],
-      skip,
-      take: pageSize,
-      order: { [sortBy]: sortDirection },
-    });
-    const totalPage = Math.ceil(total / pageSize);
-    return {
-      data,
-      pagination: {
-        current,
-        pageSize,
-        totalPage,
-        totalItem: total,
-      },
-    };
-  }
+  // async getAlbumsByDate(date: string, query: AlbumPaginationDto = {}) {
+  //   const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+  //   const skip = (current - 1) * pageSize;
+  //   const where: any = { date: this.convertDateToISO(date) };
+  //   const [data, total] = await this.albumRepository.findAndCount({
+  //     where,
+  //     relations: ['vendorAlbum', 'booking', 'booking.user'],
+  //     skip,
+  //     take: pageSize,
+  //     order: { [sortBy]: sortDirection },
+  //   });
+  //   const totalPage = Math.ceil(total / pageSize);
+  //   return {
+  //     data,
+  //     pagination: {
+  //       current,
+  //       pageSize,
+  //       totalPage,
+  //       totalItem: total,
+  //     },
+  //   };
+  // }
 } 

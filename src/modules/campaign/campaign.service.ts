@@ -958,9 +958,6 @@ export class CampaignService {
     if (!campaign) throw new NotFoundException('Campaign không tồn tại');
     const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
     if (!vendor) throw new NotFoundException('Vendor không tồn tại');
-    // Check đã có chưa
-    const existed = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId } } });
-    if (existed) throw new BadRequestException('Campaign đã có vendor');
     const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
     return this.campaignVendorRepository.save(campaignVendor);
   }

@@ -1483,11 +1483,44 @@ export class BookingService {
     return this.formatBookingDates(booking);
   }
 
+  // Thêm hàm kiểm tra membership
+  private async hasActiveMembership(userId: string): Promise<boolean> {
+    const activeMemberships = await this.subscriptionService.findAll({
+      userId,
+      status: SubscriptionStatus.ACTIVE,
+      current: 1,
+      pageSize: 10
+    });
+
+    if (!activeMemberships.data || activeMemberships.data.length === 0) return false;
+
+    return activeMemberships.data.some(sub => sub.plan?.name?.toLowerCase() === 'membership');
+  }
+
+  /**
+   * Tính phí phát sinh (rush fee) dựa trên membership và số ngày đặt trước
+   */
+  public async calculateRushFee(userId: string, bookingDate: Date, finalPrice: number): Promise<number> {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    let diffDays = 0;
+    if (bookingDate) {
+      diffDays = Math.ceil((bookingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    }
+    const hasMembership = await this.hasActiveMembership(userId);
+    if (hasMembership && diffDays >= 3) {
+      return 0;
+    } else if (diffDays < 7) {
+      return Math.round(finalPrice * 0.05);
+    }
+    return 0;
+  }
+
   async getDiscountAmount(
     userId: string,
     serviceConceptId: string,
     getDiscountAmountDto: GetDiscountAmountDto
-  ): Promise<{ discount: number, depositAmount: number, remainingAmount: number }> {
+  ): Promise<{ discount: number, depositAmount: number, remainingAmount: number, rushFee?: number, totalPayable?: number }> {
     // 1. Find the service concept
     const serviceConcept = await this.serviceConceptRepository.findOne({ 
       where: { id: serviceConceptId }, 
@@ -1509,15 +1542,28 @@ export class BookingService {
       throw new BadRequestException('Tỷ lệ đặt cọc phải từ 30% đến 100%');
     }
 
+    // --- TÍNH PHÍ PHÁT SINH (RUSH FEE) ---
+    // Lấy ngày booking từ DTO
+    const bookingDateStr = getDiscountAmountDto.date;
+    let bookingDate: Date = null;
+    if (bookingDateStr) {
+      bookingDate = new Date(this.convertDateFormat(bookingDateStr));
+    }
+    // Gọi hàm calculateRushFee
+    const rushFee = await this.calculateRushFee(userId, bookingDate, finalPrice);
+    // --- END RUSH FEE ---
+
     // If no voucher, return calculation based on final price
     if (!getDiscountAmountDto.voucherId) {
       const depositAmount = (finalPrice * depositPercentage / 100);
       const remainingAmount = finalPrice - depositAmount;
-      
+      const totalPayable = finalPrice + rushFee;
       return {
         discount: 0,
         depositAmount: Math.round(depositAmount),
-        remainingAmount: Math.round(remainingAmount)
+        remainingAmount: Math.round(remainingAmount),
+        rushFee: Math.round(rushFee),
+        totalPayable: Math.round(totalPayable)
       };
     }
 
@@ -1612,10 +1658,15 @@ export class BookingService {
     // 10. Calculate remaining amount
     const remainingAmount = discountedFinalPrice - depositAmount;
 
+    // 11. Tổng tiền phải trả (cộng rushFee)
+    const totalPayable = discountedFinalPrice + rushFee;
+
     return {
       discount: Math.round(discountAmount),
       depositAmount: Math.round(depositAmount),
-      remainingAmount: Math.round(remainingAmount)
+      remainingAmount: Math.round(remainingAmount),
+      rushFee: Math.round(rushFee),
+      totalPayable: Math.round(totalPayable)
     };
   }
 

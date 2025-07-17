@@ -9,6 +9,7 @@ import { ApiTags, ApiBody, ApiResponse, ApiOperation, ApiParam, ApiOkResponse, A
 import { AlbumPaginationDto } from './dto/pagination.dto';
 import { Public } from './../../decorator/custom';
 import { AlbumStatus } from 'src/constants/album.enum';
+import { AlbumFilterDto } from './dto/filter.dto';
 
 @ApiTags('Vendor Album')
 @Controller('vendor-albums')
@@ -100,23 +101,23 @@ export class AlbumController {
     return this.albumService.getAlbumsByVendorAlbum(vendorAlbumId, query);
   }
 
-  //get album theo date
-  @Get('album/date/:date')
-  @Public()
-  @ApiOperation({ summary: 'Lấy danh sách album theo date' })
-  @ApiParam({ name: 'date', type: 'string' })
-  @ApiOkResponse({ description: 'Danh sách album' })
-  async getAlbumsByDate(@Param('date') date: string, @Query() query: AlbumPaginationDto) {
-    return this.albumService.getAlbumsByDate(date, query);
-  }
+  // //get album theo date
+  // @Get('album/date/:date')
+  // @Public()
+  // @ApiOperation({ summary: 'Lấy danh sách album theo date' })
+  // @ApiParam({ name: 'date', type: 'string' })
+  // @ApiOkResponse({ description: 'Danh sách album' })
+  // async getAlbumsByDate(@Param('date') date: string, @Query() query: AlbumPaginationDto) {
+  //   return this.albumService.getAlbumsByDate(date, query);
+  // }
 
   @Get('album/location/:locationId')
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách album theo locationId' })
   @ApiParam({ name: 'locationId', type: 'string' })
   @ApiOkResponse({ description: 'Danh sách album' })
-  async getAlbumsByLocation(@Param('locationId') locationId: string, @Query() query: AlbumPaginationDto) {
-    return this.albumService.getAlbumsByLocation(locationId, query);
+  async getAlbumsByLocation(@Param('locationId') locationId: string, @Query('date') date: string, @Query() query: AlbumFilterDto) {
+    return this.albumService.getAlbumsByLocation(locationId, date, query);
   }
 
   @Get('album/user/:userId')
