@@ -489,13 +489,152 @@ ${prompt || ''}`;
                 });
             }
 
-            const peopleKeywords = ['nữ', 'nam', 'trẻ em', 'người', 'portrait', 'chân dung', 'group', 'person', 'people', 'beauty shot', 'cosplay', 'cặp đôi', 'cưới'];
-            const animalKeywords = ['mèo', 'chó', 'thú cưng', 'pet', 'animal', 'cat', 'dog'];
-            const landscapeKeywords = ['phong cảnh', 'landscape', 'cảnh vật', 'nature', 'outdoor', 'ngoài trời', 'thiên nhiên', 'kiến trúc'];
-            const objectKeywords = ['still life', 'food photography', 'sản phẩm', 'trái cây', 'đồ vật', 'product', 'cam'];
+            // Keywords chi tiết cho CON NGƯỜI
+            const peopleKeywords = [
+                // Giới tính & độ tuổi
+                'nữ', 'nam', 'girl', 'boy', 'woman', 'man', 'người', 'person', 'people', 'human',
+                'trẻ em', 'children', 'kid', 'child', 'thiếu niên', 'teenager', 'teen', 'adult', 'người lớn',
+                'bé', 'baby', 'infant', 'newborn', 'trẻ sơ sinh', 'toddler', 'bé yêu',
+                'người cao tuổi', 'elderly', 'senior', 'grandmother', 'grandfather', 'bà', 'ông',
 
-            // Tối ưu: Check relevance score trước khi filter - nếu tất cả đều có score thấp thì không phù hợp
-            const RELEVANCE_THRESHOLD = 0.1;
+                // Loại chụp người
+                'portrait', 'chân dung', 'headshot', 'selfie', 'group photo', 'group', 'nhóm',
+                'family', 'gia đình', 'couple', 'cặp đôi', 'duo', 'team', 'đội nhóm',
+
+                // Sự kiện & dịp đặc biệt
+                'wedding', 'cưới', 'bride', 'cô dâu', 'groom', 'chú rể', 'engagement', 'đính hôn',
+                'maternity', 'bầu bí', 'mang thai', 'pregnancy', 'thai sản',
+                'graduation', 'tốt nghiệp', 'birthday', 'sinh nhật', 'anniversary', 'kỷ niệm',
+
+                // Phong cách & thể loại
+                'fashion', 'thời trang', 'model', 'modeling', 'beauty', 'makeup', 'trang điểm',
+                'cosplay', 'costume', 'trang phục', 'áo dài', 'traditional dress',
+                'street style', 'đường phố', 'casual', 'formal', 'trang trọng',
+
+                // Cảm xúc & biểu cảm
+                'smile', 'cười', 'laugh', 'happy', 'vui vẻ', 'sad', 'buồn', 'serious', 'nghiêm túc',
+                'emotion', 'cảm xúc', 'expression', 'biểu cảm', 'eyes', 'mắt', 'face', 'khuôn mặt'
+            ];
+
+            // Keywords chi tiết cho CON VẬT
+            const animalKeywords = [
+                // Thú cưng phổ biến
+                'pet', 'thú cưng', 'domestic animal', 'động vật nuôi',
+                'cat', 'mèo', 'kitten', 'mèo con', 'feline', 'persian cat', 'british shorthair',
+                'dog', 'chó', 'puppy', 'chó con', 'canine', 'golden retriever', 'husky', 'poodle',
+                'rabbit', 'thỏ', 'bunny', 'hamster', 'chuột hamster', 'guinea pig',
+                'bird', 'chim', 'parrot', 'vẹt', 'canary', 'chim cảnh',
+
+                // Động vật hoang dã
+                'wildlife', 'động vật hoang dã', 'wild animal', 'safari',
+                'elephant', 'voi', 'lion', 'sư tử', 'tiger', 'hổ', 'leopard', 'báo',
+                'bear', 'gấu', 'wolf', 'sói', 'fox', 'cáo', 'deer', 'hươu',
+                'monkey', 'khỉ', 'gorilla', 'đười ươi', 'panda', 'gấu trúc',
+
+                // Động vật biển
+                'marine animal', 'động vật biển', 'fish', 'cá', 'dolphin', 'cá heo',
+                'whale', 'cá voi', 'shark', 'cá mập', 'sea turtle', 'rùa biển',
+
+                // Côn trùng & động vật nhỏ
+                'insect', 'côn trùng', 'butterfly', 'bướm', 'bee', 'ong', 'spider', 'nhện',
+                'lizard', 'thằn lằn', 'snake', 'rắn', 'frog', 'ếch',
+
+                // Hành vi động vật
+                'playing', 'chơi đùa', 'sleeping', 'ngủ', 'eating', 'ăn', 'running', 'chạy',
+                'flying', 'bay', 'swimming', 'bơi', 'hunting', 'săn mồi', 'cute', 'dễ thương',
+                'animal portrait', 'chân dung động vật', 'animal behavior', 'hành vi động vật'
+            ];
+
+            // Keywords chi tiết cho CẢNH VẬT & THIÊN NHIÊN
+            const landscapeKeywords = [
+                // Địa hình & cảnh quan
+                'landscape', 'phong cảnh', 'scenery', 'cảnh đẹp', 'natural scenery', 'cảnh thiên nhiên',
+                'mountain', 'núi', 'hill', 'đồi', 'valley', 'thung lũng', 'canyon', 'hẻm núi',
+                'beach', 'bãi biển', 'ocean', 'đại dương', 'sea', 'biển', 'lake', 'hồ',
+                'river', 'sông', 'stream', 'suối', 'waterfall', 'thác nước', 'pond', 'ao',
+                'forest', 'rừng', 'jungle', 'rừng nhiệt đới', 'woods', 'khu rừng',
+                'desert', 'sa mạc', 'field', 'cánh đồng', 'meadow', 'đồng cỏ',
+                'island', 'đảo', 'archipelago', 'quần đảo', 'peninsula', 'bán đảo',
+
+                // Thời tiết & khí hậu
+                'sunrise', 'bình minh', 'sunset', 'hoàng hôn', 'dawn', 'rạng đông', 'dusk', 'chạng vạng',
+                'cloudy', 'nhiều mây', 'storm', 'bão', 'rain', 'mưa', 'snow', 'tuyết',
+                'fog', 'sương mù', 'mist', 'sương', 'rainbow', 'cầu vồng',
+                'sunny', 'nắng', 'clear sky', 'trời trong', 'blue sky', 'trời xanh',
+
+                // Thực vật
+                'tree', 'cây', 'flower', 'hoa', 'grass', 'cỏ', 'leaf', 'lá',
+                'cherry blossom', 'hoa anh đào', 'lotus', 'hoa sen', 'sunflower', 'hoa hướng dương',
+                'garden', 'vườn', 'park', 'công viên', 'botanical', 'thực vật học',
+
+                // Môi trường ngoài trời
+                'outdoor', 'ngoài trời', 'nature', 'thiên nhiên', 'wilderness', 'hoang dã',
+                'countryside', 'nông thôn', 'rural', 'vùng quê', 'natural', 'tự nhiên',
+                'environment', 'môi trường', 'ecosystem', 'hệ sinh thái',
+
+                // Kiến trúc & công trình
+                'architecture', 'kiến trúc', 'building', 'tòa nhà', 'skyscraper', 'tòa nhà chọc trời',
+                'bridge', 'cầu', 'tower', 'tháp', 'castle', 'lâu đài', 'temple', 'đền',
+                'church', 'nhà thờ', 'pagoda', 'chùa', 'monument', 'tượng đài',
+                'cityscape', 'cảnh thành phố', 'urban', 'đô thị', 'street', 'đường phố'
+            ];
+
+            // Keywords chi tiết cho ĐỒ VẬT & SẢN PHẨM
+            const objectKeywords = [
+                // Đồ vật sinh hoạt
+                'object', 'đồ vật', 'item', 'vật phẩm', 'thing', 'stuff', 'belongings', 'đồ đạc',
+                'furniture', 'nội thất', 'chair', 'ghế', 'table', 'bàn', 'bed', 'giường',
+                'lamp', 'đèn', 'mirror', 'gương', 'clock', 'đồng hồ', 'vase', 'lọ hoa',
+
+                // Đồ ăn & thức uống
+                'food', 'đồ ăn', 'meal', 'bữa ăn', 'dish', 'món ăn', 'cuisine', 'ẩm thực',
+                'fruit', 'trái cây', 'apple', 'táo', 'orange', 'cam', 'banana', 'chuối',
+                'vegetable', 'rau củ', 'tomato', 'cà chua', 'carrot', 'cà rốt',
+                'bread', 'bánh mì', 'cake', 'bánh', 'coffee', 'cà phê', 'tea', 'trà',
+                'wine', 'rượu vang', 'beer', 'bia', 'cocktail', 'đồ uống pha chế',
+                'dessert', 'tráng miệng', 'chocolate', 'sô cô la', 'ice cream', 'kem',
+
+                // Sản phẩm & hàng hóa
+                'product', 'sản phẩm', 'merchandise', 'hàng hóa', 'goods', 'commodity',
+                'still life', 'tĩnh vật', 'product photography', 'chụp sản phẩm',
+                'commercial', 'thương mại', 'advertising', 'quảng cáo', 'marketing',
+
+                // Công nghệ & thiết bị
+                'technology', 'công nghệ', 'device', 'thiết bị', 'gadget', 'đồ chơi công nghệ',
+                'phone', 'điện thoại', 'computer', 'máy tính', 'laptop', 'máy tính xách tay',
+                'camera', 'máy ảnh', 'headphone', 'tai nghe', 'watch', 'đồng hồ đeo tay',
+
+                // Phương tiện & xe cộ
+                'vehicle', 'phương tiện', 'car', 'ô tô', 'motorcycle', 'xe máy',
+                'bicycle', 'xe đạp', 'truck', 'xe tải', 'bus', 'xe buýt',
+                'boat', 'thuyền', 'ship', 'tàu', 'airplane', 'máy bay',
+
+                // Quần áo & phụ kiện
+                'clothing', 'quần áo', 'fashion item', 'vật phẩm thời trang',
+                'shoes', 'giày', 'bag', 'túi', 'hat', 'mũ', 'glasses', 'kính',
+                'jewelry', 'trang sức', 'watch', 'đồng hồ', 'accessory', 'phụ kiện',
+
+                // Đồ chơi & giải trí
+                'toy', 'đồ chơi', 'game', 'trò chơi', 'book', 'sách', 'magazine', 'tạp chí',
+                'music instrument', 'nhạc cụ', 'guitar', 'đàn guitar', 'piano', 'đàn piano',
+
+                // Văn phòng phẩm & học tập
+                'stationery', 'văn phòng phẩm', 'pen', 'bút', 'pencil', 'bút chì',
+                'notebook', 'sổ tay', 'paper', 'giấy', 'document', 'tài liệu',
+
+                // Đồ trang trí & nghệ thuật
+                'decoration', 'đồ trang trí', 'artwork', 'tác phẩm nghệ thuật',
+                'painting', 'tranh', 'sculpture', 'điêu khắc', 'craft', 'thủ công',
+                'antique', 'đồ cổ', 'vintage', 'cổ điển', 'collectible', 'đồ sưu tập'
+            ];
+
+            // Cải thiện: Tăng threshold và thêm semantic filtering
+            const RELEVANCE_THRESHOLD = 0.4; // Tăng từ 0.1 lên 0.4 để chỉ lấy matches tốt
+
+            // Phân loại ảnh input dựa trên keywords
+            const inputImageType = this.categorizeImageByKeywords(keywords, peopleKeywords, animalKeywords, landscapeKeywords, objectKeywords);
+            this.logger.debug(`Image categorized as: ${inputImageType}, keywords: ${keywords.join(', ')}`);
+
             const hasGoodMatches = concepts_same.some(c => c.relevanceScore > RELEVANCE_THRESHOLD);
 
             if (!hasGoodMatches) {
@@ -503,9 +642,32 @@ ${prompt || ''}`;
                 // Jump to fallback logic
                 concepts_same = [];
             } else {
-                // Chỉ filter khi có matches tốt - simplified logic without keywords filtering
-                // Relevance score đã tính toán semantic similarity và keyword matching trong query
-                concepts_same = concepts_same.filter(c => c.relevanceScore > this.RELEVANCE_THRESHOLD);
+                // Filter với logic thông minh hơn
+                concepts_same = concepts_same.filter(c => {
+                    // Điều kiện 1: Relevance score đủ cao
+                    if (c.relevanceScore <= RELEVANCE_THRESHOLD) {
+                        return false;
+                    }
+
+                    // Điều kiện 2: Semantic filtering - loại bỏ concepts không phù hợp với loại ảnh
+                    const conceptType = this.categorizeConceptByName(c.name || '');
+
+                    // Nếu ảnh là động vật nhưng concept là người -> loại bỏ
+                    if (inputImageType === 'animal' && conceptType === 'people') {
+                        this.logger.debug(`Filtered out people concept "${c.name}" for animal image`);
+                        return false;
+                    }
+
+                    // Nếu ảnh là người nhưng concept là động vật -> loại bỏ  
+                    if (inputImageType === 'people' && conceptType === 'animal') {
+                        this.logger.debug(`Filtered out animal concept "${c.name}" for people image`);
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                this.logger.debug(`After semantic filtering: ${concepts_same.length} concepts remaining`);
             }
 
             if (!concepts_same || concepts_same.length === 0) {
@@ -707,11 +869,65 @@ Tone thân thiện, tích cực và khuyến khích.`;
             async () => {
                 const model = await this.initializeModel();
                 const imageData = { inlineData: { data: image.buffer.toString('base64'), mimeType: image.mimetype } };
-                const prompt = `Vai trò: AI phân tích ảnh chuyên sâu. Tạo danh sách từ khóa toàn diện từ ảnh.
+                const prompt = `Vai trò: Bạn là một AI phân tích hình ảnh chuyên sâu, có kiến thức sâu rộng về nhiếp ảnh, lịch sử nghệ thuật, và ký hiệu học văn hóa. Nhiệm vụ của bạn là "giải phẫu" một bức ảnh và chuyển hóa mọi chi tiết hình ảnh thành một danh sách từ khóa (keywords) toàn diện và có cấu trúc.
 
-Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, phong cách, cảm xúc.
+Nhiệm vụ: Hãy phân tích thật kỹ lưGỡng bức ảnh được cung cấp và tạo ra một danh sách từ khóa chi tiết nhất có thể, bao quát tất cả các khía cạnh có thể quan sát và suy luận được. Hãy suy nghĩ vượt ra ngoài những gì hiển nhiên và đi sâu vào các chi tiết tinh tế.
 
-Định dạng: CHỈ trả về từ khóa phân tách bằng dấu phẩy, viết thường, không giải thích.`;
+Các hạng mục phân tích (Bắt buộc):
+
+Chủ thể & Nội dung:
+
+Con người: Xác định chi tiết giới tính, độ tuổi ước tính (trẻ sơ sinh, thiếu niên, người trưởng thành, người cao tuổi), dân tộc, trang phục (loại quần áo, phong cách, thương hiệu nếu có), phụ kiện, cảm xúc (vui, buồn, tức giận, trầm tư), hành động (đang chạy, ngồi, nói chuyện), và mối quan hệ giữa các chủ thể (gia đình, bạn bè, đồng nghiệp).
+
+Động vật: Loài, giống, hành động.
+
+Vật thể: Tên gọi của các vật thể chính và phụ, chất liệu (gỗ, kim loại, thủy tinh), tình trạng (mới, cũ, hỏng).
+
+Bối cảnh & Môi trường:
+
+Địa điểm: Cụ thể hóa địa điểm (ví dụ: thay vì "ngoài trời", hãy ghi "bãi biển nhiệt đới lúc hoàng hôn"; thay vì "trong nhà", hãy ghi "phòng khách phong cách tối giản").
+
+Thời gian: Thời gian trong ngày (bình minh, giữa trưa, hoàng hôn, ban đêm), mùa trong năm.
+
+Kiến trúc & Thiên nhiên: Phong cách kiến trúc (cổ điển, hiện đại, brutalism), các yếu tố tự nhiên (cây cối, núi, sông, hồ), thời tiết (nắng, mưa, tuyết, sương mù).
+
+Bố cục & Kỹ thuật nhiếp ảnh:
+
+Bố cục: Quy tắc 1/3, đường dẫn, đối xứng, khung trong khung (framing), tiền cảnh, trung cảnh, hậu cảnh.
+
+Góc máy: Toàn cảnh, trung cảnh, cận cảnh, góc cao, góc thấp, góc nhìn ngang.
+
+Kỹ thuật: Độ sâu trường ảnh (nông/sâu), bokeh, lia máy (panning), phơi sáng dài, phơi sáng kép, hiệu ứng lens flare.
+
+Ánh sáng & Màu sắc:
+
+Ánh sáng: Nguồn sáng (tự nhiên, nhân tạo), chất lượng ánh sáng (gắt, mềm, khuếch tán), hướng sáng (chính diện, ngược sáng, chiếu xiên), ánh sáng viền (rim light), giờ vàng (golden hour), giờ xanh (blue hour).
+
+Màu sắc: Tông màu chủ đạo (ấm, lạnh), bảng màu (đơn sắc, tương phản, tương đồng), màu sắc nổi bật, độ bão hòa (cao/thấp), màu đen trắng.
+
+Thể loại, Phong cách & Cảm xúc:
+
+Thể loại: Chân dung, phong cảnh, đường phố, kiến trúc, thời trang, đời thường, trừu tượng, báo chí, macro.
+
+Phong cách: Tối giản, cổ điển (vintage), hiện đại, tương lai (futuristic), lãng mạn, kịch tính, ma mị (moody), siêu thực.
+
+Không khí & Cảm xúc: Yên bình, hỗn loạn, vui vẻ, u buồn, hoài niệm, năng động, tĩnh lặng, bí ẩn.
+
+Khái niệm & Biểu tượng:
+
+Phân tích các ý nghĩa ẩn dụ, biểu tượng văn hóa, chủ đề (ví dụ: sự cô đơn, tình yêu, sự xung đột, sự phát triển).
+
+Yêu cầu định dạng đầu ra (Rất quan trọng):
+
+CHỈ trả về một danh sách các từ khóa.
+
+Mỗi từ khóa phải ngắn gọn, súc tích, viết bằng chữ thường.
+
+Phân tách các từ khóa bằng dấu phẩy (,).
+
+TUYỆT ĐỐI KHÔNG thêm bất kỳ đầu mục, số thứ tự, câu chữ giải thích, hay bất kỳ văn bản nào khác ngoài danh sách từ khóa.
+
+TUYỆT ĐỐI KHÔNG sử dụng các từ chung chung như "ảnh", "hình", "photo", "picture", "nice", "beautiful", "nghệ thuật".`;
 
                 const result = await model.generateContent([prompt, imageData]);
                 const text = result.response.text();
@@ -817,6 +1033,84 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
     }
     //#endregion
 
+    /**
+     * Tối ưu: Download ảnh từ URL và tạo concept vector
+     */
+    async regenerateVectorFromUrl(imageUrl: string, conceptImageId: string): Promise<void> {
+        try {
+            this.logger.log(`Downloading image from URL: ${imageUrl}`);
+
+            // Download image from URL
+            const response = await fetch(imageUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to download image: ${response.statusText}`);
+            }
+
+            const buffer = Buffer.from(await response.arrayBuffer());
+
+            // Create a mock file object
+            const mockFile: Express.Multer.File = {
+                fieldname: 'image',
+                originalname: 'downloaded-image.jpg',
+                encoding: '7bit',
+                mimetype: 'image/jpeg',
+                buffer: buffer,
+                size: buffer.length,
+                stream: null as any,
+                destination: '',
+                filename: '',
+                path: ''
+            };
+
+            // Generate concept vector
+            await this.generateConceptVector(mockFile, conceptImageId);
+            this.logger.log(`Vector regenerated successfully for image: ${imageUrl}`);
+
+        } catch (error) {
+            this.logger.error(`Failed to regenerate vector from URL ${imageUrl}: ${error.message}`);
+            // Don't throw to prevent the update process from failing
+        }
+    }
+
+    /**
+     * Tối ưu: Regenerate vectors for all existing images of a concept
+     */
+    async regenerateAllVectorsForConcept(conceptId: string): Promise<void> {
+        try {
+            this.logger.log(`Starting vector regeneration for all images of concept: ${conceptId}`);
+
+            // Get all images for this concept
+            const conceptImages = await this.serviceConceptImageRepository.find({
+                where: { serviceConceptId: conceptId }
+            });
+
+            if (conceptImages.length === 0) {
+                this.logger.log(`No images found for concept: ${conceptId}`);
+                return;
+            }
+
+            this.logger.log(`Found ${conceptImages.length} images to regenerate vectors for`);
+
+            // Regenerate vector for each image
+            for (let i = 0; i < conceptImages.length; i++) {
+                const image = conceptImages[i];
+                this.logger.log(`Regenerating vector for image ${i + 1}/${conceptImages.length}: ${image.id}`);
+
+                await this.regenerateVectorFromUrl(image.imageUrl, image.id);
+
+                // Add small delay between requests to avoid overwhelming the API
+                if (i < conceptImages.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+
+            this.logger.log(`Completed vector regeneration for concept: ${conceptId}`);
+
+        } catch (error) {
+            this.logger.error(`Failed to regenerate vectors for concept ${conceptId}: ${error.message}`);
+        }
+    }
+
     private isServicePrompt(prompt?: string): boolean {
         if (!prompt) return false;
         const serviceKeywords = [
@@ -825,5 +1119,191 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
         ];
         const promptRaw = prompt.toLowerCase();
         return serviceKeywords.some(kw => promptRaw.includes(kw));
+    }
+
+    /**
+     * Phân loại ảnh dựa trên keywords được tạo từ AI
+     */
+    private categorizeImageByKeywords(
+        keywords: string[],
+        peopleKeywords: string[],
+        animalKeywords: string[],
+        landscapeKeywords: string[],
+        objectKeywords: string[]
+    ): string {
+        const keywordString = keywords.join(' ').toLowerCase();
+
+        let peopleScore = 0;
+        let animalScore = 0;
+        let landscapeScore = 0;
+        let objectScore = 0;
+
+        // Đếm số lượng keywords match với từng category
+        peopleKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                peopleScore++;
+            }
+        });
+
+        animalKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                animalScore++;
+            }
+        });
+
+        landscapeKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                landscapeScore++;
+            }
+        });
+
+        objectKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                objectScore++;
+            }
+        });
+
+        // Trả về category có score cao nhất
+        const maxScore = Math.max(peopleScore, animalScore, landscapeScore, objectScore);
+
+        if (maxScore === 0) {
+            return 'unknown'; // Không xác định được loại
+        }
+
+        if (animalScore === maxScore) {
+            return 'animal';
+        }
+        if (peopleScore === maxScore) {
+            return 'people';
+        }
+        if (landscapeScore === maxScore) {
+            return 'landscape';
+        }
+        if (objectScore === maxScore) {
+            return 'object';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * Phân loại concept dựa trên tên concept
+     */
+    private categorizeConceptByName(conceptName: string): string {
+        const name = conceptName.toLowerCase();
+
+        // Keywords chi tiết để identify concept CON NGƯỜI
+        const peopleIndicators = [
+            // Giới tính & độ tuổi
+            'bé yêu', 'bé', 'baby', 'newborn', 'trẻ sơ sinh', 'infant', 'toddler',
+            'trẻ em', 'children', 'kid', 'child', 'thiếu niên', 'teenager', 'teen',
+            'người', 'nam', 'nữ', 'girl', 'boy', 'woman', 'man', 'adult', 'người lớn',
+            'elderly', 'senior', 'grandmother', 'grandfather', 'bà', 'ông',
+
+            // Loại chụp & sự kiện
+            'portrait', 'chân dung', 'headshot', 'selfie', 'family', 'gia đình',
+            'couple', 'cặp đôi', 'group', 'nhóm', 'team', 'đội nhóm',
+            'wedding', 'cưới', 'bride', 'cô dâu', 'groom', 'chú rể', 'engagement', 'đính hôn',
+            'maternity', 'bầu bí', 'mang thai', 'pregnancy', 'thai sản',
+            'graduation', 'tốt nghiệp', 'birthday', 'sinh nhật', 'anniversary', 'kỷ niệm',
+
+            // Phong cách
+            'beauty', 'fashion', 'thời trang', 'model', 'modeling', 'makeup', 'trang điểm',
+            'cosplay', 'costume', 'trang phục', 'áo dài', 'traditional dress',
+            'street style', 'casual', 'formal', 'trang trọng'
+        ];
+
+        // Keywords chi tiết để identify concept CON VẬT
+        const animalIndicators = [
+            // Thú cưng
+            'pet', 'thú cưng', 'domestic animal', 'động vật nuôi',
+            'cat', 'mèo', 'kitten', 'mèo con', 'feline', 'persian', 'british shorthair',
+            'dog', 'chó', 'puppy', 'chó con', 'canine', 'golden retriever', 'husky', 'poodle',
+            'rabbit', 'thỏ', 'bunny', 'hamster', 'guinea pig', 'bird', 'chim', 'parrot', 'vẹt',
+
+            // Động vật hoang dã
+            'wildlife', 'động vật hoang dã', 'wild animal', 'safari', 'animal',
+            'elephant', 'voi', 'lion', 'sư tử', 'tiger', 'hổ', 'bear', 'gấu',
+            'monkey', 'khỉ', 'panda', 'gấu trúc', 'deer', 'hươu',
+
+            // Động vật biển & khác
+            'fish', 'cá', 'dolphin', 'cá heo', 'whale', 'cá voi', 'marine animal',
+            'insect', 'côn trùng', 'butterfly', 'bướm', 'động vật', 'animal portrait'
+        ];
+
+        // Keywords chi tiết để identify concept CẢNH VẬT & KIẾN TRÚC
+        const landscapeIndicators = [
+            // Cảnh quan thiên nhiên
+            'landscape', 'phong cảnh', 'scenery', 'cảnh đẹp', 'natural scenery',
+            'mountain', 'núi', 'hill', 'đồi', 'beach', 'bãi biển', 'ocean', 'biển',
+            'lake', 'hồ', 'river', 'sông', 'waterfall', 'thác', 'forest', 'rừng',
+            'sunset', 'hoàng hôn', 'sunrise', 'bình minh', 'nature', 'thiên nhiên',
+
+            // Kiến trúc & công trình
+            'architecture', 'kiến trúc', 'building', 'tòa nhà', 'bridge', 'cầu',
+            'tower', 'tháp', 'castle', 'lâu đài', 'temple', 'đền', 'church', 'nhà thờ',
+            'pagoda', 'chùa', 'cityscape', 'cảnh thành phố', 'urban', 'đô thị',
+
+            // Môi trường
+            'outdoor', 'ngoài trời', 'countryside', 'nông thôn', 'park', 'công viên',
+            'garden', 'vườn', 'street', 'đường phố'
+        ];
+
+        // Keywords chi tiết để identify concept ĐỒ VẬT & SẢN PHẨM
+        const objectIndicators = [
+            // Sản phẩm & thương mại
+            'product', 'sản phẩm', 'still life', 'tĩnh vật', 'commercial', 'thương mại',
+            'merchandise', 'hàng hóa', 'advertising', 'quảng cáo',
+
+            // Đồ ăn & thức uống
+            'food', 'đồ ăn', 'cuisine', 'ẩm thực', 'fruit', 'trái cây', 'cake', 'bánh',
+            'coffee', 'cà phê', 'wine', 'rượu', 'dessert', 'tráng miệng',
+
+            // Công nghệ & thiết bị
+            'technology', 'công nghệ', 'device', 'thiết bị', 'phone', 'điện thoại',
+            'computer', 'máy tính', 'camera', 'máy ảnh', 'watch', 'đồng hồ',
+
+            // Phương tiện & xe cộ
+            'vehicle', 'phương tiện', 'car', 'ô tô', 'motorcycle', 'xe máy',
+            'bicycle', 'xe đạp', 'boat', 'thuyền', 'airplane', 'máy bay',
+
+            // Thời trang & phụ kiện
+            'fashion item', 'shoes', 'giày', 'bag', 'túi', 'jewelry', 'trang sức',
+            'clothing', 'quần áo', 'accessory', 'phụ kiện',
+
+            // Nội thất & trang trí
+            'furniture', 'nội thất', 'decoration', 'trang trí', 'artwork', 'nghệ thuật',
+            'antique', 'đồ cổ', 'vintage', 'cổ điển'
+        ];
+
+        // Check animal indicators first (most specific)
+        for (const indicator of animalIndicators) {
+            if (name.includes(indicator)) {
+                return 'animal';
+            }
+        }
+
+        // Check people indicators
+        for (const indicator of peopleIndicators) {
+            if (name.includes(indicator)) {
+                return 'people';
+            }
+        }
+
+        // Check landscape/architecture indicators
+        for (const indicator of landscapeIndicators) {
+            if (name.includes(indicator)) {
+                return 'landscape';
+            }
+        }
+
+        // Check object/product indicators
+        for (const indicator of objectIndicators) {
+            if (name.includes(indicator)) {
+                return 'object';
+            }
+        }
+
+        return 'unknown';
     }
 }

@@ -1243,19 +1243,28 @@ export class ServicePackageService {
     const updatedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
     this.logger.log(`Khái niệm dịch vụ đã được cập nhật thành công trong ${Date.now() - startTime}ms`);
 
-    // Generate concept vector if new images are provided
-    if (files?.images && files.images.length > 0 && savedImageEntities.length === files.images.length) {
-      try {
-        this.logger.log(`Bắt đầu tạo concept vector cho tất cả ảnh của khái niệm dịch vụ ${updatedServiceConcept.id}`);
-        const vectorStartTime = Date.now();
+    // Generate concept vector for all images (new and existing)
+    try {
+      this.logger.log(`Bắt đầu tạo lại concept vector cho tất cả ảnh của khái niệm dịch vụ ${updatedServiceConcept.id}`);
+      const vectorStartTime = Date.now();
+
+      if (files?.images && files.images.length > 0 && savedImageEntities.length === files.images.length) {
+        // Generate vectors for newly uploaded images
+        this.logger.log('Generating vectors for newly uploaded images');
         for (let i = 0; i < files.images.length; i++) {
           await this.geminiService.generateConceptVector(files.images[i], savedImageEntities[i].id);
-          this.logger.log(`Concept vector đã được tạo thành công với ảnh thứ ${i + 1} (service_concept_image_id: ${savedImageEntities[i].id}) trong ${Date.now() - vectorStartTime}ms`);
+          this.logger.log(`Concept vector đã được tạo thành công với ảnh mới thứ ${i + 1} (service_concept_image_id: ${savedImageEntities[i].id})`);
         }
-      } catch (error) {
-        this.logger.error(`Lỗi khi tạo concept vector: ${error.message}`);
-        // Don't throw error to prevent service concept update from failing
+      } else {
+        // Regenerate vectors for all existing images when no new images are uploaded
+        this.logger.log('No new images uploaded. Regenerating vectors for all existing images');
+        await this.geminiService.regenerateAllVectorsForConcept(updatedServiceConcept.id);
       }
+
+      this.logger.log(`Hoàn thành tạo concept vector trong ${Date.now() - vectorStartTime}ms`);
+    } catch (error) {
+      this.logger.error(`Lỗi khi tạo concept vector: ${error.message}`);
+      // Don't throw error to prevent service concept update from failing
     }
 
     // Return the updated concept with all relations
