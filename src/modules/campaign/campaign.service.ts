@@ -202,14 +202,28 @@ export class CampaignService {
       throw new BadRequestException('Ngày bắt đầu phải trước ngày kết thúc');
     }
 
+    // Tạo campaign trước
     const campaign = this.campaignRepository.create({
       ...rest,
       startDate: this.convertDateFormat(startDate),
       endDate: this.convertDateFormat(endDate),
       status: false,
     });
+    const savedCampaign = await this.campaignRepository.save(campaign);
 
-    return this.campaignRepository.save(campaign);
+    // Lấy toàn bộ vendor và tạo campaignVendor
+    const vendors = await this.vendorRepository.find();
+    for (const vendor of vendors) {
+      const campaignVendor = this.campaignVendorRepository.create({
+        campaign: savedCampaign,
+        vendor: vendor,
+        isAvailable: false,
+        invited: false,
+      });
+      await this.campaignVendorRepository.save(campaignVendor);
+    }
+
+    return savedCampaign;
   }
 
   // Campaign Voucher endpoints
