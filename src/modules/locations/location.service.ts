@@ -99,7 +99,17 @@ export class LocationService {
       vendor,
     });
 
-    return this.locationRepository.save(location);
+    const savedLocation = await this.locationRepository.save(location);
+
+    // Tạo vendor-album cho location nếu chưa có
+    const vendorAlbumRepo = this.locationRepository.manager.getRepository('VendorAlbum');
+    let vendorAlbum = await vendorAlbumRepo.findOne({ where: { location: { id: savedLocation.id } } });
+    if (!vendorAlbum) {
+      vendorAlbum = vendorAlbumRepo.create({ location: savedLocation });
+      await vendorAlbumRepo.save(vendorAlbum);
+    }
+
+    return savedLocation;
   }
   //#endregion create
 

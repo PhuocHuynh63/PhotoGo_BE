@@ -698,6 +698,14 @@ export class BookingService {
         }
       }
 
+    // Delete album if booking is timeout, cancelled or failed
+    const album = await this.albumRepository.findOne({
+      where: { bookingId: booking.id },
+    });
+    if (album) {
+      await this.albumRepository.delete(album.id);
+    }
+
       cancelledCount++;
     }
 
@@ -958,13 +966,12 @@ export class BookingService {
     }, 15 * 60 * 1000); // 15 minutes timeout
 
     // create album with status not_upload
-    // Tìm vendorAlbum theo locationId
-    let vendorAlbum = await this.vendorAlbumRepository.findOne({
+    // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
+    const vendorAlbum = await this.vendorAlbumRepository.findOne({
       where: { location: { id: savedBooking.locationId } }
     });
     if (!vendorAlbum) {
-      vendorAlbum = this.vendorAlbumRepository.create({ location: { id: savedBooking.locationId } });
-      vendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
+      throw new NotFoundException('Không tìm thấy vendor album cho location này');
     }
 
     const album = this.albumRepository.create({
@@ -1115,13 +1122,12 @@ export class BookingService {
     // The entire day is closed when booking is created
 
     // create album with status not_upload
-    // Tìm vendorAlbum theo locationId
-    let vendorAlbum = await this.vendorAlbumRepository.findOne({
+    // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
+    const vendorAlbum = await this.vendorAlbumRepository.findOne({
       where: { location: { id: savedBooking.locationId } }
     });
     if (!vendorAlbum) {
-      vendorAlbum = this.vendorAlbumRepository.create({ location: { id: savedBooking.locationId } });
-      vendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
+      throw new NotFoundException('Không tìm thấy vendor album cho location này');
     }
 
     const album = this.albumRepository.create({

@@ -165,7 +165,15 @@ export class VendorService {
           });
 
           this.logger.log(`Saving location: ${JSON.stringify(location)}`);
-          await locationRepo.save(location);
+          const savedLocation = await locationRepo.save(location);
+
+          // Tạo vendor-album cho location nếu chưa có
+          const vendorAlbumRepo = manager.getRepository('VendorAlbum');
+          let vendorAlbum = await vendorAlbumRepo.findOne({ where: { location: { id: savedLocation.id } } });
+          if (!vendorAlbum) {
+            vendorAlbum = vendorAlbumRepo.create({ location: savedLocation });
+            await vendorAlbumRepo.save(vendorAlbum);
+          }
         } else {
           this.logger.warn('Không có vị trí được cung cấp');
         }
