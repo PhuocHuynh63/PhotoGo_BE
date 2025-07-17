@@ -18,6 +18,9 @@ export class CampaignVendor {
   @Column({ type: 'boolean', default: true, name: 'is_available' })
   isAvailable: boolean;
 
+  @Column({ type: 'boolean', default: false, name: 'invited' })
+  invited: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

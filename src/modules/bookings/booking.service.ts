@@ -820,12 +820,14 @@ export class BookingService {
       const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
       if (campaignVoucher) {
         const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
         if (campaignVendor) {
           const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
           if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
             throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
           }
+        } else {
+          throw new BadRequestException('Voucher này chưa được xác nhận mời vendor hoặc vendor chưa xác nhận tham gia campaign');
         }
       }
     }
@@ -1008,12 +1010,14 @@ export class BookingService {
       const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
       if (campaignVoucher) {
         const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
         if (campaignVendor) {
           const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
           if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
             throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
           }
+        } else {
+          throw new BadRequestException('Voucher này chưa được xác nhận mời vendor hoặc vendor chưa xác nhận tham gia campaign');
         }
       }
     }
@@ -1594,7 +1598,7 @@ export class BookingService {
     if (campaignVoucher) {
       const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
       const campaignVendor = await campaignVendorRepo.findOne({ 
-        where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, 
+        where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, 
         relations: ['vendor'] 
       });
       

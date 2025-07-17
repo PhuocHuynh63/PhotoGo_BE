@@ -193,9 +193,10 @@ export class VendorService {
           if (campaignVendor) {
             campaignVendor.vendor = savedVendor;
             campaignVendor.isAvailable = true;
+            campaignVendor.invited = true;
             await campaignVendorRepo.save(campaignVendor);
           } else {
-            campaignVendor = campaignVendorRepo.create({ campaign, vendor: savedVendor, isAvailable: true });
+            campaignVendor = campaignVendorRepo.create({ campaign, vendor: savedVendor, isAvailable: true, invited: true });
             await campaignVendorRepo.save(campaignVendor);
           }
         }

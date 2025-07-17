@@ -5,7 +5,7 @@ import { Campaign } from './entities/campaign.entity';
 import { CampaignVoucher } from './entities/campaign-voucher.entity';
 import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
-import { FindAllDto } from './dto/find-all.dto';
+import { FindAllDto, FindAllVendorWithInvitedDto } from './dto/find-all.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreateLoyaltyCampaignDto } from './dto/create-loyalty-campaign.dto';
@@ -958,7 +958,7 @@ export class CampaignService {
     if (!campaign) throw new NotFoundException('Campaign không tồn tại');
     const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
     if (!vendor) throw new NotFoundException('Vendor không tồn tại');
-    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
+    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: false, invited: false });
     return this.campaignVendorRepository.save(campaignVendor);
   }
 
@@ -1002,6 +1002,32 @@ export class CampaignService {
     };
   }
 
+  async getVendorInvitedByCampaignId(campaignId: string, query: FindAllVendorWithInvitedDto): Promise<{
+    data: CampaignVendor[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { isAvailable, invited, current = 1, pageSize = 10 } = query;
+    const queryBuilder = this.campaignVendorRepository.createQueryBuilder('campaign_vendor')
+      .leftJoinAndSelect('campaign_vendor.vendor', 'vendor')
+      .where('campaign_vendor.campaign_id = :campaignId', { campaignId });
+    if (typeof isAvailable === 'boolean') {
+      queryBuilder.andWhere('campaign_vendor.is_available = :isAvailable', { isAvailable });
+    }
+    if (typeof invited === 'boolean') {
+      queryBuilder.andWhere('campaign_vendor.invited = :invited', { invited });
+    }
+    const total = await queryBuilder.getCount();
+    const skip = (current - 1) * pageSize;
+    const data = await queryBuilder.skip(skip).take(pageSize).getMany();
+    return { data, 
+      pagination: { current, pageSize, totalPage: Math.ceil(total / pageSize), totalItem: total } };
+  }
+
   async inviteVendorToCampaign(inviteVendorDto: InviteVendorDto) {
     const { campaignId, vendorId } = inviteVendorDto;
     const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
@@ -1009,6 +1035,17 @@ export class CampaignService {
     const vendor = await this.vendorRepository.findOne({ where: { id: vendorId }, relations: ['user_id'] });
     if (!vendor) throw new NotFoundException('Vendor không tồn tại');
     if (!vendor.user_id || !vendor.user_id.email) throw new BadRequestException('Vendor chưa liên kết user hoặc thiếu email');
+
+    // Update hoặc tạo mới campaign-vendor với invited = true, isAvailable = false
+    let campaignVendor = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId }, vendor: { id: vendorId } }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) {
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, invited: true, isAvailable: false });
+    } else {
+      campaignVendor.invited = true;
+      campaignVendor.isAvailable = false;
+    }
+    await this.campaignVendorRepository.save(campaignVendor);
+
     // Sinh token ngẫu nhiên
     const token = randomBytes(32).toString('hex');
     // Lưu vào Redis với TTL 15 phút
@@ -1050,11 +1087,12 @@ export class CampaignService {
       const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
       const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
       if (!campaign || !vendor) throw new NotFoundException('Campaign hoặc Vendor không tồn tại');
-      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true, invited: true });
       await this.campaignVendorRepository.save(campaignVendor);
     } else {
       // Nếu đã có thì cập nhật trạng thái
       campaignVendor.isAvailable = true;
+      campaignVendor.invited = true;
       await this.campaignVendorRepository.save(campaignVendor);
     }
     return { message: 'Xác nhận tham gia campaign thành công', campaignId, vendorId };

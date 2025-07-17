@@ -6,7 +6,7 @@ import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { Public } from 'src/decorator/custom';
-import { FindAllDto } from './dto/find-all.dto';
+import { FindAllDto, FindAllVendorWithInvitedDto } from './dto/find-all.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreateLoyaltyCampaignDto } from './dto/create-loyalty-campaign.dto';
 import { CreateMultipleCampaignVoucherDto } from './dto/create-campaign-voucher.dto';
@@ -69,6 +69,28 @@ export class CampaignController {
   @ApiResponse({ status: 200, description: 'Thông tin campaign-vendor', type: CampaignVendor })
   async getCampaignVendorById(@Param('id') id: string): Promise<CampaignVendor> {
     return this.campaignService.getCampaignVendorById(id);
+  }
+
+  @Get('vendor/:campaignId/invited')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách vendor đã được gửi mail xác nhận chưa?' })
+  @ApiParam({ name: 'campaignId', description: 'ID của campaign' })
+  // @ApiResponse({ status: 200, description: 'Danh sách vendor đã được gửi mail xác nhận', schema: {
+  //   properties: {
+  //     data: { type: 'array', items: { $ref: '#/components/schemas/CampaignVendor' } },
+  //     pagination: {
+  //       type: 'object',
+  //       properties: {
+  //         current: { type: 'number' },
+  //         pageSize: { type: 'number' },
+  //         totalPage: { type: 'number' },
+  //         totalItem: { type: 'number' }
+  //       }
+  //     }
+  //   }
+  // } })
+  async getVendorInvitedByCampaignId(@Param('campaignId') campaignId: string, @Query() query: FindAllVendorWithInvitedDto): Promise<{ data: CampaignVendor[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
+    return this.campaignService.getVendorInvitedByCampaignId(campaignId, query);
   }
 
    // API nhập vendorId để list campaign vendor đã tham gia hoặc tự tạo
