@@ -935,6 +935,7 @@ export class VendorService {
   }> {
     const currentPage = params.current ? Number(params.current) : 1;
     const pageSize = params.pageSize ? Number(params.pageSize) : 3;
+    const actualPageSize = pageSize * pageSize;
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
     let paramIndex = 1;
@@ -1166,7 +1167,7 @@ export class VendorService {
 
     // Add pagination
     baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    baseParams.push(pageSize, skip);
+    baseParams.push(actualPageSize, skip);
 
     // Get total count query
     let countQuery = `
