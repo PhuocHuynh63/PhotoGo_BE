@@ -274,17 +274,36 @@ export class AlbumService {
     };
   }
 
-  async getAlbumsByLocation(locationId: string, date: string, query: AlbumFilterDto = {}) {
-    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+  async getAlbumsByLocation(locationId: string, query: AlbumFilterDto) {
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC', albumStatus, date } = query;
     const skip = (current - 1) * pageSize;
-    const where: any = { vendorAlbum: { location: { id: locationId } }, date: this.convertDateToISO(date), status: query.albumStatus };
+
+    // 1. Lấy vendorAlbum theo locationId
+    const vendorAlbum = await this.vendorAlbumRepository.findOne({
+      where: { location: { id: locationId } },
+    });
+    if (!vendorAlbum) {
+      throw new NotFoundException('Không tìm thấy vendor album cho location này');
+    }
+
+    // 2. Tạo điều kiện where cho Album
+    const where: any = {
+      vendorAlbum: { id: vendorAlbum.id },
+    };
+    if (date) {
+      where.date = this.convertDateToISO(date);
+    }
+    if (albumStatus) {
+      where.status = albumStatus;
+    }
+
     const [data, total] = await this.albumRepository.findAndCount({
       where,
       relations: ['vendorAlbum', 'booking', 'booking.user'],
       skip,
       take: pageSize,
       order: { [sortBy]: sortDirection },
-    }); 
+    });
     const totalPage = Math.ceil(total / pageSize);
     return {
       data,

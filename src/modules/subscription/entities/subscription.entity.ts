@@ -44,6 +44,8 @@ export class Subscription {
   })
   billingCycle: BillingCycle;
 
+  //triggerCode
+
   @Column({ type: 'timestamptz', name: 'last_billed_at', nullable: true })
   lastBilledAt: Date;
 

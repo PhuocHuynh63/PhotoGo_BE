@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { VendorAlbum } from './vendor-album.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Booking } from 'src/modules/bookings/entities/booking.entity';
@@ -12,6 +12,7 @@ export class Album {
   bookingId: string;
 
   @OneToOne(() => Booking, (booking) => booking.id)
+  @JoinColumn({ name: 'booking_id' })
   booking: Booking;
 
   @Column({ type: 'text', array: true, nullable: true })
@@ -36,5 +37,6 @@ export class Album {
   updatedAt: Date;
 
   @ManyToOne(() => VendorAlbum, (vendorAlbum) => vendorAlbum.albums)
+  @JoinColumn({ name: 'vendor_album_id' })
   vendorAlbum: VendorAlbum;
 } 

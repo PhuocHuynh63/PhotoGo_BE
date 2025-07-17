@@ -115,9 +115,10 @@ export class AlbumController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách album theo locationId' })
   @ApiParam({ name: 'locationId', type: 'string' })
+  // @ApiQuery({ name: 'date', type: 'string', required: true, description: 'Ngày cần lấy album' })
   @ApiOkResponse({ description: 'Danh sách album' })
-  async getAlbumsByLocation(@Param('locationId') locationId: string, @Query('date') date: string, @Query() query: AlbumFilterDto) {
-    return this.albumService.getAlbumsByLocation(locationId, date, query);
+  async getAlbumsByLocation(@Param('locationId') locationId: string, @Query() query: AlbumFilterDto) {
+    return this.albumService.getAlbumsByLocation(locationId, query);
   }
 
   @Get('album/user/:userId')
