@@ -27,7 +27,7 @@ import { LessThan } from 'typeorm';
 import { UserRank } from '../../constants/user.enum';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
-import { SubscriptionStatus } from '../../constants/subscription.enum';
+import { BillingCycle, SubscriptionStatus } from '../../constants/subscription.enum';
 import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
 import { VoucherTypeDiscount } from '../../constants/voucher.enum';
 import { AlbumStatus } from 'src/constants/album.enum';
@@ -1741,22 +1741,31 @@ export class BookingService {
       if (allPlans.length === 0) {
         return 0;
       }
-
-      // Calculate total price of all plans
-      const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.price), 0);
-
-      if (totalPlanPrice === 0) {
-        return 0;
+      // check which cycle of plan
+      const planCycle = allPlans[0].billingCycle;
+      if (planCycle === BillingCycle.MONTHLY) {
+        // Tính tổng giá theo priceForMonth
+        const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.priceForMonth), 0);
+        if (totalPlanPrice === 0) {
+          return 0;
+        }
+        const userSubscription = subscriptions.data[0];
+        const userPlanPrice = Number(userSubscription.plan.priceForMonth);
+        const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
+        return subscriptionScore;
+      } else if (planCycle === BillingCycle.YEARLY) {
+        // Tính tổng giá theo priceForYear
+        const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.priceForYear), 0);
+        if (totalPlanPrice === 0) {
+          return 0;
+        }
+        const userSubscription = subscriptions.data[0];
+        const userPlanPrice = Number(userSubscription.plan.priceForYear);
+        const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
+        return subscriptionScore;
       }
-
-      // Get the user's subscription plan price
-      const userSubscription = subscriptions.data[0]; // One-to-one relationship
-      const userPlanPrice = Number(userSubscription.plan.price);
-
-      // Calculate subscription score: (user plan price / total plan price) * 100
-      const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
-
-      return subscriptionScore;
+      // Nếu không phải monthly/yearly thì trả về 0
+      return 0;
     } catch (error) {
       console.error('Error calculating subscription score:', error);
       return 0;

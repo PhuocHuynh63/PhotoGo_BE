@@ -68,10 +68,17 @@ export class SubscriptionPaymentService {
     //   throw new BadRequestException('vendorId là bắt buộc khi payerType là VENDOR');
     // }
 
+    // Lấy giá theo billingCycle
+    let price = 0;
+    if (plan.billingCycle === BillingCycle.MONTHLY) {
+      price = plan.priceForMonth;
+    } else if (plan.billingCycle === BillingCycle.YEARLY) {
+      price = plan.priceForYear;
+    }
     // Tạo subscription invoice
     const invoice = this.subscriptionInvoiceRepository.create({
       subscriptionId: plan.subscriptions[0].id,
-      payablePrice: plan.price,
+      payablePrice: price,
       status: SubscriptionInvoiceStatus.PENDING,
       payerType,
     });
@@ -230,86 +237,82 @@ export class SubscriptionPaymentService {
         }
         // Note: Vendor assignment được xử lý qua SubscriptionVendor entity
       
-      // Tính next billing date dựa trên billing cycle
-      const nextBillingDate = new Date();
-      if (subscription.billingCycle === BillingCycle.MONTHLY) {
-        nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-      } else if (subscription.billingCycle === BillingCycle.YEARLY) {
-        nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
-      }
-      subscription.nextBillingAt = nextBillingDate;
-
       // Gia hạn subscription: cộng thêm thời gian vào endDate
       const plan = await this.subscriptionPlanService.findOne(subscription.planId);
+      let extensionDays = 30;
+      let planPrice = 0;
       if (plan) {
-        // Cộng thêm số ngày từ plan.duration
+        if (plan.billingCycle === BillingCycle.MONTHLY) {
+          extensionDays = 30;
+          planPrice = plan.priceForMonth;
+        } else if (plan.billingCycle === BillingCycle.YEARLY) {
+          extensionDays = 365;
+          planPrice = plan.priceForYear;
+        }
         const newEndDate = new Date(oldEndDate);
-        newEndDate.setDate(newEndDate.getDate() + plan.duration);
+        if (plan.billingCycle === BillingCycle.MONTHLY) {
+          newEndDate.setMonth(newEndDate.getMonth() + 1);
+        } else if (plan.billingCycle === BillingCycle.YEARLY) {
+          newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+        } else {
+          newEndDate.setMonth(newEndDate.getMonth() + 1);
+        }
         subscription.endDate = newEndDate;
 
         // Xác định loại action dựa trên payment type
         const isRenewal = payment.type === PaymentType.RENEWAL;
         const renewalAction = isRenewal ? SubscriptionHistoryAction.RENEWED : SubscriptionHistoryAction.ACTIVATED;
         const renewalDescription = isRenewal 
-          ? `Gia hạn subscription thêm ${plan.duration} ngày`
-          : `Kích hoạt subscription mới với ${plan.duration} ngày`;
+          ? `Gia hạn subscription thêm ${extensionDays} ngày`
+          : `Kích hoạt subscription mới với ${extensionDays} ngày`;
 
         // Tự động assign user với subscription nếu là lần thanh toán đầu tiên
         if (!isRenewal) {
-                  // Tạo history record cho việc assign user
-        await this.subscriptionHistoryService.createHistory(
-          subscription.id,
-          SubscriptionHistoryAction.ACTIVATED,
-          `Kích hoạt và assign user với subscription`,
-          {
-            subscriptionId: subscription.id,
-            userId: subscription.userId,
-            planId: plan.id,
-            planName: plan.name,
-            planDuration: plan.duration,
-            planPrice: plan.price,
-            startDate: subscription.startDate.toISOString(),
-            endDate: newEndDate.toISOString(),
-            billingCycle: subscription.billingCycle,
-            status: subscription.status,
-            paymentId: payment.id,
-            invoiceId: invoice.id,
-            amount: payment.amount,
-            payerType: payment.payerType,
-            timestamp: new Date().toISOString(),
-            action: 'user_assignment',
-            isFirstPayment: true,
-            assignedUserId: userId || subscription.userId,
-          },
-          payment.payerType
-        );
+          await this.subscriptionHistoryService.createHistory(
+            subscription.id,
+            SubscriptionHistoryAction.ACTIVATED,
+            `Kích hoạt và assign user với subscription`,
+            {
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              planId: plan.id,
+              planName: plan.name,
+              planDuration: extensionDays,
+              planPrice: planPrice,
+              startDate: subscription.startDate.toISOString(),
+              endDate: newEndDate.toISOString(),
+              billingCycle: subscription.billingCycle,
+              status: subscription.status,
+              paymentId: payment.id,
+              invoiceId: invoice.id,
+              amount: payment.amount,
+              payerType: payment.payerType,
+              timestamp: new Date().toISOString(),
+              action: 'user_assignment',
+              isFirstPayment: true,
+              assignedUserId: userId || subscription.userId,
+            },
+            payment.payerType
+          );
         } else {
-          // Tạo history record cho gia hạn
           await this.subscriptionHistoryService.createHistory(
             subscription.id,
             renewalAction,
             renewalDescription,
             {
-              // Thông tin subscription
               subscriptionId: subscription.id,
               userId: subscription.userId,
-              
-              // Thông tin plan
               planId: plan.id,
               planName: plan.name,
               planDescription: plan.description,
-              planDuration: plan.duration,
-              planPrice: plan.price,
-              
-              // Thông tin thời gian
+              planDuration: extensionDays,
+              planPrice: planPrice,
               oldEndDate: oldEndDate.toISOString(),
               newEndDate: newEndDate.toISOString(),
-              extensionDays: plan.duration,
+              extensionDays: extensionDays,
               billingCycle: subscription.billingCycle,
               lastBilledAt: subscription.lastBilledAt.toISOString(),
               nextBillingAt: subscription.nextBillingAt.toISOString(),
-              
-              // Thông tin thanh toán
               paymentId: payment.id,
               invoiceId: invoice.id,
               amount: payment.amount,
@@ -318,8 +321,6 @@ export class SubscriptionPaymentService {
               payerType: payment.payerType,
               transactionId: payment.transactionId,
               paymentOSId: payment.paymentOSId,
-              
-              // Metadata khác
               timestamp: new Date().toISOString(),
               action: isRenewal ? SubscriptionHistoryAction.RENEWED : SubscriptionHistoryAction.ACTIVATED,
               isFirstPayment: !isRenewal,
@@ -346,14 +347,13 @@ export class SubscriptionPaymentService {
               endDate: subscription.endDate,
               billingCycle: subscription.billingCycle,
               status: subscription.status,
-              price: plan.price,
+              price: planPrice,
               paymentMethod: payment.paymentMethod,
               nextBillingDate: subscription.nextBillingAt,
             }
           );
         } catch (error) {
           this.logger.error(`Failed to send subscription success email: ${error.message}`);
-          // Không throw error để không ảnh hưởng đến flow thanh toán
         }
       }
       // Gửi email thông báo thành công cho vendor
@@ -373,7 +373,7 @@ export class SubscriptionPaymentService {
               endDate: subscription.endDate,
               billingCycle: subscription.billingCycle,
               status: subscription.status,
-              price: plan.price,
+              price: planPrice,
               paymentMethod: payment.paymentMethod,
               nextBillingDate: subscription.nextBillingAt,
             }

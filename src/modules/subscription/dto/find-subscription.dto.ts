@@ -1,6 +1,6 @@
 import { IsOptional, IsEnum, IsUUID, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { SubscriptionStatus } from '../../../constants/subscription.enum';
+import { SubscriptionStatus, PlanType } from '../../../constants/subscription.enum';
 import { Type } from 'class-transformer';
 
 export class FindSubscriptionDto {
@@ -17,6 +17,11 @@ export class FindSubscriptionDto {
     required: false
   })
   status?: SubscriptionStatus;
+
+  @IsEnum(PlanType)
+  @IsOptional()
+  @ApiProperty({ description: 'Loại gói đăng ký', enum: PlanType, required: false })
+  planType?: PlanType;
 
   @IsOptional()
   @Type(() => Number)

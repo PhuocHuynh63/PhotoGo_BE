@@ -5,6 +5,7 @@ import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { CreateSubscriptionPlanDto } from './dto/subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/subscription-plan.dto';
 import { FindSubscriptionPlanDto } from './dto/subscription-plan.dto';
+import { PlanType, BillingCycle } from 'src/constants/subscription.enum';
 
 @Injectable()
 export class SubscriptionPlanService {
@@ -30,6 +31,10 @@ export class SubscriptionPlanService {
 
     if (findSubscriptionPlanDto.isActive !== undefined) {
       queryBuilder.andWhere('subscriptionPlan.isActive = :isActive', { isActive: findSubscriptionPlanDto.isActive });
+    }
+
+    if (findSubscriptionPlanDto.planType) {
+      queryBuilder.andWhere('subscriptionPlan.planType = :planType', { planType: findSubscriptionPlanDto.planType });
     }
 
     return await queryBuilder.getMany();

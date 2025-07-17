@@ -5,10 +5,11 @@ import { Subscription } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { FindSubscriptionDto } from './dto/find-subscription.dto';
-import { SubscriptionStatus, SubscriptionHistoryAction } from '../../constants/subscription.enum';
+import { SubscriptionStatus, SubscriptionHistoryAction, PlanType } from '../../constants/subscription.enum';
 import { PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
 import { SubscriptionPlanService } from './subscription-plan.service';
+import { BillingCycle } from '../../constants/subscription.enum';
 
 @Injectable()
 export class SubscriptionService {
@@ -19,12 +20,29 @@ export class SubscriptionService {
     private readonly subscriptionPlanService: SubscriptionPlanService,
   ) {}
 
+  private getDurationByBillingCycle(billingCycle: BillingCycle): number {
+    switch (billingCycle) {
+      case BillingCycle.MONTHLY:
+        return 30;
+      case BillingCycle.YEARLY:
+        return 365;
+      default:
+        return 30;
+    }
+  }
+
   async create(createSubscriptionDto: CreateSubscriptionDto): Promise<Subscription> {
     // Validate plan exists and is active
     const plan = await this.subscriptionPlanService.findOne(createSubscriptionDto.planId);
     if (!plan.isActive) {
       throw new BadRequestException('Subscription plan không hoạt động');
     }
+
+    // Kiểm tra loại plan phù hợp với loại đăng ký
+    if (createSubscriptionDto.userId && plan.planType !== PlanType.USER) {
+      throw new BadRequestException('Chỉ được đăng ký gói dành cho người dùng');
+    }
+    // Nếu sau này có vendorId thì kiểm tra planType === 'VENDOR'
 
     // Check if user already has an active subscription
     if (createSubscriptionDto.userId) {
@@ -44,13 +62,26 @@ export class SubscriptionService {
     if (!endDate) {
       const startDate = new Date(createSubscriptionDto.startDate);
       endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + plan.duration);
+      if (plan.billingCycle === BillingCycle.MONTHLY) {
+        endDate.setMonth(endDate.getMonth() + 1);
+      } else if (plan.billingCycle === BillingCycle.YEARLY) {
+        endDate.setFullYear(endDate.getFullYear() + 1);
+      } else {
+        endDate.setMonth(endDate.getMonth() + 1);
+      }
     }
-
+    // Lấy giá theo billingCycle
+    let price = 0;
+    if (plan.billingCycle === BillingCycle.MONTHLY) {
+      price = plan.priceForMonth;
+    } else if (plan.billingCycle === BillingCycle.YEARLY) {
+      price = plan.priceForYear;
+    }
     const subscription = this.subscriptionRepository.create({
       ...createSubscriptionDto,
       endDate: endDate,
-      status: SubscriptionStatus.ACTIVE
+      status: SubscriptionStatus.ACTIVE,
+      // price: price // Nếu muốn lưu giá vào subscription
     });
     const savedSubscription = await this.subscriptionRepository.save(subscription);
 
@@ -64,13 +95,11 @@ export class SubscriptionService {
         subscriptionId: savedSubscription.id,
         userId: savedSubscription.userId,
         planId: savedSubscription.planId,
-        
         // Thông tin thời gian
         startDate: savedSubscription.startDate.toISOString(),
         endDate: savedSubscription.endDate.toISOString(),
         billingCycle: savedSubscription.billingCycle,
         status: savedSubscription.status,
-        
         // Metadata khác
         timestamp: new Date().toISOString(),
         action: 'create',
