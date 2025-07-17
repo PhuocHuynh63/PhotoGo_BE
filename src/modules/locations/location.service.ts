@@ -677,7 +677,10 @@ export class LocationService {
         service: booking.serviceConcept?.name || '',
         notes: booking.userNote,
         phone: booking.phone,
-        email: booking.email
+        email: booking.email,
+        alreadyPaid: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].paidAmount : 0,
+        remain: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice - booking.invoices[0].paidAmount : 0,
+        total: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice : 0
       };
       if (booking.time) {
         // booking 1 ngày
