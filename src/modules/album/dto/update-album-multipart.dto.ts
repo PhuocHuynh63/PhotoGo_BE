@@ -22,8 +22,8 @@ export class UpdateAlbumMultipartDto {
   @IsDateString()
   date: string;
 
-  @ApiProperty({ type: 'string', description: 'Status', enum: AlbumStatus, default: AlbumStatus.NOT_UPLOAD, required: false })
-  @IsEnum(AlbumStatus)
-  @IsOptional()
-  status?: AlbumStatus;
+  // @ApiProperty({ type: 'string', description: 'Status', enum: AlbumStatus, default: AlbumStatus.NOT_UPLOAD, required: false })
+  // @IsEnum(AlbumStatus)
+  // @IsOptional()
+  // status?: AlbumStatus;
 } 
