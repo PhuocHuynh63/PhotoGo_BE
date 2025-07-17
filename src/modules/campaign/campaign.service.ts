@@ -151,11 +151,11 @@ export class CampaignService {
       const startDate = new Date(campaign.startDate);
       const endDate = new Date(campaign.endDate);
 
-      // Tính status
-      let statusText = '';
-      if (now < startDate) statusText = 'Sắp diễn ra';
-      else if (now > endDate) statusText = 'Đã kết thúc';
-      else statusText = 'Đang chạy';
+      // Tính happenned
+      let happened = '';
+      if (now < startDate) happened = 'Sắp diễn ra';
+      else if (now > endDate) happened = 'Đã kết thúc';
+      else happened = 'Đang diễn ra';
 
       // Tính progress
       let progress = 0;
@@ -172,7 +172,8 @@ export class CampaignService {
         id: campaign.id,
         name: campaign.name,
         description: campaign.description,
-        status: statusText,
+        status: campaign.status,
+        happened,
         progress,
         startDate: campaign.startDate,
         endDate: campaign.endDate,
