@@ -316,6 +316,37 @@ export class AlbumService {
     };
   }
 
+  async getAlbumsByBookingId(bookingId: string, query: AlbumPaginationDto = {}): Promise<{
+    data: Album[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+    const skip = (current - 1) * pageSize;
+    const where: any = { booking: { id: bookingId } };
+    const [data, total] = await this.albumRepository.findAndCount({
+      where,
+      relations: ['vendorAlbum', 'booking', 'booking.user'],
+      skip,
+      take: pageSize,
+      order: { [sortBy]: sortDirection },
+    });
+    const totalPage = Math.ceil(total / pageSize);
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem: total,
+      },
+    };
+  }
+
   // async getAlbumsByDate(date: string, query: AlbumPaginationDto = {}) {
   //   const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
   //   const skip = (current - 1) * pageSize;

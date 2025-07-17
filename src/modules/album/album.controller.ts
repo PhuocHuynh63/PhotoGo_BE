@@ -130,6 +130,15 @@ export class AlbumController {
     return this.albumService.getAlbumsByUserId(userId, query);
   }
 
+  @Get('album/booking/:bookingId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách album theo bookingId' })
+  @ApiParam({ name: 'bookingId', type: 'string' })
+  @ApiOkResponse({ description: 'Danh sách album theo bookingId' })
+  async getAlbumsByBookingId(@Param('bookingId') bookingId: string, @Query() query: AlbumPaginationDto) {
+    return this.albumService.getAlbumsByBookingId(bookingId, query);
+  }
+
   @Get('album/:albumId')
   @Public()
   @ApiOperation({ summary: 'Lấy 1 album theo id' })

@@ -15,19 +15,19 @@ export class SubscriptionPlan {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'price_for_month' })
   priceForMonth: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'price_for_year' })
   priceForYear: number;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: 'boolean', default: true, name: 'is_active' })
   isActive: boolean;
 
-  @Column({ type: 'enum', enum: PlanType })
+  @Column({ type: 'enum', enum: PlanType, name: 'plan_type' })
   planType: PlanType;
 
-  @Column({ type: 'enum', enum: BillingCycle })
+  @Column({ type: 'enum', enum: BillingCycle, name: 'billing_cycle' })
   billingCycle: BillingCycle;
 
   @OneToMany(() => SubscriptionVendor, subscriptionVendor => subscriptionVendor.plan)
