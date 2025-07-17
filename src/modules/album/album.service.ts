@@ -9,9 +9,28 @@ import { AlbumPaginationDto } from './dto/pagination.dto';
 import { UploadService } from '../../3rdService/upload/upload.service';
 import { CreateAlbumMultipartDto } from './dto/create-album-multipart.dto';
 import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
+import { AlbumStatus } from 'src/constants/album.enum';
 
 @Injectable()
 export class AlbumService {
+  // Helper: DD/MM/YYYY => YYYY-MM-DD
+  private convertDateToISO(date: string): string {
+    if (!date) return date;
+    const [day, month, year] = date.split('/');
+    if (!day || !month || !year) throw new BadRequestException('Sai định dạng ngày, phải là DD/MM/YYYY');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  // Helper: YYYY-MM-DD => DD/MM/YYYY
+  private convertDateToVN(date: string | Date): string {
+    if (!date) return '';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(d.getTime())) return '';
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
   constructor(
     @InjectRepository(Album)
     private readonly albumRepository: Repository<Album>,
@@ -30,7 +49,7 @@ export class AlbumService {
     const skip = (current - 1) * pageSize;
     const [data, total] = await this.vendorAlbumRepository.findAndCount({
       where: { location: { id: locationId } },
-      relations: ['albums'],
+      relations: ['albums', 'albums.booking', 'albums.booking.user'],
       skip,
       take: pageSize,
       order: { [sortBy]: sortDirection },
@@ -87,21 +106,32 @@ export class AlbumService {
     const vendorAlbum = this.vendorAlbumRepository.create({ location: locationObj });
     const savedVendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
 
+    // Convert date to ISO (YYYY-MM-DD)
+    let isoDate = undefined;
+    if (dto.date) {
+      isoDate = this.convertDateToISO(dto.date);
+    }
+
     // Create album with uploaded URLs
     const album = this.albumRepository.create({
-      userId: dto.userId,
+      bookingId: dto.bookingId,
+      date: isoDate,
       driveLink: dto.driveLink,
       photos: Array.isArray(photoUrls) ? photoUrls : (photoUrls ? [photoUrls] : []),
       behindTheScenes: Array.isArray(behindTheSceneUrls) ? behindTheSceneUrls : (behindTheSceneUrls ? [behindTheSceneUrls] : []),
       vendorAlbum: savedVendorAlbum,
+      status: dto.status,
     });
 
     const savedAlbum = await this.albumRepository.save(album);
 
+    // Convert date back to DD/MM/YYYY for response
+    const responseAlbum = { ...savedAlbum, date: this.convertDateToVN(savedAlbum.date) };
+
     // Return both vendor album and album
     return {
       vendorAlbum: savedVendorAlbum,
-      album: savedAlbum,
+      album: responseAlbum,
     };
   }
 
@@ -142,29 +172,50 @@ export class AlbumService {
     let photoUrls: string[] = album.photos || [];
     if (photoFiles && photoFiles.length > 0) {
       const newPhotoUrls = await this.uploadService.uploadImages(photoFiles, 'album/photos');
-      photoUrls = [...photoUrls, ...newPhotoUrls];
+      // Lọc bỏ các URL đã tồn tại
+      const uniqueNewPhotoUrls = newPhotoUrls.filter(url => !photoUrls.includes(url));
+      photoUrls = [...photoUrls, ...uniqueNewPhotoUrls];
+      // Giới hạn tối đa 3 ảnh
+      photoUrls = photoUrls.slice(0, 3);
     }
 
     // Upload new behind the scenes if provided
     let behindTheSceneUrls: string[] = album.behindTheScenes || [];
     if (behindTheSceneFiles && behindTheSceneFiles.length > 0) {
       const newBehindTheSceneUrls = await this.uploadService.uploadImages(behindTheSceneFiles, 'album/behind-the-scenes');
-      behindTheSceneUrls = [...behindTheSceneUrls, ...newBehindTheSceneUrls];
+      // Lọc bỏ các URL đã tồn tại
+      const uniqueNewBehindTheSceneUrls = newBehindTheSceneUrls.filter(url => !behindTheSceneUrls.includes(url));
+      behindTheSceneUrls = [...behindTheSceneUrls, ...uniqueNewBehindTheSceneUrls];
+      // Giới hạn tối đa 3 ảnh
+      behindTheSceneUrls = behindTheSceneUrls.slice(0, 3);
+    }
+
+    // Convert date to ISO (YYYY-MM-DD)
+    let isoDate = undefined;
+    if (dto.date) {
+      isoDate = this.convertDateToISO(dto.date);
     }
 
     // Update album with new data
     this.albumRepository.merge(album, {
-      userId: dto.userId,
+      bookingId: dto.bookingId,
+      date: isoDate,
       driveLink: dto.driveLink,
       photos: photoUrls,
       behindTheScenes: behindTheSceneUrls,
+      status: AlbumStatus.UPLOADED,
     });
 
-    return this.albumRepository.save(album);
+    const savedAlbum = await this.albumRepository.save(album);
+
+    // Convert date back to DD/MM/YYYY for response
+    const responseAlbum = { ...savedAlbum, date: this.convertDateToVN(savedAlbum.date) };
+
+    return responseAlbum;
   }
 
   async getAlbum(albumId: string) {
-    const album = await this.albumRepository.findOne({ where: { id: albumId }, relations: ['vendorAlbum'] });
+    const album = await this.albumRepository.findOne({ where: { id: albumId }, relations: ['vendorAlbum', 'booking', 'booking.user'] });
     if (!album) throw new NotFoundException('Không tìm thấy album');
     return album;
   }
@@ -182,7 +233,7 @@ export class AlbumService {
     const where: any = { vendorAlbum: { id: vendorAlbumId } };
     const [data, total] = await this.albumRepository.findAndCount({
       where,
-      relations: ['vendorAlbum'],
+      relations: ['vendorAlbum', 'booking', 'booking.user'],
       skip,
       take: pageSize,
       order: { [sortBy]: sortDirection },
@@ -202,10 +253,56 @@ export class AlbumService {
   async getAlbumsByUserId(userId: string, query: AlbumPaginationDto = {}) {
     const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
     const skip = (current - 1) * pageSize;
-    const where: any = { userId };
+    const where: any = { booking: { user: { id: userId } } };
     const [data, total] = await this.albumRepository.findAndCount({
       where,
-      relations: ['vendorAlbum'],
+      relations: ['vendorAlbum', 'booking', 'booking.user'],
+      skip,
+      take: pageSize,
+      order: { [sortBy]: sortDirection },
+    });
+    const totalPage = Math.ceil(total / pageSize);
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem: total,
+      },
+    };
+  }
+
+  async getAlbumsByLocation(locationId: string, query: AlbumPaginationDto = {}) {
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+    const skip = (current - 1) * pageSize;
+    const where: any = { vendorAlbum: { location: { id: locationId } } };
+    const [data, total] = await this.albumRepository.findAndCount({
+      where,
+      relations: ['vendorAlbum', 'booking', 'booking.user'],
+      skip,
+      take: pageSize,
+      order: { [sortBy]: sortDirection },
+    });
+    const totalPage = Math.ceil(total / pageSize);
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem: total,
+      },
+    };
+  }
+
+  async getAlbumsByDate(date: string, query: AlbumPaginationDto = {}) {
+    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
+    const skip = (current - 1) * pageSize;
+    const where: any = { date: this.convertDateToISO(date) };
+    const [data, total] = await this.albumRepository.findAndCount({
+      where,
+      relations: ['vendorAlbum', 'booking', 'booking.user'],
       skip,
       take: pageSize,
       order: { [sortBy]: sortDirection },

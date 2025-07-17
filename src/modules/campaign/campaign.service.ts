@@ -18,6 +18,13 @@ import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { InviteVendorDto } from './dto/invite-vendor.dto';
+import { ConfirmVendorInviteDto } from './dto/confirm-vendor-invite.dto';
+import { MailService } from 'src/3rdService/mail/mail.service';
+import * as jwt from 'jsonwebtoken';
+import { Inject } from '@nestjs/common';
+import { Redis } from 'ioredis';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class CampaignService {
@@ -54,6 +61,8 @@ export class CampaignService {
     private campaignVendorRepository: Repository<CampaignVendor>,
     @InjectRepository(Vendor)
     private vendorRepository: Repository<Vendor>,
+    private readonly mailService: MailService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
   // Campaign endpoints
@@ -994,5 +1003,63 @@ export class CampaignService {
         totalItem: total,
       }
     };
+  }
+
+  async inviteVendorToCampaign(inviteVendorDto: InviteVendorDto) {
+    const { campaignId, vendorId } = inviteVendorDto;
+    const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    const vendor = await this.vendorRepository.findOne({ where: { id: vendorId }, relations: ['user_id'] });
+    if (!vendor) throw new NotFoundException('Vendor không tồn tại');
+    if (!vendor.user_id || !vendor.user_id.email) throw new BadRequestException('Vendor chưa liên kết user hoặc thiếu email');
+    // Sinh token ngẫu nhiên
+    const token = randomBytes(32).toString('hex');
+    // Lưu vào Redis với TTL 15 phút
+    await this.redisClient.setex(
+      `campaign-invite:${token}`,
+      900, // 15 phút
+      JSON.stringify({ campaignId, vendorId })
+    );
+    // Link xác nhận
+    const confirmLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/campaigns/confirm-invite?token=${token}`;
+    // Gửi mail
+    await this.mailService.sendMail(
+      vendor.user_id.email,
+      'Mời xác nhận tham gia chiến dịch PhotoGo',
+      'invite-vendor-campaign',
+      {
+        vendorName: vendor.name,
+        campaignName: campaign.name,
+        confirmLink,
+      },
+    );
+    return { message: 'Đã gửi mail xác nhận cho vendor', email: vendor.user_id.email, token };
+  }
+
+  async confirmVendorInvite(token: string) {
+    console.log('Xác nhận token:', token);
+    // Lấy thông tin từ Redis
+    const key = `campaign-invite:${token}`;
+    const data = await this.redisClient.get(key);
+    console.log('Dữ liệu lấy từ Redis:', data);
+    if (!data) throw new BadRequestException('Token không hợp lệ hoặc đã hết hạn');
+    const { campaignId, vendorId } = JSON.parse(data);
+    // Xóa token khỏi Redis sau khi xác nhận
+    await this.redisClient.del(key);
+    // Kiểm tra campaign-vendor đã tồn tại chưa
+    let campaignVendor = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId }, vendor: { id: vendorId } }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) {
+      // Nếu chưa có thì tạo mới
+      const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+      const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
+      if (!campaign || !vendor) throw new NotFoundException('Campaign hoặc Vendor không tồn tại');
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
+      await this.campaignVendorRepository.save(campaignVendor);
+    } else {
+      // Nếu đã có thì cập nhật trạng thái
+      campaignVendor.isAvailable = true;
+      await this.campaignVendorRepository.save(campaignVendor);
+    }
+    return { message: 'Xác nhận tham gia campaign thành công', campaignId, vendorId };
   }
 } 

@@ -30,6 +30,9 @@ import { SubscriptionPlanService } from '../subscription/subscription-plan.servi
 import { SubscriptionStatus } from '../../constants/subscription.enum';
 import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
 import { VoucherTypeDiscount } from '../../constants/voucher.enum';
+import { AlbumStatus } from 'src/constants/album.enum';
+import { Album } from '../album/entities/album.entity';
+import { VendorAlbum } from '../album/entities/vendor-album.entity';
 
 @Injectable()
 export class BookingService {
@@ -63,6 +66,10 @@ export class BookingService {
     private mailService: MailService,
     private readonly subscriptionService: SubscriptionService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
+    @InjectRepository(Album)
+    private albumRepository: Repository<Album>,
+    @InjectRepository(VendorAlbum)
+    private vendorAlbumRepository: Repository<VendorAlbum>,
   ) { }
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -950,6 +957,27 @@ export class BookingService {
       }
     }, 15 * 60 * 1000); // 15 minutes timeout
 
+    // create album with status not_upload
+    // Tìm vendorAlbum theo locationId
+    let vendorAlbum = await this.vendorAlbumRepository.findOne({
+      where: { location: { id: savedBooking.locationId } }
+    });
+    if (!vendorAlbum) {
+      vendorAlbum = this.vendorAlbumRepository.create({ location: { id: savedBooking.locationId } });
+      vendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
+    }
+
+    const album = this.albumRepository.create({
+      bookingId: savedBooking.id,
+      status: AlbumStatus.NOT_UPLOAD,
+      date: savedBooking.date,
+      driveLink: null,
+      photos: [],
+      behindTheScenes: [],
+      vendorAlbum: vendorAlbum,
+    });
+    await this.albumRepository.save(album);
+
     return {
       booking: this.formatBookingDates(savedBooking),
       paymentLink: paymentLinkData.checkoutUrl,
@@ -1085,6 +1113,27 @@ export class BookingService {
 
     // For multi-day booking, we don't set timeout because we don't lock slots
     // The entire day is closed when booking is created
+
+    // create album with status not_upload
+    // Tìm vendorAlbum theo locationId
+    let vendorAlbum = await this.vendorAlbumRepository.findOne({
+      where: { location: { id: savedBooking.locationId } }
+    });
+    if (!vendorAlbum) {
+      vendorAlbum = this.vendorAlbumRepository.create({ location: { id: savedBooking.locationId } });
+      vendorAlbum = await this.vendorAlbumRepository.save(vendorAlbum);
+    }
+
+    const album = this.albumRepository.create({
+      bookingId: savedBooking.id,
+      status: AlbumStatus.NOT_UPLOAD,
+      date: savedBooking.date,
+      driveLink: null,
+      photos: [],
+      behindTheScenes: [],
+      vendorAlbum: vendorAlbum,
+    });
+    await this.albumRepository.save(album);
 
     return {
       booking: this.formatBookingDates(savedBooking),

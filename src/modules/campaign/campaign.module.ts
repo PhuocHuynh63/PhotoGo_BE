@@ -13,6 +13,8 @@ import { UserModule } from '../users/user.module';
 import { VoucherModule } from '../vouchers/voucher.module';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { MailModule } from 'src/3rdService/mail/mail.module';
+import { RedisModule } from 'src/3rdService/redis/redis.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { Vendor } from '../vendors/entities/vendor.entity';
     ]),
     VoucherModule,
     UserModule,
+    MailModule,
+    RedisModule,
   ],
   controllers: [CampaignController],
   providers: [CampaignService],

@@ -17,6 +17,8 @@ import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { JoinWelcomeCampaignDto } from './dto/join-welcome-campaign.dto';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
+import { InviteVendorDto } from './dto/invite-vendor.dto';
+import { ConfirmVendorInviteDto } from './dto/confirm-vendor-invite.dto';
 
 @Controller('campaigns')
 @ApiTags('Campaigns')
@@ -85,6 +87,13 @@ export class CampaignController {
      return this.campaignService.findCampaignsByVendorId(vendorId, Number(current) || 1, Number(pageSize) || 10);
    }
 
+  @Get('confirm-invite')
+  @Public()
+  @ApiOperation({ summary: 'Xác nhận vendor tham gia campaign qua link trong email' })
+  async confirmVendorInvite(@Query('token') token: string) {
+    return this.campaignService.confirmVendorInvite(token);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Tạo campaign mới' })
   @ApiResponse({ 
@@ -148,6 +157,12 @@ export class CampaignController {
     @Query() paginationDto: PaginationDto
   ) {
     return this.campaignService.findCampaignVouchers(campaignId, paginationDto);
+  }
+
+  @Post('invite-vendor')
+  @ApiOperation({ summary: 'Mời vendor tham gia campaign (gửi mail xác nhận)' })
+  async inviteVendorToCampaign(@Body() inviteVendorDto: InviteVendorDto) {
+    return this.campaignService.inviteVendorToCampaign(inviteVendorDto);
   }
 
   @Post(':campaignId/vouchers/:voucherId')

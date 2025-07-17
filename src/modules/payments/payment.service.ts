@@ -693,10 +693,8 @@ export class PaymentService {
       } catch (error) {
         console.error('Error reopening scheduled dates after payment failure:', error);
       }
-    }
-
-    // Unlock slot nếu có booking (for single day booking)
-    if (booking && !booking.schedules) {
+    } else if (booking) {
+      // Single day booking: unlock slot nếu có booking
       await this.locationAvailabilityService.unlockSlot(
         this.formatDate(booking.date),
         booking.time,

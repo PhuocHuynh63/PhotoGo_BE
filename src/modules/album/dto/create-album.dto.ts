@@ -2,9 +2,6 @@ import { IsArray, IsOptional, IsString, IsUrl, ArrayMaxSize, IsUUID } from 'clas
 
 export class CreateAlbumDto {
   @IsUUID()
-  userId: string;
-
-  @IsUUID()
   vendorAlbumId: string;
 
   @IsArray()

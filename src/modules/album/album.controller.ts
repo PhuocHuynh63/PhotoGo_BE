@@ -8,6 +8,7 @@ import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
 import { ApiTags, ApiBody, ApiResponse, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiBadRequestResponse, ApiNotFoundResponse, ApiQuery, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { AlbumPaginationDto } from './dto/pagination.dto';
 import { Public } from './../../decorator/custom';
+import { AlbumStatus } from 'src/constants/album.enum';
 
 @ApiTags('Vendor Album')
 @Controller('vendor-albums')
@@ -53,7 +54,8 @@ export class AlbumController {
       type: 'object',
       properties: {
         locationId: { type: 'string', description: 'Location ID' },
-        userId: { type: 'string', description: 'User ID' },
+        bookingId: { type: 'string', description: 'Booking ID' },
+        date: { type: 'string', description: 'Date' },
         driveLink: { type: 'string', format: 'url', description: 'Google Drive link (optional)' },
         photos: {
           type: 'array',
@@ -65,8 +67,14 @@ export class AlbumController {
           items: { type: 'string', format: 'binary' },
           description: 'Behind the scene files (max 3)',
         },
+        status: {
+          type: 'string',
+          description: 'Status',
+          enum: Object.values(AlbumStatus),
+          default: AlbumStatus.NOT_UPLOAD,
+        },
       },
-      required: ['userId', 'locationId'],
+      required: ['bookingId', 'locationId'],
     },
   })
   @ApiCreatedResponse({ description: 'Tạo album thành công' })
@@ -90,6 +98,25 @@ export class AlbumController {
   @ApiOkResponse({ description: 'Danh sách album' })
   async getAlbumsByVendorAlbum(@Param('vendorAlbumId') vendorAlbumId: string, @Query() query: AlbumPaginationDto) {
     return this.albumService.getAlbumsByVendorAlbum(vendorAlbumId, query);
+  }
+
+  //get album theo date
+  @Get('album/date/:date')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách album theo date' })
+  @ApiParam({ name: 'date', type: 'string' })
+  @ApiOkResponse({ description: 'Danh sách album' })
+  async getAlbumsByDate(@Param('date') date: string, @Query() query: AlbumPaginationDto) {
+    return this.albumService.getAlbumsByDate(date, query);
+  }
+
+  @Get('album/location/:locationId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách album theo locationId' })
+  @ApiParam({ name: 'locationId', type: 'string' })
+  @ApiOkResponse({ description: 'Danh sách album' })
+  async getAlbumsByLocation(@Param('locationId') locationId: string, @Query() query: AlbumPaginationDto) {
+    return this.albumService.getAlbumsByLocation(locationId, query);
   }
 
   @Get('album/user/:userId')
@@ -133,7 +160,8 @@ export class AlbumController {
     schema: {
       type: 'object',
       properties: {
-        userId: { type: 'string', description: 'User ID (optional)' },
+        bookingId: { type: 'string', description: 'Booking ID (optional)' },
+        date: { type: 'string', description: 'Date (optional)' },
         locationId: { type: 'string', description: 'Location ID (optional)' },
         driveLink: { type: 'string', format: 'url', description: 'Google Drive link (optional)' },
         photos: {
@@ -145,6 +173,12 @@ export class AlbumController {
           type: 'array',
           items: { type: 'string', format: 'binary' },
           description: 'Behind the scene files (max 3)',
+        },
+        status: {
+          type: 'string',
+          description: 'Status',
+          enum: Object.values(AlbumStatus),
+          default: AlbumStatus.NOT_UPLOAD,
         },
       },
     },
