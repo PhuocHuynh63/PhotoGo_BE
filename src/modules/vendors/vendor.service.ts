@@ -340,8 +340,8 @@ export class VendorService {
             JOIN subscription_plan sp ON sp.id = sv2.plan_id 
             WHERE sv2.vendor_id = $1 
             AND sv2.is_active = true
-            AND sp.price = (
-              SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+            AND sp.price_for_month = (
+              SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
             )
           ) THEN true 
           ELSE false 
@@ -983,8 +983,8 @@ export class VendorService {
               JOIN subscription_plan sp ON sp.id = sv2.plan_id 
               WHERE sv2.vendor_id = v.id 
               AND sv2.is_active = true
-              AND sp.price = (
-                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              AND sp.price_for_month = (
+                SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
               )
             ) THEN true 
             ELSE false 
@@ -1543,8 +1543,8 @@ export class VendorService {
               JOIN subscription_plan sp ON sp.id = sv2.plan_id 
               WHERE sv2.vendor_id = v.id 
               AND sv2.is_active = true
-              AND sp.price = (
-                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              AND sp.price_for_month = (
+                SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
               )
             ) THEN true 
             ELSE false 
@@ -1887,8 +1887,8 @@ export class VendorService {
         JOIN subscription_plan sp ON sp.id = sv2.plan_id 
         WHERE sv2.vendor_id = v.id 
         AND sv2.is_active = true
-        AND sp.price = (
-          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        AND sp.price_for_month = (
+          SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
         )
       )`;
     }
@@ -1899,8 +1899,8 @@ export class VendorService {
         JOIN subscription_plan sp ON sp.id = sv2.plan_id 
         WHERE sv2.vendor_id = v.id 
         AND sv2.is_active = true
-        AND sp.price = (
-          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        AND sp.price_for_month = (
+          SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
         )
       )`;
     }
