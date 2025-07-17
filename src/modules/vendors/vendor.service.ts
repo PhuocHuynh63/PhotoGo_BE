@@ -9,7 +9,7 @@ import { VendorManager } from './entities/vendor-manager.entity';
 import { VendorLike } from './entities/vendor-like.entity';
 import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
-import { slugify } from 'src/utils/utils';
+import { maskEmail, maskPhoneNumber, slugify } from 'src/utils/utils';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
@@ -277,7 +277,11 @@ export class VendorService {
     response.logo = vendor.logo;
     response.banner = vendor.banner;
     response.status = vendor.status;
-    response.user_id = vendor.user_id;
+    response.user_id = {
+      ...vendor.user_id,
+      phoneNumber: maskPhoneNumber(vendor.user_id.phoneNumber),
+      email: maskEmail(vendor.user_id.email),
+    }
     response.category = vendor.category;
     response.locations = vendor.locations.map(loc => ({
       id: loc.id,
