@@ -333,6 +333,15 @@ export class CampaignController {
     return this.campaignService.createLoyaltyCampaign(createLoyaltyCampaignDto);
   }
 
+  //remove voucher out of campaign
+  @Delete(':campaignId/vouchers/:voucherId')
+  @ApiOperation({ summary: 'Xóa voucher khỏi campaign' })
+  @ApiParam({ name: 'campaignId', description: 'ID của campaign' })
+  @ApiParam({ name: 'voucherId', description: 'ID của voucher' })
+  async removeVoucherOutOfCampaign(@Param('campaignId') campaignId: string, @Param('voucherId') voucherId: string): Promise<{ message: string }> {
+    return this.campaignService.removeVoucherOutOfCampaign(campaignId, voucherId);
+  }
+
   @Patch(':campaignId/status')
   @ApiOperation({ summary: 'Cập nhật trạng thái của campaign' })
   @ApiResponse({ status: 200, description: 'Campaign đã được cập nhật trạng thái', type: Campaign })
@@ -399,6 +408,16 @@ export class CampaignController {
   @ApiResponse({ status: 201, description: 'Tạo campaign-vendor thành công', type: CampaignVendor })
   async createCampaignVendor(@Query('campaignId') campaignId: string, @Query('vendorId') vendorId: string): Promise<CampaignVendor> {
     return this.campaignService.createCampaignVendor(campaignId, vendorId);
+  }
+
+  //Get id
+  @Get(':id')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin campaign theo id' })
+  @ApiParam({ name: 'id', description: 'ID của campaign' })
+  @ApiResponse({ status: 200, description: 'Thông tin campaign', type: Campaign })
+  async getCampaignById(@Param('id') id: string): Promise<Campaign> {
+    return this.campaignService.getCampaignById(id);
   }
 
   

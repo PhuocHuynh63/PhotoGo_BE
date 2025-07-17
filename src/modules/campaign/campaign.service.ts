@@ -1098,4 +1098,17 @@ export class CampaignService {
     }
     return { message: 'Xác nhận tham gia campaign thành công', campaignId, vendorId };
   }
+
+  async getCampaignById(id: string) {
+    const campaign = await this.campaignRepository.findOne({ where: { id }});
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    return campaign;
+  }
+
+  async removeVoucherOutOfCampaign(campaignId: string, voucherId: string) {
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { campaignId, voucherId } });
+    if (!campaignVoucher) throw new NotFoundException('Campaign voucher không tồn tại');
+    await this.campaignVoucherRepository.delete(campaignVoucher);
+    return { message: 'Xóa voucher khỏi campaign thành công' };
+  }
 } 
