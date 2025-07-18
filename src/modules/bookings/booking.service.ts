@@ -331,7 +331,7 @@ export class BookingService {
     return {
       isAvailable: unavailableDates.length === 0,
       unavailableDates,
-      reason: unavailableDates.length > 0 
+      reason: unavailableDates.length > 0
         ? `Các ngày sau đã được đặt hoặc không khả dụng: ${unavailableDates.join(', ')}`
         : undefined
     };
@@ -355,7 +355,7 @@ export class BookingService {
           const dateStr = typeof schedule.date === 'string' ? schedule.date : this.formatDate(schedule.date);
           const [day, month, year] = dateStr.split('/');
           const convertedDate = `${year}-${month}-${day}`;
-          
+
           // Find and reopen the working date
           const workingDate = await this.locationWorkingDateRepository.findOne({
             where: {
@@ -698,13 +698,13 @@ export class BookingService {
         }
       }
 
-    // Delete album if booking is timeout, cancelled or failed
-    const album = await this.albumRepository.findOne({
-      where: { bookingId: booking.id },
-    });
-    if (album) {
-      await this.albumRepository.delete(album.id);
-    }
+      // Delete album if booking is timeout, cancelled or failed
+      const album = await this.albumRepository.findOne({
+        where: { bookingId: booking.id },
+      });
+      if (album) {
+        await this.albumRepository.delete(album.id);
+      }
 
       cancelledCount++;
     }
@@ -874,10 +874,10 @@ export class BookingService {
 
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
+
     // Convert date format from DD/MM/YYYY to YYYY-MM-DD
     const convertedDate = this.convertDateFormat(createBookingDto.date);
-    
+
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
@@ -1064,11 +1064,11 @@ export class BookingService {
 
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
+
     // Use the first schedule for the main booking date
     const firstSchedule = createBookingDto.schedules[0];
     const convertedDate = this.convertDateFormat(firstSchedule.date);
-    
+
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
@@ -1085,7 +1085,7 @@ export class BookingService {
     const savedBooking = await this.bookingRepository.save(booking);
 
     // Create booking schedules for all dates
-    const scheduleEntities = createBookingDto.schedules.map(schedule => 
+    const scheduleEntities = createBookingDto.schedules.map(schedule =>
       this.bookingScheduleRepository.create({
         bookingId: savedBooking.id,
         date: new Date(this.convertDateFormat(schedule.date)),
@@ -1257,6 +1257,17 @@ export class BookingService {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
 
+    //location
+    const location = await this.locationRepository.findOne({
+      where: { id: booking.locationId },
+      relations: ['vendor']
+    });
+    if (!location) {
+      throw new NotFoundException(`Chi nhánh với ID ${booking.locationId} không tìm thấy`);
+    }
+    booking.location = location;
+
+
     const formatted = this.formatBookingDates(booking);
     // Lấy payablePrice từ invoice cuối cùng (nếu có)
     const latestInvoice = booking.invoices && booking.invoices.length > 0
@@ -1390,10 +1401,10 @@ export class BookingService {
       const updatedBooking = await this.bookingRepository.save(booking);
 
       // NEW: Reopen scheduled dates if booking is cancelled and it's a multi-day booking
-      if (updateBookingDto.status === BookingStatus.CANCELLED && 
-          oldStatus !== BookingStatus.CANCELLED &&
-          booking.schedules && 
-          booking.schedules.length > 0) {
+      if (updateBookingDto.status === BookingStatus.CANCELLED &&
+        oldStatus !== BookingStatus.CANCELLED &&
+        booking.schedules &&
+        booking.schedules.length > 0) {
         try {
           await this.reopenScheduledDates(id);
         } catch (error) {
@@ -1419,7 +1430,7 @@ export class BookingService {
 
   async remove(id: string): Promise<void> {
     const booking = await this.findOne(id);
-    
+
     // NEW: Reopen scheduled dates if this is a multi-day booking
     if (booking.schedules && booking.schedules.length > 0) {
       try {
@@ -1428,7 +1439,7 @@ export class BookingService {
         console.error('Error reopening scheduled dates when removing booking:', error);
       }
     }
-    
+
     await this.bookingRepository.remove(booking);
   }
 
@@ -1506,7 +1517,7 @@ export class BookingService {
    */
   public async calculateRushFee(userId: string, bookingDate: Date, finalPrice: number): Promise<number> {
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     let diffDays = 0;
     if (bookingDate) {
       diffDays = Math.ceil((bookingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -1526,11 +1537,11 @@ export class BookingService {
     getDiscountAmountDto: GetDiscountAmountDto
   ): Promise<{ discount: number, depositAmount: number, remainingAmount: number, rushFee?: number, totalPayable?: number }> {
     // 1. Find the service concept
-    const serviceConcept = await this.serviceConceptRepository.findOne({ 
-      where: { id: serviceConceptId }, 
-      relations: ['servicePackage', 'servicePackage.vendor'] 
+    const serviceConcept = await this.serviceConceptRepository.findOne({
+      where: { id: serviceConceptId },
+      relations: ['servicePackage', 'servicePackage.vendor']
     });
-    
+
     if (!serviceConcept) {
       throw new NotFoundException(`Service Concept với ID ${serviceConceptId} không tìm thấy`);
     }
@@ -1572,24 +1583,24 @@ export class BookingService {
     }
 
     // 2. Find and validate voucher
-    const voucher = await this.voucherRepository.findOne({ 
-      where: { id: getDiscountAmountDto.voucherId } 
+    const voucher = await this.voucherRepository.findOne({
+      where: { id: getDiscountAmountDto.voucherId }
     });
-    
+
     if (!voucher) {
       throw new NotFoundException(`Voucher với ID ${getDiscountAmountDto.voucherId} không tìm thấy`);
     }
 
     // 3. Check voucher availability and ownership
-    const campaignVoucher = await this.campaignVoucherRepository.findOne({ 
-      where: { voucherId: voucher.id, isAvailable: true }, 
-      relations: ['campaign'] 
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { voucherId: voucher.id, isAvailable: true },
+      relations: ['campaign']
     });
-    
-    const voucherUser = await this.voucherUserRepository.findOne({ 
-      where: { voucher_id: voucher.id, user_id: userId } 
+
+    const voucherUser = await this.voucherUserRepository.findOne({
+      where: { voucher_id: voucher.id, user_id: userId }
     });
-    
+
     if (!campaignVoucher && !voucherUser) {
       throw new NotFoundException('Voucher không thuộc campaign hoặc không thuộc user');
     }
@@ -1598,9 +1609,9 @@ export class BookingService {
     if (campaignVoucher) {
       const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
       // Lấy tất cả các vendor khả dụng của campaign
-      const campaignVendors = await campaignVendorRepo.find({ 
-        where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, 
-        relations: ['vendor'] 
+      const campaignVendors = await campaignVendorRepo.find({
+        where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true },
+        relations: ['vendor']
       });
       const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
       // Kiểm tra vendor của dịch vụ có nằm trong danh sách các vendor khả dụng không
@@ -1619,7 +1630,7 @@ export class BookingService {
     const currentDate = new Date();
     const startDate = new Date(voucher.start_date);
     const endDate = new Date(voucher.end_date);
-    
+
     if (currentDate < startDate || currentDate > endDate) {
       throw new BadRequestException('Voucher đã hết hạn hoặc chưa đến thời gian sử dụng');
     }
@@ -1631,7 +1642,7 @@ export class BookingService {
 
     // 6. Calculate discount amount
     let discountAmount = 0;
-    
+
     if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
       // Percentage discount
       discountAmount = finalPrice * (Number(voucher.discount_value) / 100);
@@ -1649,7 +1660,7 @@ export class BookingService {
 
     // 8. Calculate final price after discount and ensure it's not negative
     let discountedFinalPrice = finalPrice - discountAmount;
-    
+
     // Ensure final price is not negative
     if (discountedFinalPrice < 0) {
       discountAmount = finalPrice;
@@ -1658,7 +1669,7 @@ export class BookingService {
 
     // 9. Calculate deposit amount based on final price
     const depositAmount = (discountedFinalPrice * depositPercentage / 100);
-    
+
     // 10. Calculate remaining amount
     const remainingAmount = discountedFinalPrice - depositAmount;
 

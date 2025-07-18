@@ -38,7 +38,7 @@ export class AlbumService {
     @InjectRepository(VendorAlbum)
     private readonly vendorAlbumRepository: Repository<VendorAlbum>,
     private readonly uploadService: UploadService,
-  ) {}
+  ) { }
 
   async createVendorAlbum(locationId: string) {
     const vendorAlbum = this.vendorAlbumRepository.create({ location: { id: locationId } });
@@ -316,35 +316,13 @@ export class AlbumService {
     };
   }
 
-  async getAlbumsByBookingId(bookingId: string, query: AlbumPaginationDto = {}): Promise<{
-    data: Album[];
-    pagination: {
-      current: number;
-      pageSize: number;
-      totalPage: number;
-      totalItem: number;
-    };
-  }> {
-    const { current = 1, pageSize = 10, sortBy = 'createdAt', sortDirection = 'DESC' } = query;
-    const skip = (current - 1) * pageSize;
+  async getAlbumsByBookingId(bookingId: string) {
     const where: any = { booking: { id: bookingId } };
-    const [data, total] = await this.albumRepository.findAndCount({
+    const res = await this.albumRepository.findOne({
       where,
       relations: ['vendorAlbum', 'booking', 'booking.user'],
-      skip,
-      take: pageSize,
-      order: { [sortBy]: sortDirection },
     });
-    const totalPage = Math.ceil(total / pageSize);
-    return {
-      data,
-      pagination: {
-        current,
-        pageSize,
-        totalPage,
-        totalItem: total,
-      },
-    };
+    return res;
   }
 
   // async getAlbumsByDate(date: string, query: AlbumPaginationDto = {}) {
