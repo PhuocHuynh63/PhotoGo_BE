@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { FindNotificationDto } from './dto/find-notification.dto';
+import { FindNotificationDto, FindNotificationDtoByUser } from './dto/find-notification.dto';
 import { NotificationType } from '../../constants/notification.enum';
 import { User } from '../users/entities/user.entity';
 
@@ -43,12 +43,6 @@ export class NotificationService {
     //# Add relations to the query builder
     queryBuilder.leftJoinAndSelect('notification.user', 'user');
 
-    if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(notification.title) ILIKE unaccent(:term) OR unaccent(notification.message) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
-    }
 
     if (query.type) {
       queryBuilder.andWhere('notification.type = :type', { type: query.type });
@@ -123,7 +117,7 @@ export class NotificationService {
 
     // Create notification directly with repository instead of using DTO
     const notification = this.notificationRepository.create({
-      user: user, // Use user entity directly
+      user: { id: user.id }, // Use user id only
       title: 'Đăng nhập thành công',
       message: `Chào mừng ${user.fullName}! Bạn đã đăng nhập vào PhotoGo${methodText} lúc ${currentTime}${deviceInfo ? ` từ ${deviceInfo}` : ''}`,
       type: NotificationType.LOGIN,
@@ -143,7 +137,7 @@ export class NotificationService {
     const streakMessage = consecutiveDays > 1 ? ` Chuỗi điểm danh: ${consecutiveDays} ngày liên tiếp.` : '';
 
     const notification = this.notificationRepository.create({
-      user: user,
+      user: { id: user.id },
       title: 'Điểm danh thành công!',
       message: `Bạn đã nhận được ${pointsEarned} điểm từ việc điểm danh hôm nay.${streakMessage}${streakBonus} Hãy tiếp tục duy trì!`,
       type: NotificationType.INFO, // Temporarily use INFO until we update database enum
@@ -160,7 +154,7 @@ export class NotificationService {
    */
   async notifyVoucherExchange(user: User, voucherCode: string): Promise<Notification> {
     const notification = this.notificationRepository.create({
-      user: user,
+      user: { id: user.id },
       title: 'Đổi voucher thành công!',
       message: `Bạn đã nhận được voucher "${voucherCode}". Hãy kiểm tra trong "Mã ưu đãi" để sử dụng.`,
       type: NotificationType.SUCCESS, // Use SUCCESS for voucher received
@@ -177,7 +171,7 @@ export class NotificationService {
    */
   async notifyPointDeduction(user: User, pointsDeducted: number, reason: string): Promise<Notification> {
     const notification = this.notificationRepository.create({
-      user: user,
+      user: { id: user.id },
       title: 'Trừ điểm',
       message: `Bạn đã bị trừ ${pointsDeducted} điểm cho ${reason}.`,
       type: NotificationType.WARNING, // Use WARNING for point deduction
@@ -200,6 +194,18 @@ export class NotificationService {
   }
   //#endregion markAllAsRead
 
+  //#region markAsRead
+  /**
+   * Utility: Đánh dấu thông báo đã đọc
+   */
+  async markAsRead(userId: string, notificationId: string): Promise<void> {
+    await this.notificationRepository.update(
+      { id: notificationId, user: { id: userId } },
+      { is_read: true }
+    );
+  }
+  //#endregion markAsRead
+
   //#region getUnreadCount
   /**
    * Utility: Lấy số lượng notifications chưa đọc
@@ -215,8 +221,8 @@ export class NotificationService {
   /**
    * Lấy notifications của user cụ thể với pagination và filter
    */
-  async findNotificationsByUser(userId: string, query: FindNotificationDto): Promise<{
-    data: Notification[];
+  async findNotificationsByUser(userId: string, query: FindNotificationDtoByUser): Promise<{
+    data: any[]; // Đổi sang any[] để map lại structure
     pagination: {
       current: number;
       pageSize: number;
@@ -236,19 +242,8 @@ export class NotificationService {
     // Filter by user ID
     queryBuilder.andWhere('notification.user.id = :userId', { userId });
 
-    if (query.term) {
-      queryBuilder.andWhere(
-        `(unaccent(notification.title) ILIKE unaccent(:term) OR unaccent(notification.message) ILIKE unaccent(:term))`,
-        { term: `%${query.term}%` },
-      );
-    }
-
     if (query.type) {
       queryBuilder.andWhere('notification.type = :type', { type: query.type });
-    }
-
-    if (query.is_read !== undefined) {
-      queryBuilder.andWhere('notification.is_read = :is_read', { is_read: query.is_read });
     }
 
     // Sort by created_at descending (newest first)  
@@ -259,9 +254,21 @@ export class NotificationService {
 
     const [data, totalItem] = await queryBuilder.getManyAndCount();
     const totalPage = Math.ceil(totalItem / pageSize);
+    console.log('DEBUG full query:', query);
+
+    // Map lại để chỉ trả về userId thay vì object user
+    const mappedData = data.map((n) => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      is_read: n.is_read,
+      created_at: n.created_at,
+      userId: n.user?.id || userId,
+    }));
 
     return {
-      data,
+      data: mappedData,
       pagination: {
         current: currentPage,
         pageSize,
@@ -290,7 +297,7 @@ export class NotificationService {
     }
 
     const notification = this.notificationRepository.create({
-      user: user,
+      user: { id: user.id },
       title: 'Nhắc nhở gia hạn đăng ký',
       message: `Gói đăng ký "${planName}" của bạn sẽ được gia hạn ${timeMessage}. Hãy đảm bảo tài khoản đủ số dư để thanh toán tự động.`,
       type: NotificationType.INFO,
@@ -310,7 +317,7 @@ export class NotificationService {
     const endDate = new Date(subscription.endDate).toLocaleDateString('vi-VN');
 
     const notification = this.notificationRepository.create({
-      user: user,
+      user: { id: user.id },
       title: 'Gói đăng ký đã hết hạn',
       message: `Gói đăng ký "${planName}" của bạn đã hết hạn vào ngày ${endDate}. Hãy gia hạn để tiếp tục sử dụng dịch vụ.`,
       type: NotificationType.WARNING,
