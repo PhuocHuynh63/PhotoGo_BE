@@ -69,15 +69,11 @@ export class FindAllDto extends PaginationDto {
 }
 
 export class FindAllVendorWithInvitedDto extends PaginationDto {
-  // isAvailable  
-  @ApiProperty({ description: 'Campaign đã xác nhận chưa?', required: false, example: true })
-  @IsBoolean()
+  @ApiProperty({ description: 'Campaign đã xác nhận chưa?', required: false, example: 'true' })
   @IsOptional()
-  isAvailable?: boolean;
+  isAvailable?: string;
 
-  // invited
-  @ApiProperty({ description: 'Campaign đã được gửi mail xác nhận chưa?', required: false, example: true })
-  @IsBoolean()
+  @ApiProperty({ description: 'Campaign đã được gửi mail xác nhận chưa?', required: false, example: 'true' })
   @IsOptional()
-  invited?: boolean;
+  invited?: string;
 }

@@ -1030,11 +1030,24 @@ export class CampaignService {
     const queryBuilder = this.campaignVendorRepository.createQueryBuilder('campaign_vendor')
       .leftJoinAndSelect('campaign_vendor.vendor', 'vendor')
       .where('campaign_vendor.campaign_id = :campaignId', { campaignId });
-    if (typeof isAvailable === 'boolean') {
-      queryBuilder.andWhere('campaign_vendor.is_available = :isAvailable', { isAvailable });
+
+    function parseBool(val: any) {
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'string') {
+        if (val.toLowerCase() === 'true') return true;
+        if (val.toLowerCase() === 'false') return false;
+      }
+      return undefined;
     }
-    if (typeof invited === 'boolean') {
-      queryBuilder.andWhere('campaign_vendor.invited = :invited', { invited });
+
+    const isAvailableBool = parseBool(isAvailable);
+    const invitedBool = parseBool(invited);
+
+    if (isAvailableBool !== undefined) {
+      queryBuilder.andWhere('campaign_vendor.is_available = :isAvailable', { isAvailable: isAvailableBool });
+    }
+    if (invitedBool !== undefined) {
+      queryBuilder.andWhere('campaign_vendor.invited = :invited', { invited: invitedBool });
     }
     const total = await queryBuilder.getCount();
     const skip = (current - 1) * pageSize;
