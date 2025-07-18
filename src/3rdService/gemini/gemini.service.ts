@@ -141,17 +141,48 @@ export class GeminiService {
     async generateText(prompt: string): Promise<IGeminiResponse<any>> {
         const startTime = Date.now();
         if (this.isSuggestConceptPrompt(prompt) || this.isServicePrompt(prompt)) {
-            // Use injected repository
-            let concepts = await this.serviceConceptRepository.find({
-                relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
-                order: { createdAt: 'ASC' },
-                take: 5
-            });
-            let withImage = concepts.filter(c => Array.isArray(c.images) && c.images.length > 0 && c.images[0]?.imageUrl);
-            let withoutImage = concepts.filter(c => !Array.isArray(c.images) || c.images.length === 0 || !c.images[0]?.imageUrl);
-            let selected = [...withImage.slice(0, 2), ...withoutImage.slice(0, 1)];
-            if (selected.length < 3) {
-                selected = [...withImage, ...withoutImage].slice(0, 3);
+            // ✅ NEW: Use location-aware concept retrieval
+            this.logger.debug(`Processing location-aware concept suggestion for prompt: "${prompt}"`);
+
+            const locationInfo = this.detectLocationFromPrompt(prompt);
+            const { location: detectedLocation, address: detectedAddress } = locationInfo;
+            let selected = await this.getLocationAwareConcepts(prompt, 5);
+
+            // ✅ Enhanced message for location-specific results
+            let locationMessage = '';
+            if (detectedLocation && selected.length > 0) {
+                const locationDisplayName = this.getLocationDisplayName(detectedLocation);
+                const addressPart = detectedAddress ? ` (${detectedAddress})` : '';
+                locationMessage = ` tại ${locationDisplayName}${addressPart}`;
+                this.logger.debug(`Found ${selected.length} concepts for location: ${detectedLocation}${detectedAddress ? `, address: ${detectedAddress}` : ''}`);
+            } else if (detectedLocation && selected.length === 0) {
+                // Fallback to general concepts if no location-specific concepts found
+                this.logger.debug(`No concepts found for location: ${detectedLocation}${detectedAddress ? `, address: ${detectedAddress}` : ''}, falling back to general concepts`);
+                selected = await this.serviceConceptRepository.find({
+                    relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                    where: { status: ServiceConceptStatus.ACTIVE },
+                    order: { createdAt: 'DESC' },
+                    take: 5
+                });
+
+                // Prioritize concepts with images
+                let withImage = selected.filter(c => Array.isArray(c.images) && c.images.length > 0 && c.images[0]?.imageUrl);
+                let withoutImage = selected.filter(c => !Array.isArray(c.images) || c.images.length === 0 || !c.images[0]?.imageUrl);
+                selected = [...withImage.slice(0, 3), ...withoutImage.slice(0, 2)].slice(0, 5);
+
+                const locationDisplayName = this.getLocationDisplayName(detectedLocation);
+                const addressPart = detectedAddress ? ` (${detectedAddress})` : '';
+                locationMessage = `. Hiện tại chưa có concept tại ${locationDisplayName}${addressPart}, đây là một số concept tổng hợp`;
+            }
+
+            // Ensure we have at least some concepts
+            if (selected.length === 0) {
+                selected = await this.serviceConceptRepository.find({
+                    relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                    where: { status: ServiceConceptStatus.ACTIVE },
+                    order: { createdAt: 'DESC' },
+                    take: 5
+                });
             }
 
             // Transform concepts to match concepts_same format from analyzeImageWithConcepts
@@ -172,23 +203,42 @@ export class GeminiService {
                 model: GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION,
                 generationConfig: { ...this.generationConfig, maxOutputTokens: 512 },
             });
-            const enhancedPrompt = `${this.systemContext}\n\nUser: ${prompt}`;
+
+            // ✅ Enhanced prompt with location context
+            const locationContext = detectedLocation ? `\n\nLưu ý: Người dùng quan tâm đến concept${locationMessage}.` : '';
+            const enhancedPrompt = `${this.systemContext}${locationContext}\n\nUser: ${prompt}`;
+
             const result = await model.generateContent({
                 contents: [{ role: 'user', parts: [{ text: enhancedPrompt }] }],
                 safetySettings: this.safetySettings,
             });
             const response = result.response.text();
 
+            // ✅ Dynamic example text based on location context
+            let exampleText = this.isServicePrompt(prompt)
+                ? "Một số dịch vụ nổi bật của PhotoGo"
+                : "Một số concept nổi bật của PhotoGo";
+
+            if (locationMessage) {
+                exampleText += locationMessage;
+            }
+            exampleText += ":";
+
             return {
                 success: true,
                 data: {
                     text: response,
-                    example: this.isServicePrompt(prompt)
-                        ? "Một số dịch vụ nổi bật của PhotoGo:"
-                        : "Một số concept nổi bật của PhotoGo:",
+                    example: exampleText,
                     concepts_same: concepts_same
                 },
-                metadata: { processingTime: Date.now() - startTime }
+                metadata: {
+                    processingTime: Date.now() - startTime,
+                    detectedLocation: detectedLocation,
+                    detectedAddress: detectedAddress,
+                    conceptCount: selected.length,
+                    locationFiltered: !!detectedLocation,
+                    addressFiltered: !!detectedAddress
+                }
             };
         }
 
@@ -1929,5 +1979,374 @@ Hãy phân tích ảnh:`;
         }
 
         return 'unknown';
+    }
+
+    /**
+ * ✅ NEW: Detect location and address from user prompt
+ */
+    private detectLocationFromPrompt(prompt: string): { location: string | null; address: string | null } {
+        const promptLower = prompt.toLowerCase();
+
+        // Normalize Vietnamese text
+        const normalizeVietnamese = (str: string): string => {
+            return str.normalize('NFD')
+                .replace(/\p{Diacritic}/gu, '')
+                .replace(/đ/g, 'd').replace(/Đ/g, 'D');
+        };
+
+        const promptNormalized = normalizeVietnamese(promptLower);
+
+        // Location keywords mapping
+        const locationKeywords = {
+            'ho chi minh': ['tp hcm', 'tphcm', 'ho chi minh', 'hồ chí minh', 'sai gon', 'sài gòn', 'saigon', 'hcm', 'tp.hcm'],
+            'ha noi': ['ha noi', 'hà nội', 'hanoi', 'hn', 'thu do', 'thủ đô'],
+            'da nang': ['da nang', 'đà nẵng', 'danang', 'dn'],
+            'can tho': ['can tho', 'cần thơ', 'cantho', 'ct'],
+            'hai phong': ['hai phong', 'hải phòng', 'haiphong', 'hp'],
+            'vung tau': ['vung tau', 'vũng tàu', 'vungtau', 'vt'],
+            'nha trang': ['nha trang', 'nha trang', 'nhatrang', 'nt'],
+            'da lat': ['da lat', 'đà lạt', 'dalat', 'dl']
+        };
+
+        let detectedLocation: string | null = null;
+        let usedKeyword: string | null = null;
+
+        // Check for location keywords
+        for (const [location, keywords] of Object.entries(locationKeywords)) {
+            for (const keyword of keywords) {
+                const keywordNormalized = normalizeVietnamese(keyword);
+                if (promptLower.includes(keyword) || promptNormalized.includes(keywordNormalized)) {
+                    this.logger.debug(`Detected location: ${location} from keyword: ${keyword}`);
+                    detectedLocation = location;
+                    usedKeyword = keyword;
+                    break;
+                }
+            }
+            if (detectedLocation) break;
+        }
+
+        // ✅ ENHANCED: Always check for address patterns, not just after city detection
+        let detectedAddress: string | null = null;
+
+        // Extract potential address using common Vietnamese address patterns
+        const addressPatterns = [
+            // Street patterns (enhanced)
+            /([^,.\n]*(?:đường|đ\.?|street|st\.?|phố|ph\.?)[^,.\n]*)/gi,
+            // District patterns  
+            /([^,.\n]*(?:quận|q\.?|district|dist\.?|huyện|h\.?)[^,.\n]*)/gi,
+            // Ward patterns
+            /([^,.\n]*(?:phường|p\.?|ward|w\.?|xã|x\.?)[^,.\n]*)/gi,
+            // Address number patterns
+            /(\d+[a-z]?\s+[^,.\n]+)/gi,
+            // Common address words
+            /([^,.\n]*(?:tòa nhà|tower|building|bldg|center|centre|plaza|complex)[^,.\n]*)/gi,
+            // ✅ NEW: Common Vietnamese street names
+            /(nguyễn [^,.\n]*|trần [^,.\n]*|lê [^,.\n]*|phạm [^,.\n]*|hoàng [^,.\n]*|võ [^,.\n]*)/gi
+        ];
+
+        const words = promptLower.split(/[\s,]+/).filter(w => w.length > 1);
+        const possibleAddresses: string[] = [];
+
+        // Look for street/address indicators
+        for (const word of words) {
+            if (this.isAddressKeyword(word)) {
+                // Take this word and a few surrounding words
+                const wordIndex = words.indexOf(word);
+                const start = Math.max(0, wordIndex - 1);
+                const end = Math.min(words.length, wordIndex + 3);
+                const addressPart = words.slice(start, end).join(' ');
+                possibleAddresses.push(addressPart);
+            }
+        }
+
+        // ✅ NEW: Check for Vietnamese street name patterns (Nguyễn, Trần, etc.)
+        const vietnameseNamePatterns = [
+            /nguyễn\s+[\w\s]+/gi,
+            /trần\s+[\w\s]+/gi,
+            /lê\s+[\w\s]+/gi,
+            /phạm\s+[\w\s]+/gi,
+            /hoàng\s+[\w\s]+/gi,
+            /võ\s+[\w\s]+/gi,
+            /đỗ\s+[\w\s]+/gi,
+            /bùi\s+[\w\s]+/gi,
+            /đặng\s+[\w\s]+/gi,
+            /vũ\s+[\w\s]+/gi
+        ];
+
+        for (const pattern of vietnameseNamePatterns) {
+            const matches = prompt.match(pattern);
+            if (matches) {
+                possibleAddresses.push(...matches.map(m => m.trim()));
+            }
+        }
+
+        // Try regex patterns
+        for (const pattern of addressPatterns) {
+            const matches = prompt.match(pattern);
+            if (matches) {
+                possibleAddresses.push(...matches.map(m => m.trim()));
+            }
+        }
+
+        // ✅ NEW: If we have city context, look for address after city keyword
+        if (detectedLocation && usedKeyword) {
+            const keywordIndex = promptLower.indexOf(usedKeyword);
+            const afterKeyword = prompt.substring(keywordIndex + usedKeyword.length).trim();
+
+            if (afterKeyword.length > 3) {
+                const afterWords = afterKeyword.split(/[\s,]+/).filter(w => w.length > 1);
+
+                for (const word of afterWords) {
+                    if (this.isAddressKeyword(word)) {
+                        const wordIndex = afterWords.indexOf(word);
+                        const start = Math.max(0, wordIndex - 1);
+                        const end = Math.min(afterWords.length, wordIndex + 3);
+                        const addressPart = afterWords.slice(start, end).join(' ');
+                        possibleAddresses.push(addressPart);
+                    }
+                }
+            }
+        }
+
+        // Take the longest/most specific address
+        if (possibleAddresses.length > 0) {
+            detectedAddress = possibleAddresses
+                .filter(addr => addr.length > 3)
+                .sort((a, b) => b.length - a.length)[0];
+
+            if (detectedAddress) {
+                // Clean up the address
+                detectedAddress = detectedAddress
+                    .replace(/^[,.\s]+|[,.\s]+$/g, '') // Remove leading/trailing punctuation
+                    .replace(/\s+/g, ' ') // Normalize spaces
+                    .trim();
+
+                if (detectedAddress.length > 3) {
+                    this.logger.debug(`Detected address: "${detectedAddress}"${detectedLocation ? ` near ${detectedLocation}` : ''}`);
+                } else {
+                    detectedAddress = null;
+                }
+            }
+        }
+
+        // Check for general location indicators
+        const generalLocationKeywords = [
+            'gần', 'gan', 'near', 'nearby', 'around', 'quanh', 'xung quanh',
+            'tại', 'tai', 'at', 'in', 'ở', 'o', 'trong', 'area', 'khu vực', 'khu vuc'
+        ];
+
+        const hasLocationIndicator = generalLocationKeywords.some(kw =>
+            promptLower.includes(kw) || promptNormalized.includes(normalizeVietnamese(kw))
+        );
+
+        if (hasLocationIndicator && !detectedLocation && !detectedAddress) {
+            this.logger.debug(`Detected general location indicator in prompt`);
+            // Could extend this to extract city names using NLP
+        }
+
+        return {
+            location: detectedLocation,
+            address: detectedAddress
+        };
+    }
+
+    /**
+     * ✅ NEW: Check if a word is likely an address keyword
+     */
+    private isAddressKeyword(word: string): boolean {
+        const addressKeywords = [
+            // Street indicators
+            'đường', 'duong', 'đ', 'd', 'street', 'st', 'phố', 'pho', 'ph',
+            // District indicators  
+            'quận', 'quan', 'q', 'district', 'dist', 'huyện', 'huyen', 'h',
+            // Ward indicators
+            'phường', 'phuong', 'p', 'ward', 'w', 'xã', 'xa', 'x',
+            // Building indicators
+            'tòa', 'toa', 'tower', 'building', 'bldg', 'center', 'centre', 'plaza', 'complex',
+            // Common street names
+            'nguyễn', 'nguyen', 'trần', 'tran', 'lê', 'le', 'phạm', 'pham', 'hoàng', 'hoang',
+            'võ', 'vo', 'đỗ', 'do', 'bùi', 'bui', 'dương', 'duong', 'mai', 'cao', 'hồ', 'ho'
+        ];
+
+        const wordLower = word.toLowerCase().replace(/[^\w]/g, '');
+        return addressKeywords.some(keyword =>
+            wordLower.includes(keyword.toLowerCase()) ||
+            keyword.toLowerCase().includes(wordLower)
+        );
+    }
+
+    /**
+     * ✅ NEW: Filter concepts by detected location and address
+     */
+    private async filterConceptsByLocation(concepts: any[], locationInfo: { location: string | null; address: string | null }): Promise<any[]> {
+        const { location: detectedLocation, address: detectedAddress } = locationInfo;
+
+        if (!detectedLocation || !concepts.length) {
+            return concepts;
+        }
+
+        this.logger.debug(`Filtering ${concepts.length} concepts by location: ${detectedLocation}${detectedAddress ? `, address: ${detectedAddress}` : ''}`);
+
+        // Location mapping for database search
+        const locationMapping = {
+            'ho chi minh': ['hồ chí minh', 'ho chi minh', 'hcm', 'sài gòn', 'saigon'],
+            'ha noi': ['hà nội', 'ha noi', 'hanoi', 'thủ đô'],
+            'da nang': ['đà nẵng', 'da nang', 'danang'],
+            'can tho': ['cần thơ', 'can tho'],
+            'hai phong': ['hải phòng', 'hai phong'],
+            'vung tau': ['vũng tàu', 'vung tau'],
+            'nha trang': ['nha trang'],
+            'da lat': ['đà lạt', 'da lat']
+        };
+
+        const locationNames = locationMapping[detectedLocation] || [detectedLocation];
+
+        // Filter concepts that have vendors in the specified location
+        const conceptsWithScores = concepts.map(concept => {
+            if (!concept.servicePackage?.vendor?.locations || !Array.isArray(concept.servicePackage.vendor.locations)) {
+                return { concept, score: 0, matchesLocation: false };
+            }
+
+            let score = 0;
+            let matchesLocation = false;
+
+            for (const location of concept.servicePackage.vendor.locations) {
+                const locationStr = `${location.city || ''} ${location.province || ''}`.toLowerCase();
+                const addressStr = (location.address || '').toLowerCase();
+
+                // Check if location matches
+                const locationMatches = locationNames.some(name => locationStr.includes(name.toLowerCase()));
+                if (locationMatches) {
+                    matchesLocation = true;
+                    score += 1; // Base score for location match
+
+                    // Bonus score for address match
+                    if (detectedAddress && addressStr.length > 0) {
+                        const addressWords = detectedAddress.toLowerCase().split(/\s+/);
+                        const addressMatchCount = addressWords.filter(word =>
+                            word.length > 2 && addressStr.includes(word)
+                        ).length;
+
+                        if (addressMatchCount > 0) {
+                            const addressMatchRatio = addressMatchCount / addressWords.length;
+                            score += addressMatchRatio * 2; // Up to 2 bonus points for address match
+                            this.logger.debug(`Address match for "${concept.name}": ${addressMatchCount}/${addressWords.length} words (${location.address})`);
+                        }
+                    }
+                }
+            }
+
+            return { concept, score, matchesLocation };
+        });
+
+        // Filter out concepts that don't match the location
+        const locationFilteredConcepts = conceptsWithScores
+            .filter(item => item.matchesLocation)
+            .sort((a, b) => b.score - a.score) // Sort by score (address matches first)
+            .map(item => item.concept);
+
+        this.logger.debug(`Filtered result: ${locationFilteredConcepts.length}/${concepts.length} concepts match location ${detectedLocation}`);
+
+        return locationFilteredConcepts;
+    }
+
+    /**
+     * ✅ NEW: Get display name for detected location
+     */
+    private getLocationDisplayName(locationCode: string): string {
+        const locationDisplayNames = {
+            'ho chi minh': 'TP. Hồ Chí Minh',
+            'ha noi': 'Hà Nội',
+            'da nang': 'Đà Nẵng',
+            'can tho': 'Cần Thơ',
+            'hai phong': 'Hải Phòng',
+            'vung tau': 'Vũng Tàu',
+            'nha trang': 'Nha Trang',
+            'da lat': 'Đà Lạt'
+        };
+
+        return locationDisplayNames[locationCode] || locationCode;
+    }
+
+    /**
+ * ✅ NEW: Get location-aware concepts for text queries  
+ */
+    private async getLocationAwareConcepts(prompt: string, limit: number = 5): Promise<any[]> {
+        // Detect location and address from prompt
+        const locationInfo = this.detectLocationFromPrompt(prompt);
+        const { location: detectedLocation, address: detectedAddress } = locationInfo;
+
+        // Build query with location filtering if detected
+        let queryBuilder = this.serviceConceptRepository.createQueryBuilder('sc')
+            .leftJoinAndSelect('sc.images', 'images')
+            .leftJoinAndSelect('sc.servicePackage', 'sp')
+            .leftJoinAndSelect('sp.vendor', 'v')
+            .leftJoinAndSelect('v.locations', 'l')
+            .where('sc.status = :status', { status: ServiceConceptStatus.ACTIVE });
+
+        // Apply location filter if detected
+        if (detectedLocation) {
+            const locationMapping = {
+                'ho chi minh': ['hồ chí minh', 'ho chi minh', 'hcm', 'sài gòn', 'saigon'],
+                'ha noi': ['hà nội', 'ha noi', 'hanoi', 'thủ đô'],
+                'da nang': ['đà nẵng', 'da nang', 'danang'],
+                'can tho': ['cần thơ', 'can tho'],
+                'hai phong': ['hải phòng', 'hai phong'],
+                'vung tau': ['vũng tàu', 'vung tau'],
+                'nha trang': ['nha trang'],
+                'da lat': ['đà lạt', 'da lat']
+            };
+
+            const locationNames = locationMapping[detectedLocation] || [detectedLocation];
+
+            const locationConditions = locationNames.map((name, index) =>
+                `(LOWER(l.city) LIKE :location${index} OR LOWER(l.province) LIKE :location${index})`
+            ).join(' OR ');
+
+            if (locationConditions) {
+                queryBuilder = queryBuilder.andWhere(`(${locationConditions})`);
+
+                locationNames.forEach((name, index) => {
+                    queryBuilder.setParameter(`location${index}`, `%${name.toLowerCase()}%`);
+                });
+            }
+
+            // ✅ NEW: Add address filtering if provided
+            if (detectedAddress) {
+                const addressWords = detectedAddress.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+                if (addressWords.length > 0) {
+                    const addressConditions = addressWords.map((word, index) =>
+                        `LOWER(l.address) LIKE :address${index}`
+                    ).join(' OR ');
+
+                    if (addressConditions) {
+                        queryBuilder = queryBuilder.andWhere(`(${addressConditions})`);
+
+                        addressWords.forEach((word, index) => {
+                            queryBuilder.setParameter(`address${index}`, `%${word}%`);
+                        });
+                    }
+                }
+            }
+        }
+
+        // Execute query with limit
+        const concepts = await queryBuilder
+            .orderBy('sc.createdAt', 'DESC')
+            .limit(limit * 3) // Get more to ensure we have enough after address filtering
+            .getMany();
+
+        this.logger.debug(`Found ${concepts.length} concepts for location: ${detectedLocation || 'any'}${detectedAddress ? `, address: ${detectedAddress}` : ''}`);
+
+        // ✅ NEW: Use advanced filtering with address scoring
+        const filteredConcepts = await this.filterConceptsByLocation(concepts, locationInfo);
+
+        // Prioritize concepts with images
+        const withImage = filteredConcepts.filter(c => Array.isArray(c.images) && c.images.length > 0 && c.images[0]?.imageUrl);
+        const withoutImage = filteredConcepts.filter(c => !Array.isArray(c.images) || c.images.length === 0 || !c.images[0]?.imageUrl);
+
+        const selected = [...withImage.slice(0, Math.ceil(limit * 0.7)), ...withoutImage.slice(0, Math.floor(limit * 0.3))];
+
+        return selected.slice(0, limit);
     }
 }
