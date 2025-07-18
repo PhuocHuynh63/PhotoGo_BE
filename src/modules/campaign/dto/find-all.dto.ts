@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsNumber, Min, IsBoolean, IsDateString, ValidateIf, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 export class PaginationDto {
   @ApiProperty({ required: false, default: 1 })
     @Type(() => Number)
@@ -69,11 +69,13 @@ export class FindAllDto extends PaginationDto {
 }
 
 export class FindAllVendorWithInvitedDto extends PaginationDto {
-  @ApiProperty({ description: 'Campaign đã xác nhận chưa?', required: false, example: 'true' })
+  @ApiProperty({ description: 'Campaign đã xác nhận chưa?', required: false, example: true })
   @IsOptional()
-  isAvailable?: string;
+  @Transform(({ value }) => value === 'true')
+  isAvailable?: boolean;
 
-  @ApiProperty({ description: 'Campaign đã được gửi mail xác nhận chưa?', required: false, example: 'true' })
+  @ApiProperty({ description: 'Campaign đã được gửi mail xác nhận chưa?', required: false, example: true })
   @IsOptional()
-  invited?: string;
+  @Transform(({ value }) => value === 'true')
+  invited?: boolean;
 }

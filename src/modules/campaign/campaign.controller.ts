@@ -75,20 +75,6 @@ export class CampaignController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách vendor đã được gửi mail xác nhận chưa?' })
   @ApiParam({ name: 'campaignId', description: 'ID của campaign' })
-  // @ApiResponse({ status: 200, description: 'Danh sách vendor đã được gửi mail xác nhận', schema: {
-  //   properties: {
-  //     data: { type: 'array', items: { $ref: '#/components/schemas/CampaignVendor' } },
-  //     pagination: {
-  //       type: 'object',
-  //       properties: {
-  //         current: { type: 'number' },
-  //         pageSize: { type: 'number' },
-  //         totalPage: { type: 'number' },
-  //         totalItem: { type: 'number' }
-  //       }
-  //     }
-  //   }
-  // } })
   async getVendorInvitedByCampaignId(@Param('campaignId') campaignId: string, @Query() query: FindAllVendorWithInvitedDto): Promise<{ data: CampaignVendor[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
     return this.campaignService.getVendorInvitedByCampaignId(campaignId, query);
   }
