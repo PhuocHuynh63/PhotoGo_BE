@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubscriptionVendor } from './entities/subscription-vendor.entity';
 import { CreateSubscriptionVendorDto, UpdateSubscriptionVendorDto, SubscriptionVendorResponseDto } from './dto/subscription-vendor.dto';
+import { SubscriptionPlan } from './entities/subscription-plan.entity';
+import { PlanType, BillingCycle } from 'src/constants/subscription.enum';
 
 @Injectable()
 export class SubscriptionVendorService {
@@ -12,6 +14,14 @@ export class SubscriptionVendorService {
   ) {}
 
   async create(createDto: CreateSubscriptionVendorDto): Promise<SubscriptionVendorResponseDto> {
+    // Lấy plan để kiểm tra loại và duration
+    const planRepo = this.subscriptionVendorRepository.manager.getRepository(SubscriptionPlan);
+    const plan = await planRepo.findOne({ where: { id: createDto.planId } });
+    if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
+    if (plan.planType !== PlanType.VENDOR) {
+      throw new Error('Chỉ được đăng ký gói dành cho vendor');
+    }
+    // Nếu plan là monthly và không có duration thì duration = 30 (nếu cần dùng duration ở đây)
     // Kiểm tra xem vendor có thể tham gia subscription plan không
     const canJoin = await this.canVendorJoinPlan(createDto.vendorId, createDto.planId);
     

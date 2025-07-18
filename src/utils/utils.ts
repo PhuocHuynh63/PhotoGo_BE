@@ -34,3 +34,18 @@ export function getInitials(fullName: string): string {
     if (words.length === 2) return (words[0][0] + words[1][0]).toUpperCase();
     return (words[0][0] + words[words.length - 1][0]).toUpperCase(); // VD: Nguyễn Văn A → NA
 }
+
+export function maskPhoneNumber(phoneNumber: string): string {
+    if (!phoneNumber || phoneNumber.length < 4) return phoneNumber;
+    const firstPart = phoneNumber.slice(0, -4);
+    const maskedLastFour = '#'.repeat(4);
+    return firstPart + maskedLastFour;
+}
+
+export function maskEmail(email: string): string {
+    if (!email || !email.includes('@')) return email;
+    const [localPart, domain] = email.split('@');
+    if (localPart.length <= 2) return email;
+    const masked = localPart[0] + '#'.repeat(localPart.length - 2) + localPart[localPart.length - 1];
+    return `${masked}@${domain}`;
+}

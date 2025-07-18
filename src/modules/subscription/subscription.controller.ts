@@ -164,26 +164,33 @@ export class SubscriptionController {
     // Lấy plan để lấy giá
     const plan = await this.subscriptionPlanService.findOne(subscription.planId);
     if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
-
+    if (!plan.isActive) {
+      throw new BadRequestException('Subscription plan không hoạt động, không thể gia hạn');
+    }
+    // Lấy giá theo billingCycle
+    let price = 0;
+    if (plan.billingCycle === BillingCycle.MONTHLY) {
+      price = plan.priceForMonth;
+    } else if (plan.billingCycle === BillingCycle.YEARLY) {
+      price = plan.priceForYear;
+    }
     // Tạo invoice mới cho gia hạn
     const invoice = this.subscriptionInvoiceRepository.create({
       subscriptionId: id,
-      payablePrice: plan.price,
+      payablePrice: price,
       status: SubscriptionInvoiceStatus.PENDING,
     });
     const savedInvoice = await this.subscriptionInvoiceRepository.save(invoice);
-
     // Tạo link thanh toán cho gia hạn
     const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
       savedInvoice.id,
       PaymentType.RENEWAL
     );
-
     return {
       ...result,
       message: 'Tạo link thanh toán gia hạn thành công',
       currentEndDate: subscription.endDate,
-      renewalAmount: plan.price
+      renewalAmount: price
     };
   }
 

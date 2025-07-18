@@ -25,6 +25,7 @@ import { RefundService } from '../refunds/refund.service';
 import { LocationAvailabilityService } from '../locations/location-availability.service';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
+import { Album } from '../album/entities/album.entity';
 
 @Injectable()
 export class PaymentService {
@@ -54,6 +55,8 @@ export class PaymentService {
     private readonly voucherRepository: Repository<Voucher>,
     @InjectRepository(LocationWorkingDate)
     private readonly locationWorkingDateRepository: Repository<LocationWorkingDate>,
+    @InjectRepository(Album)
+    private readonly albumRepository: Repository<Album>,
   ) {}
 
   // Helper function to format date to DD/MM/YYYY
@@ -698,15 +701,21 @@ export class PaymentService {
       } catch (error) {
         console.error('Error reopening scheduled dates after payment failure:', error);
       }
-    }
-
-    // Unlock slot nếu có booking (for single day booking)
-    if (booking && !booking.schedules) {
+    } else if (booking) {
+      // Single day booking: unlock slot nếu có booking
       await this.locationAvailabilityService.unlockSlot(
         this.formatDate(booking.date),
         booking.time,
         booking.locationId
       );
+
+      // Delete album if booking is timeout, cancelled or failed
+      const album = await this.albumRepository.findOne({
+        where: { bookingId: booking.id },
+      });
+      if (album) {
+        await this.albumRepository.delete(album.id);
+      }
     }
 
     // Update invoice status (nếu muốn)

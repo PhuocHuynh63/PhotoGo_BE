@@ -3,10 +3,6 @@ import { IsArray, IsOptional, IsString, IsUrl, ArrayMaxSize, IsUUID } from 'clas
 export class UpdateAlbumDto {
   @IsUUID()
   @IsOptional()
-  userId?: string;
-
-  @IsUUID()
-  @IsOptional()
   vendorAlbumId?: string;
 
   @IsArray()

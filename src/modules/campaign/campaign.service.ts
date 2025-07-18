@@ -5,7 +5,7 @@ import { Campaign } from './entities/campaign.entity';
 import { CampaignVoucher } from './entities/campaign-voucher.entity';
 import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
-import { FindAllDto } from './dto/find-all.dto';
+import { FindAllDto, FindAllVendorWithInvitedDto } from './dto/find-all.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreateLoyaltyCampaignDto } from './dto/create-loyalty-campaign.dto';
@@ -18,6 +18,13 @@ import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { InviteVendorDto } from './dto/invite-vendor.dto';
+import { ConfirmVendorInviteDto } from './dto/confirm-vendor-invite.dto';
+import { MailService } from 'src/3rdService/mail/mail.service';
+import * as jwt from 'jsonwebtoken';
+import { Inject } from '@nestjs/common';
+import { Redis } from 'ioredis';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class CampaignService {
@@ -54,6 +61,8 @@ export class CampaignService {
     private campaignVendorRepository: Repository<CampaignVendor>,
     @InjectRepository(Vendor)
     private vendorRepository: Repository<Vendor>,
+    private readonly mailService: MailService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
   // Campaign endpoints
@@ -142,11 +151,11 @@ export class CampaignService {
       const startDate = new Date(campaign.startDate);
       const endDate = new Date(campaign.endDate);
 
-      // Tính status
-      let statusText = '';
-      if (now < startDate) statusText = 'Sắp diễn ra';
-      else if (now > endDate) statusText = 'Đã kết thúc';
-      else statusText = 'Đang chạy';
+      // Tính happenned
+      let happened = '';
+      if (now < startDate) happened = 'Sắp diễn ra';
+      else if (now > endDate) happened = 'Đã kết thúc';
+      else happened = 'Đang diễn ra';
 
       // Tính progress
       let progress = 0;
@@ -163,7 +172,8 @@ export class CampaignService {
         id: campaign.id,
         name: campaign.name,
         description: campaign.description,
-        status: statusText,
+        status: campaign.status,
+        happened,
         progress,
         startDate: campaign.startDate,
         endDate: campaign.endDate,
@@ -192,14 +202,28 @@ export class CampaignService {
       throw new BadRequestException('Ngày bắt đầu phải trước ngày kết thúc');
     }
 
+    // Tạo campaign trước
     const campaign = this.campaignRepository.create({
       ...rest,
       startDate: this.convertDateFormat(startDate),
       endDate: this.convertDateFormat(endDate),
       status: false,
     });
+    const savedCampaign = await this.campaignRepository.save(campaign);
 
-    return this.campaignRepository.save(campaign);
+    // Lấy toàn bộ vendor và tạo campaignVendor
+    const vendors = await this.vendorRepository.find();
+    for (const vendor of vendors) {
+      const campaignVendor = this.campaignVendorRepository.create({
+        campaign: savedCampaign,
+        vendor: vendor,
+        isAvailable: false,
+        invited: false,
+      });
+      await this.campaignVendorRepository.save(campaignVendor);
+    }
+
+    return savedCampaign;
   }
 
   // Campaign Voucher endpoints
@@ -949,10 +973,7 @@ export class CampaignService {
     if (!campaign) throw new NotFoundException('Campaign không tồn tại');
     const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
     if (!vendor) throw new NotFoundException('Vendor không tồn tại');
-    // Check đã có chưa
-    const existed = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId } } });
-    if (existed) throw new BadRequestException('Campaign đã có vendor');
-    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
+    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: false, invited: false });
     return this.campaignVendorRepository.save(campaignVendor);
   }
 
@@ -994,5 +1015,127 @@ export class CampaignService {
         totalItem: total,
       }
     };
+  }
+
+  async getVendorInvitedByCampaignId(campaignId: string, query: FindAllVendorWithInvitedDto): Promise<{
+    data: CampaignVendor[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { isAvailable, invited, current = 1, pageSize = 10 } = query;
+    const queryBuilder = this.campaignVendorRepository.createQueryBuilder('campaign_vendor')
+      .leftJoinAndSelect('campaign_vendor.vendor', 'vendor')
+      .where('campaign_vendor.campaign_id = :campaignId', { campaignId });
+
+    function parseBool(val: any) {
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'string') {
+        if (val.toLowerCase() === 'true') return true;
+        if (val.toLowerCase() === 'false') return false;
+      }
+      return undefined;
+    }
+
+    const isAvailableBool = parseBool(isAvailable);
+    const invitedBool = parseBool(invited);
+
+    if (isAvailableBool !== undefined) {
+      queryBuilder.andWhere('campaign_vendor.is_available = :isAvailable', { isAvailable: isAvailableBool });
+    }
+    if (invitedBool !== undefined) {
+      queryBuilder.andWhere('campaign_vendor.invited = :invited', { invited: invitedBool });
+    }
+    const total = await queryBuilder.getCount();
+    const skip = (current - 1) * pageSize;
+    const data = await queryBuilder.skip(skip).take(pageSize).getMany();
+    return { data, 
+      pagination: { current, pageSize, totalPage: Math.ceil(total / pageSize), totalItem: total } };
+  }
+
+  async inviteVendorToCampaign(inviteVendorDto: InviteVendorDto) {
+    const { campaignId, vendorId } = inviteVendorDto;
+    const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    const vendor = await this.vendorRepository.findOne({ where: { id: vendorId }, relations: ['user_id'] });
+    if (!vendor) throw new NotFoundException('Vendor không tồn tại');
+    if (!vendor.user_id || !vendor.user_id.email) throw new BadRequestException('Vendor chưa liên kết user hoặc thiếu email');
+
+    // Update hoặc tạo mới campaign-vendor với invited = true, isAvailable = false
+    let campaignVendor = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId }, vendor: { id: vendorId } }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) {
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, invited: true, isAvailable: false });
+    } else {
+      campaignVendor.invited = true;
+      campaignVendor.isAvailable = false;
+    }
+    await this.campaignVendorRepository.save(campaignVendor);
+
+    // Sinh token ngẫu nhiên
+    const token = randomBytes(32).toString('hex');
+    // Lưu vào Redis với TTL 15 phút
+    await this.redisClient.setex(
+      `campaign-invite:${token}`,
+      900, // 15 phút
+      JSON.stringify({ campaignId, vendorId })
+    );
+    // Link xác nhận
+    const confirmLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/campaigns/confirm-invite?token=${token}`;
+    // Gửi mail
+    await this.mailService.sendMail(
+      vendor.user_id.email,
+      'Mời xác nhận tham gia chiến dịch PhotoGo',
+      'invite-vendor-campaign',
+      {
+        vendorName: vendor.name,
+        campaignName: campaign.name,
+        confirmLink,
+      },
+    );
+    return { message: 'Đã gửi mail xác nhận cho vendor', email: vendor.user_id.email, token };
+  }
+
+  async confirmVendorInvite(token: string) {
+    console.log('Xác nhận token:', token);
+    // Lấy thông tin từ Redis
+    const key = `campaign-invite:${token}`;
+    const data = await this.redisClient.get(key);
+    console.log('Dữ liệu lấy từ Redis:', data);
+    if (!data) throw new BadRequestException('Token không hợp lệ hoặc đã hết hạn');
+    const { campaignId, vendorId } = JSON.parse(data);
+    // Xóa token khỏi Redis sau khi xác nhận
+    await this.redisClient.del(key);
+    // Kiểm tra campaign-vendor đã tồn tại chưa
+    let campaignVendor = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId }, vendor: { id: vendorId } }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) {
+      // Nếu chưa có thì tạo mới
+      const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+      const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
+      if (!campaign || !vendor) throw new NotFoundException('Campaign hoặc Vendor không tồn tại');
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true, invited: true });
+      await this.campaignVendorRepository.save(campaignVendor);
+    } else {
+      // Nếu đã có thì cập nhật trạng thái
+      campaignVendor.isAvailable = true;
+      campaignVendor.invited = true;
+      await this.campaignVendorRepository.save(campaignVendor);
+    }
+    return { message: 'Xác nhận tham gia campaign thành công', campaignId, vendorId };
+  }
+
+  async getCampaignById(id: string) {
+    const campaign = await this.campaignRepository.findOne({ where: { id }});
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    return campaign;
+  }
+
+  async removeVoucherOutOfCampaign(campaignId: string, voucherId: string) {
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { campaignId, voucherId } });
+    if (!campaignVoucher) throw new NotFoundException('Campaign voucher không tồn tại');
+    await this.campaignVoucherRepository.delete(campaignVoucher);
+    return { message: 'Xóa voucher khỏi campaign thành công' };
   }
 } 

@@ -6,7 +6,7 @@ import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { Public } from 'src/decorator/custom';
-import { FindAllDto } from './dto/find-all.dto';
+import { FindAllDto, FindAllVendorWithInvitedDto } from './dto/find-all.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreateLoyaltyCampaignDto } from './dto/create-loyalty-campaign.dto';
 import { CreateMultipleCampaignVoucherDto } from './dto/create-campaign-voucher.dto';
@@ -17,6 +17,8 @@ import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { JoinWelcomeCampaignDto } from './dto/join-welcome-campaign.dto';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
+import { InviteVendorDto } from './dto/invite-vendor.dto';
+import { ConfirmVendorInviteDto } from './dto/confirm-vendor-invite.dto';
 
 @Controller('campaigns')
 @ApiTags('Campaigns')
@@ -69,6 +71,14 @@ export class CampaignController {
     return this.campaignService.getCampaignVendorById(id);
   }
 
+  @Get('vendor/:campaignId/invited')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách vendor đã được gửi mail xác nhận chưa?' })
+  @ApiParam({ name: 'campaignId', description: 'ID của campaign' })
+  async getVendorInvitedByCampaignId(@Param('campaignId') campaignId: string, @Query() query: FindAllVendorWithInvitedDto): Promise<{ data: CampaignVendor[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
+    return this.campaignService.getVendorInvitedByCampaignId(campaignId, query);
+  }
+
    // API nhập vendorId để list campaign vendor đã tham gia hoặc tự tạo
    @Get('by-vendor')
    @Public()
@@ -84,6 +94,13 @@ export class CampaignController {
    ) {
      return this.campaignService.findCampaignsByVendorId(vendorId, Number(current) || 1, Number(pageSize) || 10);
    }
+
+  @Get('confirm-invite')
+  @Public()
+  @ApiOperation({ summary: 'Xác nhận vendor tham gia campaign qua link trong email' })
+  async confirmVendorInvite(@Query('token') token: string) {
+    return this.campaignService.confirmVendorInvite(token);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Tạo campaign mới' })
@@ -148,6 +165,12 @@ export class CampaignController {
     @Query() paginationDto: PaginationDto
   ) {
     return this.campaignService.findCampaignVouchers(campaignId, paginationDto);
+  }
+
+  @Post('invite-vendor')
+  @ApiOperation({ summary: 'Mời vendor tham gia campaign (gửi mail xác nhận)' })
+  async inviteVendorToCampaign(@Body() inviteVendorDto: InviteVendorDto) {
+    return this.campaignService.inviteVendorToCampaign(inviteVendorDto);
   }
 
   @Post(':campaignId/vouchers/:voucherId')
@@ -296,6 +319,15 @@ export class CampaignController {
     return this.campaignService.createLoyaltyCampaign(createLoyaltyCampaignDto);
   }
 
+  //remove voucher out of campaign
+  @Delete(':campaignId/vouchers/:voucherId')
+  @ApiOperation({ summary: 'Xóa voucher khỏi campaign' })
+  @ApiParam({ name: 'campaignId', description: 'ID của campaign' })
+  @ApiParam({ name: 'voucherId', description: 'ID của voucher' })
+  async removeVoucherOutOfCampaign(@Param('campaignId') campaignId: string, @Param('voucherId') voucherId: string): Promise<{ message: string }> {
+    return this.campaignService.removeVoucherOutOfCampaign(campaignId, voucherId);
+  }
+
   @Patch(':campaignId/status')
   @ApiOperation({ summary: 'Cập nhật trạng thái của campaign' })
   @ApiResponse({ status: 200, description: 'Campaign đã được cập nhật trạng thái', type: Campaign })
@@ -362,6 +394,16 @@ export class CampaignController {
   @ApiResponse({ status: 201, description: 'Tạo campaign-vendor thành công', type: CampaignVendor })
   async createCampaignVendor(@Query('campaignId') campaignId: string, @Query('vendorId') vendorId: string): Promise<CampaignVendor> {
     return this.campaignService.createCampaignVendor(campaignId, vendorId);
+  }
+
+  //Get id
+  @Get(':id')
+  @Public()
+  @ApiOperation({ summary: 'Lấy thông tin campaign theo id' })
+  @ApiParam({ name: 'id', description: 'ID của campaign' })
+  @ApiResponse({ status: 200, description: 'Thông tin campaign', type: Campaign })
+  async getCampaignById(@Param('id') id: string): Promise<Campaign> {
+    return this.campaignService.getCampaignById(id);
   }
 
   

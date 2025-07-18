@@ -7,6 +7,7 @@ import { BookingSchedule } from './booking-schedule.entity';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { Dispute } from '../../disputes/entities/dispute.entity';
 import { BookingStatus, BookingSourceType, BookingDepositType, BookingType } from '../../../constants/booking.enum';
+import { Album } from 'src/modules/album/entities/album.entity';
 
 @Entity('booking')
 export class Booking {
@@ -93,4 +94,7 @@ export class Booking {
 
   @OneToMany(() => Dispute, (dispute) => dispute.booking)
   disputes: Dispute[];
+
+  @OneToMany(() => Album, (album) => album.booking)
+  albums: Album[];
 }

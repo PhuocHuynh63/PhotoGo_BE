@@ -35,23 +35,60 @@ export class ImageAnalysisResponse {
     @ApiProperty({ example: true })
     success: boolean;
 
-    @ApiProperty()
+    @ApiProperty({
+        example: {
+            analysis: {
+                description: "Phân tích chi tiết về ảnh...",
+                technicalAnalysis: {
+                    composition: "Bố cục tốt...",
+                    lighting: "Ánh sáng đẹp...",
+                    colors: ["blue", "green"]
+                },
+                suggestions: ["Gợi ý 1", "Gợi ý 2"]
+            },
+            example: "Concept chụp ảnh cún cưng siêu cute:",
+            concepts_same: [
+                {
+                    id: "concept-123",
+                    name: "Con Vật",
+                    price: "1000000",
+                    relevanceScore: 0.8
+                }
+            ],
+            isNoMatch: false,
+            suggestion: "Tìm thấy concept phù hợp!"
+        }
+    })
     data: {
-        description: string;
-        technicalAnalysis: {
-            composition: string;
-            lighting: string;
-            colors: string[];
+        analysis: {
+            description: string;
+            technicalAnalysis: {
+                composition: string;
+                lighting: string;
+                colors: string[];
+            };
+            suggestions: string[];
         };
-        suggestions: string[];
+        example: string;
+        concepts_same: any[];
+        isNoMatch?: boolean;
+        suggestion?: string;
     };
 
-    @ApiProperty()
+    @ApiProperty({
+        example: {
+            filename: "image.jpg",
+            size: 123456,
+            mimeType: "image/jpeg",
+            processingTime: 2500,
+            message: "Đã tìm thấy 3 concept phù hợp."
+        }
+    })
     metadata: {
         filename: string;
         size: number;
         mimeType: string;
-        model: string;
         processingTime: number;
+        message?: string;
     };
 }

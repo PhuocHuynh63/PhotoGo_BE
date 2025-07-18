@@ -41,20 +41,24 @@ export class GeminiService {
     private embeddingModel: any = null;
 
     private readonly systemContext = `
-        Bạn là AI phân tích ảnh chuyên nghiệp của PhotoGo - nền tảng đặt lịch studio chụp ảnh.
+        Bạn là trợ lý AI của ứng dụng PhotoGo, một nền tảng đặt lịch studio, freelancer về chủ đề chụp ảnh với nhiều concept và make up.
+        Khi phân tích ảnh:
+        - Tập trung vào các yếu tố nghệ thuật trong ảnh
+        - Đề cập đến bố cục, màu sắc, ánh sáng
+        - Đánh giá chất lượng ảnh
+        - Đưa ra gợi ý cải thiện nếu cần
         
-        Nguyên tắc phân tích ảnh:
-        - Phân tích kỹ thuật: bố cục, ánh sáng, màu sắc, composition
-        - Đánh giá chất lượng nghệ thuật với tone thân thiện
-        - Đưa ra gợi ý cải thiện cụ thể và khuyến khích
-        - Chào hỏi ngắn gọn rồi đi thẳng vào phân tích
-        
-        Khi trả lời về dịch vụ:
-        - Thông tin dựa trên dữ liệu thực tế của PhotoGo
-        - Gợi ý concept, gói chụp có sẵn trong hệ thống
-        - Ngôn ngữ thân thiện, nhiệt tình nhưng không dài dòng
-        - Tập trung vào giải pháp nhiếp ảnh thực tế
+        Khi trả lời câu hỏi:
+        - Đưa ra các thông tin liên quan đến nhiếp ảnh
+        - Đưa ra các thông tin (gói, concept, make up) có sẵn trong ứng dụng PhotoGo
+        - Sử dụng ngôn ngữ thân thiện
+        - Tập trung vào chủ đề nhiếp ảnh, concept của ảnh đã đính kèm
+        - Đưa ra các gợi ý thực tế, có sẵn trong ứng dụng PhotoGo
+        - Không đưa ra các thông tin không liên quan đến nhiếp ảnh
+        - Không đưa ra các thông tin không có trong ảnh đã đính kèm
+        - Không đưa ra các thông tin không có trong ứng dụng PhotoGo
     `;
+
 
     constructor(
         private configService: ConfigService,
@@ -247,16 +251,20 @@ export class GeminiService {
     //#region Helper Methods
     private async generateImageAnalysis(imageData: any, prompt?: string): Promise<any> {
         const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
+
+        // ✅ FIX: Enhanced prompt with context validation
         const analysisPrompt = `${this.systemContext}
 
 Xin chào! Mình sẽ giúp bạn phân tích bức ảnh này một cách chuyên nghiệp:
 
-1. **Mô tả tổng quan**: Nội dung chính của ảnh
+1. **Mô tả tổng quan**: Nội dung chính của ảnh (QUAN TRỌNG: Phải khớp với keywords đã phân tích)
 2. **Phân tích kỹ thuật**: 
    - Bố cục và composition
    - Ánh sáng và exposure
    - Màu sắc và tông màu
 3. **Gợi ý cải thiện**: Những điểm có thể nâng cao để ảnh đẹp hơn
+
+LƯU Ý QUAN TRỌNG: Hãy đảm bảo mô tả của bạn phù hợp với thông tin keywords được cung cấp.
 
 ${prompt || ''}`;
 
@@ -264,7 +272,10 @@ ${prompt || ''}`;
             contents: [{ role: 'user', parts: [{ text: analysisPrompt }, imageData] }]
         });
 
-        return await this.parseImageAnalysis(result.response.text());
+        const analysisText = result.response.text();
+        this.logger.debug(`Generated analysis preview: ${analysisText.substring(0, 100)}...`);
+
+        return await this.parseImageAnalysis(analysisText);
     }
 
     // Tối ưu: Cache utilities
@@ -347,12 +358,12 @@ ${prompt || ''}`;
                 CASE WHEN EXISTS (
                     SELECT 1 FROM unnest(cv.keywords) keyword 
                     WHERE keyword = ANY(:keywords)
-                ) THEN 1 ELSE 0 END * 0.4 + 
-                (1 - (cv.embedding <-> :queryEmbedding::vector)) * 0.6
+                ) THEN 1 ELSE 0 END * 0.3 + 
+                (1 - (cv.embedding <-> :queryEmbedding::vector)) * 0.7
             )::float as relevance_score`)
             .addSelect('(cv.embedding <-> :queryEmbedding::vector)::float as distance')
             .where('cv.embedding <-> :queryEmbedding::vector < :threshold', {
-                threshold: 1.0 // Pre-filter with distance threshold
+                threshold: 1.2 // ✅ FIX: Relaxed threshold to include more candidates 
             })
             .setParameter('keywords', keywords)
             .setParameter('queryEmbedding', `[${queryEmbedding.join(',')}]`)
@@ -424,19 +435,44 @@ ${prompt || ''}`;
             const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
             const imageData = { inlineData: { data: optimizedBuffer.toString('base64'), mimeType: 'image/jpeg' } };
 
-            // Tối ưu: Chạy song song thay vì tuần tự
-            const [analysis, keywords] = await Promise.all([
-                this.generateImageAnalysis(imageData, prompt),
-                this.generateKeywordsFromImage(optimizedFile)
-            ]);
+            // ✅ FIX: Run sequentially to avoid AI model confusion and cache conflicts  
+            this.logger.debug('Starting image analysis and keyword generation');
+
+            // Generate keywords first (more reliable for categorization)
+            const keywords = await this.generateKeywordsFromImage(optimizedFile);
+            this.logger.debug(`Keywords generated: [${keywords.join(', ')}]`);
+
+            // Then generate analysis with context from keywords
+            const enhancedPrompt = prompt ? `${prompt}\n\nKeywords từ ảnh: ${keywords.join(', ')}` : `Keywords từ ảnh: ${keywords.join(', ')}`;
+            const analysis = await this.generateImageAnalysis(imageData, enhancedPrompt);
+            this.logger.debug('Image analysis completed');
+
+            // ✅ FIX: Validate consistency between keywords and analysis
+            const isConsistent = this.validateKeywordAnalysisConsistency(keywords, analysis.description);
+            if (!isConsistent) {
+                this.logger.warn(`Inconsistency detected between keywords and analysis for ${file.originalname}`);
+                this.logger.warn(`Keywords suggest: ${this.inferContentFromKeywords(keywords)}`);
+                this.logger.warn(`Analysis describes: ${analysis.description.substring(0, 200)}...`);
+            }
 
             const queryEmbedding = await this.generateEmbedding(keywords.join(' '));
             if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== 768) {
                 throw new Error(`Invalid query embedding: must be an array of 768 numbers`);
             }
 
+            // ✅ DEBUG: Log keywords and embedding info for troubleshooting
+            this.logger.debug(`Generated keywords for search: [${keywords.join(', ')}]`);
+            this.logger.debug(`Embedding vector length: ${queryEmbedding.length}, first 5 values: [${queryEmbedding.slice(0, 5).join(', ')}]`);
+
             // Tối ưu: Use optimized vector search
             const results = await this.performOptimizedVectorSearch(queryEmbedding, keywords, 5);
+
+            // ✅ DEBUG: Log vector search results for troubleshooting
+            this.logger.debug(`Vector search results: found ${results.entities.length} candidates`);
+            if (results.raw.length > 0) {
+                const bestMatch = results.raw[0];
+                this.logger.debug(`Best match - relevance: ${bestMatch.relevance_score}, distance: ${bestMatch.distance}`);
+            }
 
             // Tối ưu: Single query thay vì N+1 queries
             const conceptImageIds = results.entities.map(e => e.concept_image_id).filter(id => id);
@@ -488,13 +524,152 @@ ${prompt || ''}`;
                 });
             }
 
-            const peopleKeywords = ['nữ', 'nam', 'trẻ em', 'người', 'portrait', 'chân dung', 'group', 'person', 'people', 'beauty shot', 'cosplay', 'cặp đôi', 'cưới'];
-            const animalKeywords = ['mèo', 'chó', 'thú cưng', 'pet', 'animal', 'cat', 'dog'];
-            const landscapeKeywords = ['phong cảnh', 'landscape', 'cảnh vật', 'nature', 'outdoor', 'ngoài trời', 'thiên nhiên', 'kiến trúc'];
-            const objectKeywords = ['still life', 'food photography', 'sản phẩm', 'trái cây', 'đồ vật', 'product', 'cam'];
+            // Keywords chi tiết cho CON NGƯỜI
+            const peopleKeywords = [
+                // Giới tính & độ tuổi
+                'nữ', 'nam', 'girl', 'boy', 'woman', 'man', 'người', 'person', 'people', 'human',
+                'trẻ em', 'children', 'kid', 'child', 'thiếu niên', 'teenager', 'teen', 'adult', 'người lớn',
+                'bé', 'baby', 'infant', 'newborn', 'trẻ sơ sinh', 'toddler', 'bé yêu',
+                'người cao tuổi', 'elderly', 'senior', 'grandmother', 'grandfather', 'bà', 'ông',
 
-            // Tối ưu: Check relevance score trước khi filter - nếu tất cả đều có score thấp thì không phù hợp
-            const RELEVANCE_THRESHOLD = 0.1;
+                // Loại chụp người
+                'portrait', 'chân dung', 'headshot', 'selfie', 'group photo', 'group', 'nhóm',
+                'family', 'gia đình', 'couple', 'cặp đôi', 'duo', 'team', 'đội nhóm',
+
+                // Sự kiện & dịp đặc biệt
+                'wedding', 'cưới', 'bride', 'cô dâu', 'groom', 'chú rể', 'engagement', 'đính hôn',
+                'maternity', 'bầu bí', 'mang thai', 'pregnancy', 'thai sản',
+                'graduation', 'tốt nghiệp', 'birthday', 'sinh nhật', 'anniversary', 'kỷ niệm',
+
+                // Phong cách & thể loại
+                'fashion', 'thời trang', 'model', 'modeling', 'beauty', 'makeup', 'trang điểm',
+                'cosplay', 'costume', 'trang phục', 'áo dài', 'traditional dress',
+                'street style', 'đường phố', 'casual', 'formal', 'trang trọng',
+
+                // Cảm xúc & biểu cảm
+                'smile', 'cười', 'laugh', 'happy', 'vui vẻ', 'sad', 'buồn', 'serious', 'nghiêm túc',
+                'emotion', 'cảm xúc', 'expression', 'biểu cảm', 'eyes', 'mắt', 'face', 'khuôn mặt'
+            ];
+
+            // Keywords chi tiết cho CON VẬT
+            const animalKeywords = [
+                // Thú cưng phổ biến
+                'pet', 'thú cưng', 'domestic animal', 'động vật nuôi',
+                'cat', 'mèo', 'kitten', 'mèo con', 'feline', 'persian cat', 'british shorthair',
+                'dog', 'chó', 'puppy', 'chó con', 'canine', 'golden retriever', 'husky', 'poodle',
+                'rabbit', 'thỏ', 'bunny', 'hamster', 'chuột hamster', 'guinea pig',
+                'bird', 'chim', 'parrot', 'vẹt', 'canary', 'chim cảnh',
+
+                // Động vật hoang dã
+                'wildlife', 'động vật hoang dã', 'wild animal', 'safari',
+                'elephant', 'voi', 'lion', 'sư tử', 'tiger', 'hổ', 'leopard', 'báo',
+                'bear', 'gấu', 'wolf', 'sói', 'fox', 'cáo', 'deer', 'hươu',
+                'monkey', 'khỉ', 'gorilla', 'đười ươi', 'panda', 'gấu trúc',
+
+                // Động vật biển
+                'marine animal', 'động vật biển', 'fish', 'cá', 'dolphin', 'cá heo',
+                'whale', 'cá voi', 'shark', 'cá mập', 'sea turtle', 'rùa biển',
+
+                // Côn trùng & động vật nhỏ
+                'insect', 'côn trùng', 'butterfly', 'bướm', 'bee', 'ong', 'spider', 'nhện',
+                'lizard', 'thằn lằn', 'snake', 'rắn', 'frog', 'ếch',
+
+                // Hành vi động vật
+                'playing', 'chơi đùa', 'sleeping', 'ngủ', 'eating', 'ăn', 'running', 'chạy',
+                'flying', 'bay', 'swimming', 'bơi', 'hunting', 'săn mồi', 'cute', 'dễ thương',
+                'animal portrait', 'chân dung động vật', 'animal behavior', 'hành vi động vật'
+            ];
+
+            // Keywords chi tiết cho CẢNH VẬT & THIÊN NHIÊN
+            const landscapeKeywords = [
+                // Địa hình & cảnh quan
+                'landscape', 'phong cảnh', 'scenery', 'cảnh đẹp', 'natural scenery', 'cảnh thiên nhiên',
+                'mountain', 'núi', 'hill', 'đồi', 'valley', 'thung lũng', 'canyon', 'hẻm núi',
+                'beach', 'bãi biển', 'ocean', 'đại dương', 'sea', 'biển', 'lake', 'hồ',
+                'river', 'sông', 'stream', 'suối', 'waterfall', 'thác nước', 'pond', 'ao',
+                'forest', 'rừng', 'jungle', 'rừng nhiệt đới', 'woods', 'khu rừng',
+                'desert', 'sa mạc', 'field', 'cánh đồng', 'meadow', 'đồng cỏ',
+                'island', 'đảo', 'archipelago', 'quần đảo', 'peninsula', 'bán đảo',
+
+                // Thời tiết & khí hậu
+                'sunrise', 'bình minh', 'sunset', 'hoàng hôn', 'dawn', 'rạng đông', 'dusk', 'chạng vạng',
+                'cloudy', 'nhiều mây', 'storm', 'bão', 'rain', 'mưa', 'snow', 'tuyết',
+                'fog', 'sương mù', 'mist', 'sương', 'rainbow', 'cầu vồng',
+                'sunny', 'nắng', 'clear sky', 'trời trong', 'blue sky', 'trời xanh',
+
+                // Thực vật
+                'tree', 'cây', 'flower', 'hoa', 'grass', 'cỏ', 'leaf', 'lá',
+                'cherry blossom', 'hoa anh đào', 'lotus', 'hoa sen', 'sunflower', 'hoa hướng dương',
+                'garden', 'vườn', 'park', 'công viên', 'botanical', 'thực vật học',
+
+                // Môi trường ngoài trời
+                'outdoor', 'ngoài trời', 'nature', 'thiên nhiên', 'wilderness', 'hoang dã',
+                'countryside', 'nông thôn', 'rural', 'vùng quê', 'natural', 'tự nhiên',
+                'environment', 'môi trường', 'ecosystem', 'hệ sinh thái',
+
+                // Kiến trúc & công trình
+                'architecture', 'kiến trúc', 'building', 'tòa nhà', 'skyscraper', 'tòa nhà chọc trời',
+                'bridge', 'cầu', 'tower', 'tháp', 'castle', 'lâu đài', 'temple', 'đền',
+                'church', 'nhà thờ', 'pagoda', 'chùa', 'monument', 'tượng đài',
+                'cityscape', 'cảnh thành phố', 'urban', 'đô thị', 'street', 'đường phố'
+            ];
+
+            // Keywords chi tiết cho ĐỒ VẬT & SẢN PHẨM
+            const objectKeywords = [
+                // Đồ vật sinh hoạt
+                'object', 'đồ vật', 'item', 'vật phẩm', 'thing', 'stuff', 'belongings', 'đồ đạc',
+                'furniture', 'nội thất', 'chair', 'ghế', 'table', 'bàn', 'bed', 'giường',
+                'lamp', 'đèn', 'mirror', 'gương', 'clock', 'đồng hồ', 'vase', 'lọ hoa',
+
+                // Đồ ăn & thức uống
+                'food', 'đồ ăn', 'meal', 'bữa ăn', 'dish', 'món ăn', 'cuisine', 'ẩm thực',
+                'fruit', 'trái cây', 'apple', 'táo', 'orange', 'cam', 'banana', 'chuối',
+                'vegetable', 'rau củ', 'tomato', 'cà chua', 'carrot', 'cà rốt',
+                'bread', 'bánh mì', 'cake', 'bánh', 'coffee', 'cà phê', 'tea', 'trà',
+                'wine', 'rượu vang', 'beer', 'bia', 'cocktail', 'đồ uống pha chế',
+                'dessert', 'tráng miệng', 'chocolate', 'sô cô la', 'ice cream', 'kem',
+
+                // Sản phẩm & hàng hóa
+                'product', 'sản phẩm', 'merchandise', 'hàng hóa', 'goods', 'commodity',
+                'still life', 'tĩnh vật', 'product photography', 'chụp sản phẩm',
+                'commercial', 'thương mại', 'advertising', 'quảng cáo', 'marketing',
+
+                // Công nghệ & thiết bị
+                'technology', 'công nghệ', 'device', 'thiết bị', 'gadget', 'đồ chơi công nghệ',
+                'phone', 'điện thoại', 'computer', 'máy tính', 'laptop', 'máy tính xách tay',
+                'camera', 'máy ảnh', 'headphone', 'tai nghe', 'watch', 'đồng hồ đeo tay',
+
+                // Phương tiện & xe cộ
+                'vehicle', 'phương tiện', 'car', 'ô tô', 'motorcycle', 'xe máy',
+                'bicycle', 'xe đạp', 'truck', 'xe tải', 'bus', 'xe buýt',
+                'boat', 'thuyền', 'ship', 'tàu', 'airplane', 'máy bay',
+
+                // Quần áo & phụ kiện
+                'clothing', 'quần áo', 'fashion item', 'vật phẩm thời trang',
+                'shoes', 'giày', 'bag', 'túi', 'hat', 'mũ', 'glasses', 'kính',
+                'jewelry', 'trang sức', 'watch', 'đồng hồ', 'accessory', 'phụ kiện',
+
+                // Đồ chơi & giải trí
+                'toy', 'đồ chơi', 'game', 'trò chơi', 'book', 'sách', 'magazine', 'tạp chí',
+                'music instrument', 'nhạc cụ', 'guitar', 'đàn guitar', 'piano', 'đàn piano',
+
+                // Văn phòng phẩm & học tập
+                'stationery', 'văn phòng phẩm', 'pen', 'bút', 'pencil', 'bút chì',
+                'notebook', 'sổ tay', 'paper', 'giấy', 'document', 'tài liệu',
+
+                // Đồ trang trí & nghệ thuật
+                'decoration', 'đồ trang trí', 'artwork', 'tác phẩm nghệ thuật',
+                'painting', 'tranh', 'sculpture', 'điêu khắc', 'craft', 'thủ công',
+                'antique', 'đồ cổ', 'vintage', 'cổ điển', 'collectible', 'đồ sưu tập'
+            ];
+
+            // ✅ FIX: Giảm threshold để tăng khả năng match concepts phù hợp
+            const RELEVANCE_THRESHOLD = 0.2; // Giảm từ 0.4 xuống 0.2 để bao gồm nhiều matches hợp lý hơn
+
+            // Phân loại ảnh input dựa trên keywords với độ chính xác cao
+            const inputImageType = this.categorizeImageByKeywords(keywords, peopleKeywords, animalKeywords, landscapeKeywords, objectKeywords);
+            this.logger.debug(`Image categorized as: ${inputImageType}, keywords: ${keywords.join(', ')}`);
+
             const hasGoodMatches = concepts_same.some(c => c.relevanceScore > RELEVANCE_THRESHOLD);
 
             if (!hasGoodMatches) {
@@ -502,19 +677,207 @@ ${prompt || ''}`;
                 // Jump to fallback logic
                 concepts_same = [];
             } else {
-                // Chỉ filter khi có matches tốt - simplified logic without keywords filtering
-                // Relevance score đã tính toán semantic similarity và keyword matching trong query
-                concepts_same = concepts_same.filter(c => c.relevanceScore > this.RELEVANCE_THRESHOLD);
+                // ✅ FIX: Enhanced semantic filtering với strict category matching
+                concepts_same = concepts_same.filter(c => {
+                    // Điều kiện 1: Relevance score đủ cao
+                    if (c.relevanceScore <= RELEVANCE_THRESHOLD) {
+                        return false;
+                    }
+
+                    // Điều kiện 2: Strict semantic filtering - KHÔNG cho phép bypass
+                    const conceptType = this.categorizeConceptByName(c.name || '');
+
+                    // ✅ DEBUG: Log categorization results
+                    this.logger.debug(`Concept "${c.name}" categorized as "${conceptType}" for "${inputImageType}" image`);
+
+                    // ✅ FIX: STRICT FILTERING - không cho phép cross-category matches
+                    if (inputImageType !== 'unknown') {
+                        // Nếu ảnh là động vật -> CHỈ cho phép concept động vật hoặc unknown
+                        if (inputImageType === 'animal' && conceptType !== 'animal' && conceptType !== 'unknown') {
+                            this.logger.debug(`🚫 Filtered out non-animal concept "${c.name}" for animal image (concept type: ${conceptType})`);
+                            return false;
+                        }
+
+                        // Nếu ảnh là người -> CHỈ cho phép concept người hoặc unknown  
+                        if (inputImageType === 'people' && conceptType !== 'people' && conceptType !== 'unknown') {
+                            this.logger.debug(`🚫 Filtered out non-people concept "${c.name}" for people image (concept type: ${conceptType})`);
+                            return false;
+                        }
+
+                        // Nếu ảnh là cảnh vật -> CHỈ cho phép concept cảnh vật hoặc unknown
+                        if (inputImageType === 'landscape' && conceptType !== 'landscape' && conceptType !== 'unknown') {
+                            this.logger.debug(`🚫 Filtered out non-landscape concept "${c.name}" for landscape image (concept type: ${conceptType})`);
+                            return false;
+                        }
+
+                        // Nếu ảnh là đồ vật -> CHỈ cho phép concept đồ vật hoặc unknown
+                        if (inputImageType === 'object' && conceptType !== 'object' && conceptType !== 'unknown') {
+                            this.logger.debug(`🚫 Filtered out non-object concept "${c.name}" for object image (concept type: ${conceptType})`);
+                            return false;
+                        }
+
+                        // ✅ NEW: Extra strict filtering for strong animal images
+                        if (inputImageType === 'animal') {
+                            const hasStrongAnimalKeywords = ['mèo', 'chó', 'cat', 'dog', 'thú cưng', 'pet', 'động vật', 'animal'].some(kw =>
+                                keywords.join(' ').toLowerCase().includes(kw)
+                            );
+
+                            if (hasStrongAnimalKeywords && conceptType === 'unknown') {
+                                // For strong animal images, unknown concepts must have animal-related terms
+                                const conceptName = (c.name || '').toLowerCase();
+                                const hasAnimalRelatedTerms = ['pet', 'thú cưng', 'mèo', 'chó', 'cat', 'dog', 'animal', 'động vật', 'cute', 'dễ thương'].some(term =>
+                                    conceptName.includes(term)
+                                );
+
+                                if (!hasAnimalRelatedTerms) {
+                                    this.logger.debug(`🚫 Filtered out unknown concept "${c.name}" for strong animal image (no animal terms)`);
+                                    return false;
+                                }
+                            }
+                        }
+
+                        // ✅ NEW: Chỉ cho phép high relevance score bypass cho unknown concepts với điều kiện
+                        if (conceptType === 'unknown' && c.relevanceScore > 0.6) {
+                            this.logger.debug(`✅ High relevance unknown concept "${c.name}" passed filtering (score: ${c.relevanceScore})`);
+                            return true;
+                        }
+                    }
+
+                    return true;
+                });
+
+                this.logger.debug(`After enhanced semantic filtering: ${concepts_same.length} concepts remaining`);
+
+                // ✅ ENHANCED: Universal semantic mismatch detection
+                concepts_same = concepts_same.filter(c => {
+                    const keywordString = keywords.join(' ').toLowerCase();
+                    const conceptName = (c.name || '').toLowerCase();
+
+                    const imageCategory = this.detectAdvancedImageCategory(keywords);
+                    const conceptCategory = this.detectConceptCategory(c.name || '');
+
+                    // Check for strong mismatches
+                    const mismatchScore = this.calculateMismatchPenalty(imageCategory, conceptCategory);
+
+                    if (mismatchScore > 0.7) { // Strong mismatch
+                        this.logger.debug(`🚫 Rejecting mismatched concept "${c.name}" (${conceptCategory}) for ${imageCategory} image (mismatch: ${mismatchScore})`);
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                this.logger.debug(`After semantic mismatch filtering: ${concepts_same.length} concepts remaining`);
+
+                // Thêm validation: Nếu ảnh rõ ràng là động vật mà không có concept nào phù hợp -> trả về rỗng
+                if (inputImageType === 'animal' && concepts_same.length === 0) {
+                    this.logger.debug(`No animal concepts found for animal image. Will use fallback.`);
+                }
             }
 
             if (!concepts_same || concepts_same.length === 0) {
-                // Khi không tìm thấy concept phù hợp, lấy một số concept ngẫu nhiên từ hệ thống
-                const fallbackConcepts = await this.serviceConceptRepository.find({
-                    relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
-                    where: { status: ServiceConceptStatus.ACTIVE },
-                    order: { createdAt: 'DESC' },
-                    take: 5
-                });
+                // ✅ ENHANCED FALLBACK: Better messaging for no matches
+                let fallbackConcepts: any[];
+                let fallbackMessage = '';
+
+                // ✅ ENHANCED: Universal fallback for special image categories
+                const imageCategory = this.detectAdvancedImageCategory(keywords);
+
+                const specialCategoryMessages = {
+                    'sci-fi-space': 'Hiện tại PhotoGo chưa có concept chụp ảnh vũ trụ, khoa học viễn tưởng. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'military-vehicle': 'Hiện tại PhotoGo chưa có concept chụp ảnh xe quân sự, vũ khí. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'robot-ai': 'Hiện tại PhotoGo chưa có concept chụp ảnh robot, trí tuệ nhân tạo. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'fantasy': 'Hiện tại PhotoGo chưa có concept chụp ảnh fantasy, thần thoại. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'abstract-art': 'Hiện tại PhotoGo chưa có concept chụp ảnh nghệ thuật trừu tượng. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'extreme-sport': 'Hiện tại PhotoGo chưa có concept chụp ảnh thể thao mạo hiểm. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.',
+                    'advanced-architecture': 'Hiện tại PhotoGo chưa có concept chụp ảnh kiến trúc hiện đại, futuristic. Bạn có thể tham khảo các concept chụp ảnh khác phù hợp với nhu cầu của mình.'
+                };
+
+                if (specialCategoryMessages[imageCategory]) {
+                    this.logger.debug(`Special category detected: ${imageCategory} - no suitable concepts available`);
+                    fallbackMessage = specialCategoryMessages[imageCategory];
+
+                    // Return general concepts instead of trying to match
+                    const generalConcepts = await this.serviceConceptRepository.find({
+                        relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                        where: { status: ServiceConceptStatus.ACTIVE },
+                        order: { createdAt: 'DESC' },
+                        take: 3
+                    });
+
+                    fallbackConcepts = generalConcepts;
+                } else if (inputImageType === 'animal') {
+                    // ✅ FIX: Tìm concept động vật tốt nhất với priority cao hơn
+                    this.logger.debug('Looking for animal concepts as fallback');
+                    const allConcepts = await this.serviceConceptRepository.find({
+                        relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                        where: { status: ServiceConceptStatus.ACTIVE },
+                        order: { createdAt: 'DESC' },
+                        take: 50 // ✅ FIX: Lấy nhiều hơn để có nhiều lựa chọn filter
+                    });
+
+                    // ✅ FIX: Prioritize concepts có từ khóa động vật rõ ràng với expanded keywords
+                    const strongAnimalKeywords = ['con vật', 'động vật', 'thú cưng', 'pet', 'mèo', 'chó', 'cat', 'dog', 'animal', 'kitten', 'puppy', 'pet portrait'];
+                    const weakAnimalKeywords = ['cute', 'dễ thương', 'adorable', 'furry', 'fluffy'];
+
+                    const strongAnimalConcepts = allConcepts.filter(concept => {
+                        const name = concept.name?.toLowerCase() || '';
+                        return strongAnimalKeywords.some(keyword => name.includes(keyword));
+                    });
+
+                    // Filter concept động vật với extended categorization
+                    const otherAnimalConcepts = allConcepts.filter(concept => {
+                        const name = concept.name?.toLowerCase() || '';
+                        if (strongAnimalKeywords.some(keyword => name.includes(keyword))) return false; // Đã có trong strong
+
+                        // Check if it's categorized as animal OR has weak animal indicators
+                        const conceptType = this.categorizeConceptByName(concept.name || '');
+                        const hasWeakAnimalKeywords = weakAnimalKeywords.some(keyword => name.includes(keyword));
+
+                        return conceptType === 'animal' || hasWeakAnimalKeywords;
+                    });
+
+                    // ✅ FIX: Combine với priority: strong animal concepts trước
+                    fallbackConcepts = [...strongAnimalConcepts.slice(0, 2), ...otherAnimalConcepts.slice(0, 1)]; // Lấy 3 concept động vật tốt nhất
+
+                    if (fallbackConcepts.length === 0) {
+                        // Nếu không có concept động vật nào, lấy concept general
+                        fallbackConcepts = allConcepts.slice(0, 3);
+                        fallbackMessage = 'Không tìm thấy concept động vật phù hợp. Đây là một số concept khác bạn có thể tham khảo.';
+                    } else {
+                        fallbackMessage = `Tìm thấy ${fallbackConcepts.length} concept động vật phù hợp với ảnh của bạn!`;
+                    }
+                } else if (inputImageType === 'people') {
+                    // Tương tự cho người
+                    this.logger.debug('Looking for people concepts as fallback');
+                    const allConcepts = await this.serviceConceptRepository.find({
+                        relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                        where: { status: ServiceConceptStatus.ACTIVE },
+                        order: { createdAt: 'DESC' },
+                        take: 20
+                    });
+
+                    fallbackConcepts = allConcepts.filter(concept => {
+                        const conceptType = this.categorizeConceptByName(concept.name || '');
+                        return conceptType === 'people';
+                    }).slice(0, 3);
+
+                    if (fallbackConcepts.length === 0) {
+                        fallbackConcepts = allConcepts.slice(0, 3);
+                        fallbackMessage = 'Không tìm thấy concept chụp người phù hợp. Đây là một số concept khác bạn có thể tham khảo.';
+                    } else {
+                        fallbackMessage = `Tìm thấy ${fallbackConcepts.length} concept chụp người phù hợp với ảnh của bạn!`;
+                    }
+                } else {
+                    // Fallback chung cho các loại khác
+                    fallbackConcepts = await this.serviceConceptRepository.find({
+                        relations: ['images', 'servicePackage', 'servicePackage.vendor', 'servicePackage.vendor.locations'],
+                        where: { status: ServiceConceptStatus.ACTIVE },
+                        order: { createdAt: 'DESC' },
+                        take: 5
+                    });
+                    fallbackMessage = 'PhotoGo có rất nhiều concept đa dạng và thú vị bạn có thể khám phá!';
+                }
 
                 const fallbackConceptsSame = await Promise.all(fallbackConcepts.map(async (concept) => {
                     let vendorSlug: string | null = null;
@@ -536,22 +899,22 @@ ${prompt || ''}`;
                         location: vendorLocations,
                         vendorId,
                         conceptId: concept.id,
-                        relevanceScore: 0.5, // Lower relevance for fallback
-                        distance: 1.0 // Higher distance for fallback
+                        relevanceScore: inputImageType === this.categorizeConceptByName(concept.name || '') ? 0.7 : 0.3, // Higher score for matching type
+                        distance: inputImageType === this.categorizeConceptByName(concept.name || '') ? 0.5 : 1.0
                     };
                 }));
 
-                // Tạo prompt cho AI để giải thích tại sao không tìm thấy và gợi ý
+                // Tạo prompt cho AI để giải thích
                 const model = await this.initializeModel(GeminiModel.GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION);
                 const imageData = { inlineData: { data: file.buffer.toString('base64'), mimeType: file.mimetype } };
 
                 const fallbackPrompt = `${this.systemContext}
 
-Xin chào! Mình đã phân tích ảnh này và có một vài thông tin để chia sẻ:
+Xin chào! Mình đã phân tích ảnh ${inputImageType} này và có một vài thông tin để chia sẻ:
 
 1. **Mô tả về ảnh**: Nội dung và đặc điểm chính
-2. **Về việc tìm kiếm concept**: Tại sao không tìm thấy concept hoàn toàn phù hợp trong hệ thống
-3. **Gợi ý tích cực**: PhotoGo có rất nhiều concept đa dạng và thú vị khác mà bạn có thể khám phá
+2. **Về việc tìm kiếm concept**: ${fallbackMessage}
+3. **Gợi ý tích cực**: Các concept dưới đây có thể phù hợp với nhu cầu của bạn
 
 Tone thân thiện, tích cực và khuyến khích.`;
 
@@ -561,29 +924,63 @@ Tone thân thiện, tích cực và khuyến khích.`;
 
                 const fallbackAnalysis = await this.parseImageAnalysis(fallbackResult.response.text());
 
+                // ✅ Generate dynamic example for fallback flow too
+                let fallbackExample: string;
+                const isSpecialCategory = ['sci-fi-space', 'military-vehicle', 'robot-ai', 'fantasy', 'abstract-art', 'extreme-sport', 'advanced-architecture'].includes(imageCategory);
+
+                if (isSpecialCategory) {
+                    fallbackExample = "Một số concept chụp ảnh khác có thể phù hợp:";
+                } else {
+                    fallbackExample = this.generateExampleText(inputImageType, fallbackConceptsSame, keywords);
+                }
+
                 return {
                     success: true,
                     data: {
                         analysis: fallbackAnalysis,
+                        example: fallbackExample, // ✅ Dynamic example for fallback too
                         concepts_same: fallbackConceptsSame,
-                        isNoMatch: true,
-                        suggestion: "Mặc dù không tìm thấy concept hoàn toàn phù hợp, PhotoGo có nhiều concept thú vị khác bạn có thể tham khảo!"
+                        isNoMatch: inputImageType !== 'unknown', // Only mark as no match if we can classify the image
+                        suggestion: fallbackMessage
                     },
                     metadata: {
                         filename: file.originalname,
                         size: file.size,
                         mimeType: file.mimetype,
                         processingTime: Date.now() - startTime,
-                        message: 'Không tìm thấy concept phù hợp hoàn toàn, đã gợi ý các concept khác.'
+                        message: `Đã tìm thấy ${fallbackConceptsSame.length} concept phù hợp với loại ảnh ${inputImageType}.`
                     }
                 };
             }
+
+            // ✅ FIX: Success flow should also include message fields for consistency
+            const conceptCount = concepts_same.length;
+            const bestScore = conceptCount > 0 ? Math.max(...concepts_same.map(c => c.relevanceScore)).toFixed(2) : '0';
+
+            // ✅ Generate dynamic example text based on image type and concepts
+            // ✅ FIX: Handle special image categories in success flow too
+            const imageCategory = this.detectAdvancedImageCategory(keywords);
+            const isSpecialCategory = ['sci-fi-space', 'military-vehicle', 'robot-ai', 'fantasy', 'abstract-art', 'extreme-sport', 'advanced-architecture'].includes(imageCategory);
+
+            const dynamicExample = isSpecialCategory
+                ? "Concept chụp ảnh tổng hợp:"
+                : this.generateExampleText(inputImageType, concepts_same, keywords);
+
             return {
                 success: true,
-                data: { analysis, concepts_same },
+                data: {
+                    analysis,
+                    example: dynamicExample, // ✅ Dynamic AI-generated example
+                    concepts_same,
+                    isNoMatch: false, // ✅ FIX: Explicitly mark as successful match
+                    suggestion: `Tìm thấy ${conceptCount} concept phù hợp với ảnh của bạn! (Điểm tương đồng cao nhất: ${bestScore})`
+                },
                 metadata: {
-                    filename: file.originalname, size: file.size, mimeType: file.mimetype,
-                    processingTime: Date.now() - startTime
+                    filename: file.originalname,
+                    size: file.size,
+                    mimeType: file.mimetype,
+                    processingTime: Date.now() - startTime,
+                    message: `Đã tìm thấy ${conceptCount} concept phù hợp với loại ảnh ${inputImageType}.` // ✅ FIX: Add message to success flow
                 }
             };
         } catch (error) {
@@ -674,6 +1071,290 @@ Tone thân thiện, tích cực và khuyến khích.`;
         return positiveCount > negativeCount ? 'positive' : negativeCount > positiveCount ? 'negative' : 'neutral';
     }
 
+    /**
+     * ✅ Validate consistency between keywords and analysis description
+     */
+    private validateKeywordAnalysisConsistency(keywords: string[], analysisDescription: string): boolean {
+        const keywordString = keywords.join(' ').toLowerCase();
+        const analysisLower = analysisDescription.toLowerCase();
+
+        // Check for major content type consistency
+        const hasAnimalKeywords = ['mèo', 'chó', 'cat', 'dog', 'thú cưng', 'pet', 'động vật', 'animal'].some(kw => keywordString.includes(kw));
+        const hasPeopleKeywords = ['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình', 'portrait', 'chân dung'].some(kw => keywordString.includes(kw));
+        const hasLandscapeKeywords = ['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain', 'biển', 'sea'].some(kw => keywordString.includes(kw));
+
+        const analysisHasAnimal = ['chó', 'mèo', 'dog', 'cat', 'thú cưng', 'pet', 'động vật', 'animal'].some(word => analysisLower.includes(word));
+        const analysisHasPeople = ['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình'].some(word => analysisLower.includes(word));
+        const analysisHasLandscape = ['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain'].some(word => analysisLower.includes(word));
+
+        // Major inconsistencies
+        if (hasAnimalKeywords && analysisHasPeople && !analysisHasAnimal) return false;
+        if (hasPeopleKeywords && analysisHasAnimal && !analysisHasPeople) return false;
+        if (hasLandscapeKeywords && (analysisHasAnimal || analysisHasPeople) && !analysisHasLandscape) return false;
+
+        return true;
+    }
+
+    /**
+     * ✅ Infer content type from keywords for debugging
+     */
+    private inferContentFromKeywords(keywords: string[]): string {
+        const keywordString = keywords.join(' ').toLowerCase();
+
+        if (['mèo', 'chó', 'cat', 'dog', 'thú cưng', 'pet', 'động vật', 'animal'].some(kw => keywordString.includes(kw))) {
+            return 'Động vật/Thú cưng';
+        }
+        if (['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình', 'portrait', 'chân dung'].some(kw => keywordString.includes(kw))) {
+            return 'Người/Portrait';
+        }
+        if (['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain', 'biển', 'sea'].some(kw => keywordString.includes(kw))) {
+            return 'Phong cảnh/Landscape';
+        }
+
+        return 'Không xác định';
+    }
+
+    /**
+     * ✅ Advanced image category detection for comprehensive filtering
+     */
+    private detectAdvancedImageCategory(keywords: string[]): string {
+        const keywordString = keywords.join(' ').toLowerCase();
+
+        // ✅ FIX: Check standard categories FIRST to avoid misclassification
+        // Animals - highest priority to avoid confusion
+        if (['mèo', 'chó', 'cat', 'dog', 'pet', 'thú cưng', 'động vật', 'animal', 'kitten', 'puppy'].some(kw => keywordString.includes(kw))) {
+            return 'animal';
+        }
+
+        // People - high priority
+        if (['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình', 'portrait', 'chân dung', 'baby', 'bé'].some(kw => keywordString.includes(kw))) {
+            return 'people';
+        }
+
+        // Landscape - high priority  
+        if (['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain', 'biển', 'sea', 'thiên nhiên', 'nature'].some(kw => keywordString.includes(kw))) {
+            return 'landscape';
+        }
+
+        // Objects - high priority
+        if (['đồ ăn', 'food', 'sản phẩm', 'product', 'object', 'still life'].some(kw => keywordString.includes(kw))) {
+            return 'object';
+        }
+
+        // Special categories only checked AFTER standard categories
+        // Sci-fi & Technology
+        if (['vũ trụ', 'space', 'galaxy', 'star', 'planet', 'satellite', 'astronaut', 'rocket', 'cosmos', 'nebula'].some(kw => keywordString.includes(kw))) {
+            return 'sci-fi-space';
+        }
+
+        // Military & Vehicles
+        if (['xe tăng', 'tank', 'military', 'quân sự', 'armor', 'weapon', 'chiến đấu', 'máy bay chiến đấu', 'fighter jet', 'helicopter', 'tàu chiến', 'submarine'].some(kw => keywordString.includes(kw))) {
+            return 'military-vehicle';
+        }
+
+        // Robots & AI
+        if (['robot', 'android', 'cyborg', 'ai', 'artificial intelligence', 'machine', 'mech', 'automation'].some(kw => keywordString.includes(kw))) {
+            return 'robot-ai';
+        }
+
+        // Fantasy & Supernatural
+        if (['dragon', 'rồng', 'magic', 'wizard', 'fairy', 'tiên', 'fantasy', 'supernatural', 'mythical', 'unicorn'].some(kw => keywordString.includes(kw))) {
+            return 'fantasy';
+        }
+
+        // Advanced Architecture
+        if (['skyscraper', 'nhà chọc trời', 'futuristic', 'modern architecture', 'kiến trúc hiện đại', 'high-tech building'].some(kw => keywordString.includes(kw))) {
+            return 'advanced-architecture';
+        }
+
+        // Abstract & Art
+        if (['abstract', 'trừu tượng', 'modern art', 'nghệ thuật hiện đại', 'surreal', 'artistic'].some(kw => keywordString.includes(kw))) {
+            return 'abstract-art';
+        }
+
+        // Sports & Extreme
+        if (['extreme sport', 'thể thao mạo hiểm', 'skydiving', 'bungee', 'racing', 'motorsport'].some(kw => keywordString.includes(kw))) {
+            return 'extreme-sport';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * ✅ Detect concept category for mismatch calculation
+     */
+    private detectConceptCategory(conceptName: string): string {
+        const name = conceptName.toLowerCase();
+
+        if (['con vật', 'animal', 'pet', 'thú cưng', 'mèo', 'chó'].some(kw => name.includes(kw))) {
+            return 'animal';
+        }
+
+        if (['người', 'portrait', 'chân dung', 'family', 'gia đình', 'wedding', 'cưới'].some(kw => name.includes(kw))) {
+            return 'people';
+        }
+
+        if (['thác', 'waterfall', 'cảnh', 'landscape', 'phong cảnh', 'thiên nhiên', 'nature'].some(kw => name.includes(kw))) {
+            return 'landscape';
+        }
+
+        if (['sản phẩm', 'product', 'đồ ăn', 'food', 'object'].some(kw => name.includes(kw))) {
+            return 'object';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * ✅ Calculate mismatch penalty between image and concept categories
+     */
+    private calculateMismatchPenalty(imageCategory: string, conceptCategory: string): number {
+        // Perfect match = no penalty
+        if (imageCategory === conceptCategory) {
+            return 0.0;
+        }
+
+        // Define strong mismatches (high penalty)
+        const strongMismatches = [
+            // Sci-fi/Tech vs Nature
+            { image: 'sci-fi-space', concept: 'animal' },
+            { image: 'sci-fi-space', concept: 'landscape' },
+            { image: 'military-vehicle', concept: 'animal' },
+            { image: 'military-vehicle', concept: 'landscape' },
+            { image: 'robot-ai', concept: 'animal' },
+            { image: 'robot-ai', concept: 'landscape' },
+
+            // Fantasy vs Reality
+            { image: 'fantasy', concept: 'people' },
+            { image: 'fantasy', concept: 'landscape' },
+
+            // Abstract vs Concrete
+            { image: 'abstract-art', concept: 'animal' },
+            { image: 'abstract-art', concept: 'people' },
+
+            // Cross-category mismatches
+            { image: 'animal', concept: 'people' },
+            { image: 'people', concept: 'animal' },
+            { image: 'animal', concept: 'landscape' },
+            { image: 'landscape', concept: 'animal' },
+        ];
+
+        // Check for strong mismatches
+        for (const mismatch of strongMismatches) {
+            if (imageCategory === mismatch.image && conceptCategory === mismatch.concept) {
+                return 0.9; // Very high penalty
+            }
+        }
+
+        // Special categories that rarely match traditional concepts
+        const specialCategories = ['sci-fi-space', 'military-vehicle', 'robot-ai', 'fantasy', 'abstract-art', 'extreme-sport', 'advanced-architecture'];
+
+        if (specialCategories.includes(imageCategory) && ['animal', 'people', 'landscape'].includes(conceptCategory)) {
+            return 0.8; // High penalty for special vs traditional
+        }
+
+        // Moderate mismatches
+        const moderateMismatches = [
+            { image: 'people', concept: 'landscape' },
+            { image: 'landscape', concept: 'people' },
+            { image: 'object', concept: 'animal' },
+            { image: 'object', concept: 'people' },
+        ];
+
+        for (const mismatch of moderateMismatches) {
+            if (imageCategory === mismatch.image && conceptCategory === mismatch.concept) {
+                return 0.6; // Moderate penalty
+            }
+        }
+
+        // Unknown categories get low penalty
+        if (imageCategory === 'unknown' || conceptCategory === 'unknown') {
+            return 0.3;
+        }
+
+        // Default penalty for other mismatches
+        return 0.4;
+    }
+
+    /**
+     * ✅ Generate dynamic example text based on image type and context
+     */
+    private generateExampleText(imageType: string, concepts: any[], keywords: string[]): string {
+        // Extract main themes from concepts and keywords
+        const conceptNames = concepts.map(c => c.name?.toLowerCase() || '').filter(name => name);
+        const keywordString = keywords.join(' ').toLowerCase();
+
+        // Determine theme based on image type and content
+        if (imageType === 'animal') {
+            if (keywordString.includes('mèo') || keywordString.includes('cat')) {
+                return "Concept chụp ảnh mèo cưng đáng yêu:";
+            }
+            if (keywordString.includes('chó') || keywordString.includes('dog')) {
+                return "Concept chụp ảnh cún cưng siêu cute:";
+            }
+            if (conceptNames.some(name => name.includes('thú cưng') || name.includes('pet'))) {
+                return "Concept chụp ảnh thú cưng chuyên nghiệp:";
+            }
+            return "Concept chụp ảnh động vật tuyệt đẹp:";
+        }
+
+        if (imageType === 'people') {
+            if (keywordString.includes('wedding') || keywordString.includes('cưới')) {
+                return "Concept chụp ảnh cưới lãng mạn:";
+            }
+            if (keywordString.includes('family') || keywordString.includes('gia đình')) {
+                return "Concept chụp ảnh gia đình hạnh phúc:";
+            }
+            if (keywordString.includes('couple') || keywordString.includes('cặp đôi')) {
+                return "Concept chụp ảnh đôi ngọt ngào:";
+            }
+            if (keywordString.includes('portrait') || keywordString.includes('chân dung')) {
+                return "Concept chụp chân dung nghệ thuật:";
+            }
+            return "Concept chụp ảnh người đẹp mắt:";
+        }
+
+        if (imageType === 'landscape') {
+            if (keywordString.includes('thác') || keywordString.includes('waterfall')) {
+                return "Concept chụp ảnh thác nước hùng vĩ:";
+            }
+            if (keywordString.includes('núi') || keywordString.includes('mountain')) {
+                return "Concept chụp ảnh núi non tráng lệ:";
+            }
+            if (keywordString.includes('biển') || keywordString.includes('beach') || keywordString.includes('sea')) {
+                return "Concept chụp ảnh biển cả bình yên:";
+            }
+            if (keywordString.includes('sunset') || keywordString.includes('hoàng hôn')) {
+                return "Concept chụp ảnh hoàng hôn thơ mộng:";
+            }
+            return "Concept chụp ảnh phong cảnh tuyệt đẹp:";
+        }
+
+        if (imageType === 'object') {
+            if (keywordString.includes('food') || keywordString.includes('đồ ăn')) {
+                return "Concept chụp ảnh ẩm thực hấp dẫn:";
+            }
+            if (keywordString.includes('product') || keywordString.includes('sản phẩm')) {
+                return "Concept chụp ảnh sản phẩm chuyên nghiệp:";
+            }
+            return "Concept chụp ảnh sáng tạo:";
+        }
+
+        // Fallback based on concept names
+        if (conceptNames.some(name => name.includes('cưới') || name.includes('wedding'))) {
+            return "Concept chụp ảnh cưới lãng mạn:";
+        }
+        if (conceptNames.some(name => name.includes('thú cưng') || name.includes('động vật'))) {
+            return "Concept chụp ảnh thú cưng đáng yêu:";
+        }
+        if (conceptNames.some(name => name.includes('phong cảnh') || name.includes('landscape'))) {
+            return "Concept chụp ảnh phong cảnh tuyệt đẹp:";
+        }
+
+        // Default fallback
+        return "Concept nổi bật của PhotoGo:";
+    }
+
     async generateConceptVector(image: Express.Multer.File, concept_image_id: string): Promise<ConceptVector> {
         const keywords = await this.generateKeywordsFromImage(image);
         this.logger.log(`Generated keywords: ${keywords.join(', ')}`);
@@ -693,31 +1374,53 @@ Tone thân thiện, tích cực và khuyến khích.`;
     }
 
     private async generateKeywordsFromImage(image: Express.Multer.File): Promise<string[]> {
-        // Tối ưu: Check cache first
+        // ✅ FIX: Improved cache key to prevent collisions
         const fileHash = this.createFileHash(image.buffer);
-        const cacheKey = `keywords:${fileHash}`;
+        const timestamp = Date.now();
+        const cacheKey = `keywords:${fileHash}:${image.originalname}:${image.size}`;
         const cached = this.getCached<string[]>(cacheKey);
         if (cached) {
-            this.logger.debug(`Cache hit for keywords: ${fileHash}`);
+            this.logger.debug(`Cache hit for keywords: ${fileHash} (${image.originalname})`);
             return cached;
         }
+
+        this.logger.debug(`Generating fresh keywords for: ${image.originalname} (${image.size} bytes)`);
 
         return await this.executeWithFallback(
             async () => {
                 const model = await this.initializeModel();
                 const imageData = { inlineData: { data: image.buffer.toString('base64'), mimeType: image.mimetype } };
-                const prompt = `Vai trò: AI phân tích ảnh chuyên sâu. Tạo danh sách từ khóa toàn diện từ ảnh.
 
-Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, phong cách, cảm xúc.
+                // Cải thiện: Prompt ngắn gọn và rõ ràng hơn
+                const prompt = `Phân tích ảnh này và trả về danh sách từ khóa mô tả nội dung.
 
-Định dạng: CHỈ trả về từ khóa phân tách bằng dấu phẩy, viết thường, không giải thích.`;
+YÊU CẦU QUAN TRỌNG:
+- CHỈ trả về các từ khóa, KHÔNG giải thích gì thêm
+- Mỗi từ khóa tối đa 2-3 từ
+- Phân cách bằng dấu phẩy
+- Viết thường, không dấu ngoặc kép
+- Tối đa 20 từ khóa
+
+Ví dụ: người, nam, nữ, cặp đôi, mỉm cười, trong nhà, ánh sáng tự nhiên, portrait
+
+Hãy phân tích ảnh:`;
 
                 const result = await model.generateContent([prompt, imageData]);
                 const text = result.response.text();
                 if (!text) {
                     throw new Error('No text response from Gemini API');
                 }
-                const keywords = text.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0);
+
+                // Cải thiện: Clean up và validate keywords
+                let keywords = this.cleanupKeywords(text);
+
+                // Giới hạn số lượng keywords
+                if (keywords.length > 20) {
+                    keywords = keywords.slice(0, 20);
+                }
+
+                // Validate keywords quality
+                keywords = this.validateKeywords(keywords);
 
                 // Cache the result
                 this.setCached(cacheKey, keywords);
@@ -732,6 +1435,61 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
             },
             'Gemini keyword generation failed'
         );
+    }
+
+    /**
+     * Clean up keywords từ Gemini response
+     */
+    private cleanupKeywords(text: string): string[] {
+        // Remove extra characters and normalize
+        let cleanText = text
+            .replace(/[{}""''`]/g, '') // Remove curly braces and quotes
+            .replace(/\n/g, ',') // Replace newlines with commas
+            .replace(/\s*,\s*/g, ',') // Normalize comma spacing
+            .trim();
+
+        // Split by comma and clean each keyword
+        let keywords = cleanText.split(',')
+            .map(k => k.trim().toLowerCase())
+            .filter(k => k.length > 0 && k.length < 50) // Filter out empty and overly long keywords
+            .filter(k => !k.includes('sự vô')) // Remove problematic patterns
+            .filter(k => !k.startsWith('sự ') || k.length < 15); // Limit "sự" keywords
+
+        // Remove duplicates
+        keywords = [...new Set(keywords)];
+
+        return keywords;
+    }
+
+    /**
+     * Validate và filter keywords quality
+     */
+    private validateKeywords(keywords: string[]): string[] {
+        const badPatterns = [
+            /^sự\s+/,           // Từ bắt đầu bằng "sự "
+            /vô\s+tận/,         // Từ chứa "vô tận"
+            /^\s*$/,            // Từ rỗng
+            /^[^a-zA-Zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ\s]+$/ // Từ không chứa chữ cái
+        ];
+
+        const validKeywords = keywords.filter(keyword => {
+            // Check against bad patterns
+            for (const pattern of badPatterns) {
+                if (pattern.test(keyword)) {
+                    return false;
+                }
+            }
+
+            // Keyword should be reasonable length
+            if (keyword.length < 2 || keyword.length > 30) {
+                return false;
+            }
+
+            return true;
+        });
+
+        this.logger.debug(`Filtered ${keywords.length - validKeywords.length} invalid keywords`);
+        return validKeywords;
     }
 
     private async generateEmbedding(text: string): Promise<number[]> {
@@ -816,6 +1574,84 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
     }
     //#endregion
 
+    /**
+     * Tối ưu: Download ảnh từ URL và tạo concept vector
+     */
+    async regenerateVectorFromUrl(imageUrl: string, conceptImageId: string): Promise<void> {
+        try {
+            this.logger.log(`Downloading image from URL: ${imageUrl}`);
+
+            // Download image from URL
+            const response = await fetch(imageUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to download image: ${response.statusText}`);
+            }
+
+            const buffer = Buffer.from(await response.arrayBuffer());
+
+            // Create a mock file object
+            const mockFile: Express.Multer.File = {
+                fieldname: 'image',
+                originalname: 'downloaded-image.jpg',
+                encoding: '7bit',
+                mimetype: 'image/jpeg',
+                buffer: buffer,
+                size: buffer.length,
+                stream: null as any,
+                destination: '',
+                filename: '',
+                path: ''
+            };
+
+            // Generate concept vector
+            await this.generateConceptVector(mockFile, conceptImageId);
+            this.logger.log(`Vector regenerated successfully for image: ${imageUrl}`);
+
+        } catch (error) {
+            this.logger.error(`Failed to regenerate vector from URL ${imageUrl}: ${error.message}`);
+            // Don't throw to prevent the update process from failing
+        }
+    }
+
+    /**
+     * Tối ưu: Regenerate vectors for all existing images of a concept
+     */
+    async regenerateAllVectorsForConcept(conceptId: string): Promise<void> {
+        try {
+            this.logger.log(`Starting vector regeneration for all images of concept: ${conceptId}`);
+
+            // Get all images for this concept
+            const conceptImages = await this.serviceConceptImageRepository.find({
+                where: { serviceConceptId: conceptId }
+            });
+
+            if (conceptImages.length === 0) {
+                this.logger.log(`No images found for concept: ${conceptId}`);
+                return;
+            }
+
+            this.logger.log(`Found ${conceptImages.length} images to regenerate vectors for`);
+
+            // Regenerate vector for each image
+            for (let i = 0; i < conceptImages.length; i++) {
+                const image = conceptImages[i];
+                this.logger.log(`Regenerating vector for image ${i + 1}/${conceptImages.length}: ${image.id}`);
+
+                await this.regenerateVectorFromUrl(image.imageUrl, image.id);
+
+                // Add small delay between requests to avoid overwhelming the API
+                if (i < conceptImages.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+
+            this.logger.log(`Completed vector regeneration for concept: ${conceptId}`);
+
+        } catch (error) {
+            this.logger.error(`Failed to regenerate vectors for concept ${conceptId}: ${error.message}`);
+        }
+    }
+
     private isServicePrompt(prompt?: string): boolean {
         if (!prompt) return false;
         const serviceKeywords = [
@@ -824,5 +1660,274 @@ Phân tích: Chủ thể, môi trường, kỹ thuật, ánh sáng, màu sắc, 
         ];
         const promptRaw = prompt.toLowerCase();
         return serviceKeywords.some(kw => promptRaw.includes(kw));
+    }
+
+    /**
+     * Phân loại ảnh dựa trên keywords được tạo từ AI với độ chính xác cao
+     */
+    private categorizeImageByKeywords(
+        keywords: string[],
+        peopleKeywords: string[],
+        animalKeywords: string[],
+        landscapeKeywords: string[],
+        objectKeywords: string[]
+    ): string {
+        const keywordString = keywords.join(' ').toLowerCase();
+
+        let peopleScore = 0;
+        let animalScore = 0;
+        let landscapeScore = 0;
+        let objectScore = 0;
+
+        // Enhanced scoring với weight khác nhau cho keywords quan trọng
+        const animalHighPriorityKeywords = ['mèo', 'chó', 'thú cưng', 'pet', 'animal', 'động vật', 'cat', 'dog', 'kitten', 'puppy'];
+        const peopleHighPriorityKeywords = ['người', 'nam', 'nữ', 'portrait', 'chân dung', 'family', 'gia đình', 'couple', 'cặp đôi'];
+
+        // Đếm với weight cao cho keywords ưu tiên
+        peopleKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                const weight = peopleHighPriorityKeywords.includes(kw.toLowerCase()) ? 3 : 1;
+                peopleScore += weight;
+            }
+        });
+
+        animalKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                const weight = animalHighPriorityKeywords.includes(kw.toLowerCase()) ? 3 : 1;
+                animalScore += weight;
+            }
+        });
+
+        landscapeKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                landscapeScore++;
+            }
+        });
+
+        objectKeywords.forEach(kw => {
+            if (keywordString.includes(kw.toLowerCase())) {
+                objectScore++;
+            }
+        });
+
+        // Enhanced logic: ưu tiên động vật nếu có từ khóa động vật mạnh
+        const hasStrongAnimalKeywords = animalHighPriorityKeywords.some(kw =>
+            keywordString.includes(kw.toLowerCase())
+        );
+
+        const hasStrongPeopleKeywords = peopleHighPriorityKeywords.some(kw =>
+            keywordString.includes(kw.toLowerCase())
+        );
+
+        this.logger.debug(`Categorization scores - People: ${peopleScore}, Animal: ${animalScore}, Landscape: ${landscapeScore}, Object: ${objectScore}`);
+        this.logger.debug(`Strong keywords - Animal: ${hasStrongAnimalKeywords}, People: ${hasStrongPeopleKeywords}`);
+
+        // Special case: Nếu có từ khóa động vật mạnh và không có từ khóa người mạnh -> chắc chắn là động vật
+        if (hasStrongAnimalKeywords && !hasStrongPeopleKeywords && animalScore >= 2) {
+            this.logger.debug(`Classified as ANIMAL due to strong animal keywords`);
+            return 'animal';
+        }
+
+        // Special case: Nếu có từ khóa người mạnh và không có từ khóa động vật mạnh -> chắc chắn là người
+        if (hasStrongPeopleKeywords && !hasStrongAnimalKeywords && peopleScore >= 2) {
+            this.logger.debug(`Classified as PEOPLE due to strong people keywords`);
+            return 'people';
+        }
+
+        // Trả về category có score cao nhất
+        const maxScore = Math.max(peopleScore, animalScore, landscapeScore, objectScore);
+
+        if (maxScore === 0) {
+            return 'unknown'; // Không xác định được loại
+        }
+
+        // Ưu tiên động vật nếu tie với categories khác
+        if (animalScore === maxScore && animalScore > 0) {
+            return 'animal';
+        }
+        if (peopleScore === maxScore) {
+            return 'people';
+        }
+        if (landscapeScore === maxScore) {
+            return 'landscape';
+        }
+        if (objectScore === maxScore) {
+            return 'object';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * Phân loại concept dựa trên tên concept
+     */
+    private categorizeConceptByName(conceptName: string): string {
+        const name = conceptName.toLowerCase();
+
+        // Keywords chi tiết để identify concept CON NGƯỜI
+        const peopleIndicators = [
+            // Giới tính & độ tuổi
+            'bé yêu', 'bé', 'baby', 'newborn', 'trẻ sơ sinh', 'infant', 'toddler',
+            'trẻ em', 'children', 'kid', 'child', 'thiếu niên', 'teenager', 'teen',
+            'người', 'nam', 'nữ', 'girl', 'boy', 'woman', 'man', 'adult', 'người lớn',
+            'elderly', 'senior', 'grandmother', 'grandfather', 'bà', 'ông',
+            'lady', 'ladies', 'quý phái', 'phái đẹp', 'miss', 'ms', 'mrs',
+
+            // Loại chụp & sự kiện
+            'portrait', 'chân dung', 'headshot', 'selfie', 'family', 'gia đình',
+            'couple', 'cặp đôi', 'group', 'nhóm', 'team', 'đội nhóm',
+            'wedding', 'cưới', 'bride', 'cô dâu', 'groom', 'chú rể', 'engagement', 'đính hôn',
+            'maternity', 'bầu bí', 'mang thai', 'pregnancy', 'thai sản',
+            'graduation', 'tốt nghiệp', 'birthday', 'sinh nhật', 'anniversary', 'kỷ niệm',
+            'profile', 'hồ sơ', 'avatar', 'sự kiện', 'event', 'quay', 'filming', 'video',
+
+            // Phong cách & modeling
+            'beauty', 'fashion', 'thời trang', 'model', 'modeling', 'makeup', 'trang điểm',
+            'cosplay', 'costume', 'trang phục', 'áo dài', 'traditional dress',
+            'street style', 'casual', 'formal', 'trang trọng', 'secret', 'bí mật',
+            'elegant', 'thanh lịch', 'sexy', 'quyến rũ', 'cute', 'dễ thương'
+        ];
+
+        // Keywords chi tiết để identify concept CON VẬT với độ ưu tiên
+        const animalIndicators = [
+            // Thú cưng - HIGH PRIORITY
+            'pet', 'thú cưng', 'domestic animal', 'động vật nuôi',
+            'cat', 'mèo', 'kitten', 'mèo con', 'feline', 'persian', 'british shorthair',
+            'dog', 'chó', 'puppy', 'chó con', 'canine', 'golden retriever', 'husky', 'poodle',
+            'rabbit', 'thỏ', 'bunny', 'hamster', 'guinea pig', 'bird', 'chim', 'parrot', 'vẹt',
+
+            // Từ khóa động vật chung - HIGH PRIORITY  
+            'animal', 'động vật', 'con vật', 'con thú', 'animal portrait', 'chân dung động vật',
+
+            // Động vật hoang dã
+            'wildlife', 'động vật hoang dã', 'wild animal', 'safari',
+            'elephant', 'voi', 'lion', 'sư tử', 'tiger', 'hổ', 'bear', 'gấu',
+            'monkey', 'khỉ', 'panda', 'gấu trúc', 'deer', 'hươu',
+
+            // Động vật biển & khác
+            'fish', 'cá', 'dolphin', 'cá heo', 'whale', 'cá voi', 'marine animal',
+            'insect', 'côn trùng', 'butterfly', 'bướm'
+        ];
+
+        // Keywords chi tiết để identify concept CẢNH VẬT & KIẾN TRÚC
+        const landscapeIndicators = [
+            // Cảnh quan thiên nhiên
+            'landscape', 'phong cảnh', 'scenery', 'cảnh đẹp', 'natural scenery',
+            'mountain', 'núi', 'hill', 'đồi', 'beach', 'bãi biển', 'ocean', 'biển',
+            'lake', 'hồ', 'river', 'sông', 'waterfall', 'thác', 'forest', 'rừng',
+            'sunset', 'hoàng hôn', 'sunrise', 'bình minh', 'nature', 'thiên nhiên',
+
+            // Kiến trúc & công trình
+            'architecture', 'kiến trúc', 'building', 'tòa nhà', 'bridge', 'cầu',
+            'tower', 'tháp', 'castle', 'lâu đài', 'temple', 'đền', 'church', 'nhà thờ',
+            'pagoda', 'chùa', 'cityscape', 'cảnh thành phố', 'urban', 'đô thị',
+
+            // Môi trường
+            'outdoor', 'ngoài trời', 'countryside', 'nông thôn', 'park', 'công viên',
+            'garden', 'vườn', 'street', 'đường phố'
+        ];
+
+        // Keywords chi tiết để identify concept ĐỒ VẬT & SẢN PHẨM
+        const objectIndicators = [
+            // Sản phẩm & thương mại
+            'product', 'sản phẩm', 'still life', 'tĩnh vật', 'commercial', 'thương mại',
+            'merchandise', 'hàng hóa', 'advertising', 'quảng cáo',
+
+            // Đồ ăn & thức uống
+            'food', 'đồ ăn', 'cuisine', 'ẩm thực', 'fruit', 'trái cây', 'cake', 'bánh',
+            'coffee', 'cà phê', 'wine', 'rượu', 'dessert', 'tráng miệng',
+
+            // Công nghệ & thiết bị
+            'technology', 'công nghệ', 'device', 'thiết bị', 'phone', 'điện thoại',
+            'computer', 'máy tính', 'camera', 'máy ảnh', 'watch', 'đồng hồ',
+
+            // Phương tiện & xe cộ
+            'vehicle', 'phương tiện', 'car', 'ô tô', 'motorcycle', 'xe máy',
+            'bicycle', 'xe đạp', 'boat', 'thuyền', 'airplane', 'máy bay',
+
+            // Thời trang & phụ kiện
+            'fashion item', 'shoes', 'giày', 'bag', 'túi', 'jewelry', 'trang sức',
+            'clothing', 'quần áo', 'accessory', 'phụ kiện',
+
+            // Nội thất & trang trí
+            'furniture', 'nội thất', 'decoration', 'trang trí', 'artwork', 'nghệ thuật',
+            'antique', 'đồ cổ', 'vintage', 'cổ điển'
+        ];
+
+        // Enhanced scoring system với priority weights
+        const animalHighPriorityWords = ['pet', 'thú cưng', 'mèo', 'chó', 'cat', 'dog', 'animal', 'động vật'];
+        const peopleHighPriorityWords = ['người', 'bé', 'baby', 'family', 'gia đình', 'wedding', 'cưới', 'portrait', 'chân dung', 'model', 'girl', 'boy', 'lady', 'quý phái', 'woman', 'man', 'profile', 'sự kiện', 'event'];
+
+        let animalScore = 0;
+        let peopleScore = 0;
+        let landscapeScore = 0;
+        let objectScore = 0;
+
+        // Score với weights cho animal indicators
+        animalIndicators.forEach(indicator => {
+            if (name.includes(indicator)) {
+                const weight = animalHighPriorityWords.includes(indicator) ? 3 : 1;
+                animalScore += weight;
+            }
+        });
+
+        // Score với weights cho people indicators  
+        peopleIndicators.forEach(indicator => {
+            if (name.includes(indicator)) {
+                const weight = peopleHighPriorityWords.includes(indicator) ? 3 : 1;
+                peopleScore += weight;
+            }
+        });
+
+        // Score cho landscape indicators
+        landscapeIndicators.forEach(indicator => {
+            if (name.includes(indicator)) {
+                landscapeScore += 1;
+            }
+        });
+
+        // Score cho object indicators
+        objectIndicators.forEach(indicator => {
+            if (name.includes(indicator)) {
+                objectScore += 1;
+            }
+        });
+
+        // Check for strong animal indicators first (highest priority)
+        const hasStrongAnimalWords = animalHighPriorityWords.some(word => name.includes(word));
+        const hasStrongPeopleWords = peopleHighPriorityWords.some(word => name.includes(word));
+
+        // Special case: Strong animal words and no strong people words -> definitely animal
+        if (hasStrongAnimalWords && !hasStrongPeopleWords && animalScore >= 2) {
+            return 'animal';
+        }
+
+        // Special case: Strong people words and no strong animal words -> definitely people
+        if (hasStrongPeopleWords && !hasStrongAnimalWords && peopleScore >= 2) {
+            return 'people';
+        }
+
+        // Determine winner by highest score
+        const maxScore = Math.max(animalScore, peopleScore, landscapeScore, objectScore);
+
+        if (maxScore === 0) {
+            return 'unknown';
+        }
+
+        // Prioritize animal if tied with others
+        if (animalScore === maxScore && animalScore > 0) {
+            return 'animal';
+        }
+        if (peopleScore === maxScore) {
+            return 'people';
+        }
+        if (landscapeScore === maxScore) {
+            return 'landscape';
+        }
+        if (objectScore === maxScore) {
+            return 'object';
+        }
+
+        return 'unknown';
     }
 }

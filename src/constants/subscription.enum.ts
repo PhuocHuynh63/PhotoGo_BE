@@ -25,3 +25,8 @@ export enum SubscriptionInvoiceStatus {
   PAID = 'đã thanh toán',
   CANCELED = 'đã hủy',
 }
+
+export enum PlanType {
+  USER = 'người dùng',
+  VENDOR = 'nhà cung cấp',
+}

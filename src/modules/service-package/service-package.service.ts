@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ServicePackage } from './entities/service-package.entity';
 import { ServicePackageMetadata } from './entities/service-package-metadata.entity';
 import { ServiceConceptServiceType } from './entities/service-concept-service-type.entity';
@@ -1060,17 +1060,62 @@ export class ServicePackageService {
 
     const serviceConcept = await this.findServiceConcept(id);
 
-    // Upload new images if provided
+    // Handle image updates with smart logic
     let savedImageEntities: ServiceConceptImage[] = [];
+    let hasImageChanges = false;
+
+    // Handle image deletion first (if specified)
+    if (updateServiceConceptDto.imagesToDelete && updateServiceConceptDto.imagesToDelete.length > 0) {
+      this.logger.log(`Deleting specified images: ${updateServiceConceptDto.imagesToDelete.join(', ')}`);
+
+      // Delete vectors for specific images
+      await this.dataSource.query(
+        `DELETE FROM concept_vector WHERE concept_image_id = ANY($1)`,
+        [updateServiceConceptDto.imagesToDelete]
+      );
+
+      // Delete specific images
+      await this.serviceConceptImageRepository.delete({
+        id: In(updateServiceConceptDto.imagesToDelete)
+      });
+
+      hasImageChanges = true;
+      this.logger.log(`Deleted ${updateServiceConceptDto.imagesToDelete.length} specified images`);
+    }
+
+    // Handle new image uploads
     if (files.images && files.images.length > 0) {
-      this.logger.log('Uploading new images');
+      this.logger.log('Processing new images');
       try {
         const uploadedImageUrls = await this.uploadService.uploadImages(files.images, 'service-concepts/images');
 
-        // Delete existing images first
-        await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
+        if (updateServiceConceptDto.replaceAllImages === true) {
+          // REPLACE ALL: Delete all existing images and replace with new ones
+          this.logger.log('Replace all images mode - deleting all existing images');
 
-        // Then create new images
+          const existingImages = await this.serviceConceptImageRepository.find({
+            where: { serviceConceptId: id },
+            select: ['id']
+          });
+          const existingImageIds = existingImages.map(img => img.id);
+
+          if (existingImageIds.length > 0) {
+            // Delete vectors for all existing images
+            await this.dataSource.query(
+              `DELETE FROM concept_vector WHERE concept_image_id = ANY($1)`,
+              [existingImageIds]
+            );
+
+            // Delete all existing images
+            await this.serviceConceptImageRepository.delete({ serviceConceptId: id });
+            this.logger.log(`Deleted ${existingImageIds.length} existing images`);
+          }
+        } else {
+          // ADD TO EXISTING: Keep existing images and add new ones
+          this.logger.log('Add to existing images mode - keeping current images');
+        }
+
+        // Create new images
         const imageEntities = uploadedImageUrls.map(url =>
           this.serviceConceptImageRepository.create({
             imageUrl: url,
@@ -1078,13 +1123,22 @@ export class ServicePackageService {
           })
         );
         savedImageEntities = await this.serviceConceptImageRepository.save(imageEntities);
+        hasImageChanges = true;
 
-        // Update service concept with new images
-        serviceConcept.images = savedImageEntities;
+        this.logger.log(`Added ${savedImageEntities.length} new images`);
       } catch (error) {
-        this.logger.error(`Error uploading images: ${error.message}`);
-        throw new BadRequestException(`Error uploading images: ${error.message}`);
+        this.logger.error(`Error processing images: ${error.message}`);
+        throw new BadRequestException(`Error processing images: ${error.message}`);
       }
+    }
+
+    // Update service concept images relation if there were changes
+    if (hasImageChanges) {
+      const allCurrentImages = await this.serviceConceptImageRepository.find({
+        where: { serviceConceptId: id }
+      });
+      serviceConcept.images = allCurrentImages;
+      this.logger.log(`Concept now has ${allCurrentImages.length} total images`);
     }
 
     // Update basic fields - only if provided (not undefined)
@@ -1243,19 +1297,32 @@ export class ServicePackageService {
     const updatedServiceConcept = await this.serviceConceptRepository.save(serviceConcept);
     this.logger.log(`Khái niệm dịch vụ đã được cập nhật thành công trong ${Date.now() - startTime}ms`);
 
-    // Generate concept vector if new images are provided
-    if (files?.images && files.images.length > 0 && savedImageEntities.length === files.images.length) {
-      try {
-        this.logger.log(`Bắt đầu tạo concept vector cho tất cả ảnh của khái niệm dịch vụ ${updatedServiceConcept.id}`);
-        const vectorStartTime = Date.now();
+    // Generate concept vectors with smart logic
+    try {
+      this.logger.log(`Bắt đầu xử lý concept vector cho khái niệm dịch vụ ${updatedServiceConcept.id}`);
+      const vectorStartTime = Date.now();
+
+      if (files?.images && files.images.length > 0 && savedImageEntities.length === files.images.length) {
+        // Generate vectors for newly uploaded images only
+        this.logger.log('Generating vectors for newly uploaded images');
         for (let i = 0; i < files.images.length; i++) {
           await this.geminiService.generateConceptVector(files.images[i], savedImageEntities[i].id);
-          this.logger.log(`Concept vector đã được tạo thành công với ảnh thứ ${i + 1} (service_concept_image_id: ${savedImageEntities[i].id}) trong ${Date.now() - vectorStartTime}ms`);
+          this.logger.log(`Concept vector đã được tạo thành công với ảnh mới thứ ${i + 1} (service_concept_image_id: ${savedImageEntities[i].id})`);
         }
-      } catch (error) {
-        this.logger.error(`Lỗi khi tạo concept vector: ${error.message}`);
-        // Don't throw error to prevent service concept update from failing
+      } else if (hasImageChanges && !files?.images) {
+        // Only images were deleted, no new images added - no vector generation needed
+        this.logger.log('Only image deletions occurred, no vector generation needed');
+      } else if (!hasImageChanges) {
+        // No image changes, but other concept data might have changed
+        // Regenerate vectors for all existing images to reflect updated concept context
+        this.logger.log('No image changes. Regenerating vectors for all existing images with updated context');
+        await this.geminiService.regenerateAllVectorsForConcept(updatedServiceConcept.id);
       }
+
+      this.logger.log(`Hoàn thành xử lý concept vector trong ${Date.now() - vectorStartTime}ms`);
+    } catch (error) {
+      this.logger.error(`Lỗi khi xử lý concept vector: ${error.message}`);
+      // Don't throw error to prevent service concept update from failing
     }
 
     // Return the updated concept with all relations
@@ -1318,12 +1385,21 @@ export class ServicePackageService {
         this.logger.warn(`Không thể xóa concept vector: ${error.message}`);
       }
 
+      // ✅ FIX: Correct field name in query - should be concept_image_id not concept_id
       // 4.5. Delete concept vector records from database
-      await this.dataSource.query(`
-        DELETE FROM concept_vector 
-        WHERE concept_id = $1
-      `, [id]);
-      this.logger.log(`Đã xóa concept vector records cho concept ${id}`);
+      const conceptImages = await this.serviceConceptImageRepository.find({
+        where: { serviceConceptId: id },
+        select: ['id']
+      });
+      const conceptImageIds = conceptImages.map(img => img.id);
+
+      if (conceptImageIds.length > 0) {
+        await this.dataSource.query(`
+          DELETE FROM concept_vector 
+          WHERE concept_image_id = ANY($1)
+        `, [conceptImageIds]);
+        this.logger.log(`Đã xóa concept vector records cho concept ${id}`);
+      }
 
       // 5. Finally delete the service concept
       await this.serviceConceptRepository.remove(serviceConcept);

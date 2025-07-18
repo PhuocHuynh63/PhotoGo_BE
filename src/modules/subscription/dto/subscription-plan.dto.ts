@@ -1,5 +1,6 @@
-import { IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { BillingCycle, PlanType } from '../../../constants/subscription.enum';
 
 export class CreateSubscriptionPlanDto {
   @IsString()
@@ -11,17 +12,25 @@ export class CreateSubscriptionPlanDto {
   description: string;
 
   @IsNumber()
-  @ApiProperty({ description: 'Giá gói đăng ký' })
-  price: number;
+  @ApiProperty({ description: 'Giá gói đăng ký theo tháng' })
+  priceForMonth: number;
 
   @IsNumber()
-  @ApiProperty({ description: 'Thời hạn gói đăng ký (ngày)' })
-  duration: number;
+  @ApiProperty({ description: 'Giá gói đăng ký theo năm' })
+  priceForYear: number;
 
   @IsBoolean()
   @IsOptional()
   @ApiProperty({ description: 'Trạng thái hoạt động', default: true })
   isActive?: boolean = true;
+
+  @IsEnum(PlanType)
+  @ApiProperty({ description: 'Loại gói đăng ký', enum: PlanType })
+  planType: PlanType;
+
+  @IsEnum(BillingCycle)
+  @ApiProperty({ description: 'Chu kỳ thanh toán', enum: BillingCycle })
+  billingCycle: BillingCycle;
 }
 
 export class UpdateSubscriptionPlanDto {
@@ -37,18 +46,28 @@ export class UpdateSubscriptionPlanDto {
 
   @IsNumber()
   @IsOptional()
-  @ApiProperty({ description: 'Giá gói đăng ký', required: false })
-  price?: number;
+  @ApiProperty({ description: 'Giá gói đăng ký theo tháng', required: false })
+  priceForMonth?: number;
 
   @IsNumber()
   @IsOptional()
-  @ApiProperty({ description: 'Thời hạn gói đăng ký (ngày)', required: false })
-  duration?: number;
+  @ApiProperty({ description: 'Giá gói đăng ký theo năm', required: false })
+  priceForYear?: number;
 
   @IsBoolean()
   @IsOptional()
   @ApiProperty({ description: 'Trạng thái hoạt động', required: false })
   isActive?: boolean;
+
+  @IsEnum(PlanType)
+  @IsOptional()
+  @ApiProperty({ description: 'Loại gói đăng ký', enum: PlanType, required: false })
+  planType?: PlanType;
+
+  @IsEnum(BillingCycle)
+  @IsOptional()
+  @ApiProperty({ description: 'Chu kỳ thanh toán', enum: BillingCycle, required: false })
+  billingCycle?: BillingCycle;
 }
 
 export class FindSubscriptionPlanDto {
@@ -61,4 +80,9 @@ export class FindSubscriptionPlanDto {
   @IsOptional()
   @ApiProperty({ description: 'Lọc theo trạng thái hoạt động', required: false })
   isActive?: boolean;
+
+  @IsEnum(PlanType)
+  @IsOptional()
+  @ApiProperty({ description: 'Loại gói đăng ký', enum: PlanType, required: false })
+  planType?: PlanType;
 } 

@@ -1,11 +1,8 @@
-import { IsOptional, IsUUID, IsUrl } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsUUID, IsUrl } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { AlbumStatus } from 'src/constants/album.enum';
 
 export class UpdateAlbumMultipartDto {
-  @ApiProperty({ type: 'string', required: false, description: 'User ID' })
-  @IsUUID()
-  @IsOptional()
-  userId?: string;
 
   @ApiProperty({ type: 'string', required: false, description: 'Location ID' })
   @IsUUID()
@@ -16,4 +13,17 @@ export class UpdateAlbumMultipartDto {
   @IsUrl()
   @IsOptional()
   driveLink?: string;
+
+  @ApiProperty({ type: 'string', description: 'Booking ID' })
+  @IsUUID()
+  bookingId: string;
+
+  @ApiProperty({ type: 'string', description: 'Date' })
+  @IsDateString()
+  date: string;
+
+  // @ApiProperty({ type: 'string', description: 'Status', enum: AlbumStatus, default: AlbumStatus.NOT_UPLOAD, required: false })
+  // @IsEnum(AlbumStatus)
+  // @IsOptional()
+  // status?: AlbumStatus;
 } 

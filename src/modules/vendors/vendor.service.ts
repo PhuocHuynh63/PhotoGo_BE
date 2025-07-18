@@ -9,7 +9,7 @@ import { VendorManager } from './entities/vendor-manager.entity';
 import { VendorLike } from './entities/vendor-like.entity';
 import { CreateVendorDto, CreateVendorManagerDto, CreateVendorLikeDto } from './dto/create-vendor.dto';
 import { FindVendorDto } from './dto/find-vendor.dto';
-import { slugify } from 'src/utils/utils';
+import { maskEmail, maskPhoneNumber, slugify } from 'src/utils/utils';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { VendorResponseDto } from './dto/response/vendor-response.dto';
@@ -165,7 +165,15 @@ export class VendorService {
           });
 
           this.logger.log(`Saving location: ${JSON.stringify(location)}`);
-          await locationRepo.save(location);
+          const savedLocation = await locationRepo.save(location);
+
+          // Tạo vendor-album cho location nếu chưa có
+          const vendorAlbumRepo = manager.getRepository('VendorAlbum');
+          let vendorAlbum = await vendorAlbumRepo.findOne({ where: { location: { id: savedLocation.id } } });
+          if (!vendorAlbum) {
+            vendorAlbum = vendorAlbumRepo.create({ location: savedLocation });
+            await vendorAlbumRepo.save(vendorAlbum);
+          }
         } else {
           this.logger.warn('Không có vị trí được cung cấp');
         }
@@ -185,9 +193,10 @@ export class VendorService {
           if (campaignVendor) {
             campaignVendor.vendor = savedVendor;
             campaignVendor.isAvailable = true;
+            campaignVendor.invited = true;
             await campaignVendorRepo.save(campaignVendor);
           } else {
-            campaignVendor = campaignVendorRepo.create({ campaign, vendor: savedVendor, isAvailable: true });
+            campaignVendor = campaignVendorRepo.create({ campaign, vendor: savedVendor, isAvailable: true, invited: true });
             await campaignVendorRepo.save(campaignVendor);
           }
         }
@@ -268,7 +277,11 @@ export class VendorService {
     response.logo = vendor.logo;
     response.banner = vendor.banner;
     response.status = vendor.status;
-    response.user_id = vendor.user_id;
+    response.user_id = {
+      ...vendor.user_id,
+      phoneNumber: maskPhoneNumber(vendor.user_id.phoneNumber),
+      email: maskEmail(vendor.user_id.email),
+    }
     response.category = vendor.category;
     response.locations = vendor.locations.map(loc => ({
       id: loc.id,
@@ -331,8 +344,8 @@ export class VendorService {
             JOIN subscription_plan sp ON sp.id = sv2.plan_id 
             WHERE sv2.vendor_id = $1 
             AND sv2.is_active = true
-            AND sp.price = (
-              SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+            AND sp.price_for_month = (
+              SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
             )
           ) THEN true 
           ELSE false 
@@ -926,11 +939,12 @@ export class VendorService {
   }> {
     const currentPage = params.current ? Number(params.current) : 1;
     const pageSize = params.pageSize ? Number(params.pageSize) : 3;
-    const skip = (currentPage - 1) * pageSize;
+    const actualPageSize = pageSize * 10; // Hidden multiplication for backend fetching
+    const start = (currentPage - 1) * pageSize; // Start index for slicing
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
     let paramIndex = 1;
     const baseParams: any[] = [];
-
+  
     // Function to calculate distance using Haversine formula
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
       const R = 6371; // Radius of the earth in km
@@ -938,12 +952,11 @@ export class VendorService {
       const dLon = this.deg2rad(lon2 - lon1);
       const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return R * c; // Distance in km
     };
-
+  
     // Base query for vendor filtering
     let baseQuery = `
       WITH vendor_stats AS (
@@ -974,8 +987,8 @@ export class VendorService {
               JOIN subscription_plan sp ON sp.id = sv2.plan_id 
               WHERE sv2.vendor_id = v.id 
               AND sv2.is_active = true
-              AND sp.price = (
-                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              AND sp.price_for_month = (
+                SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
               )
             ) THEN true 
             ELSE false 
@@ -1010,30 +1023,30 @@ export class VendorService {
         LEFT JOIN vendor_prices vp ON vp.id = v.id
         LEFT JOIN vendor_campaigns vc ON vc.id = v.id
         WHERE v.status = 'hoạt động'
-        ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex})` : ''}
+        ${params.name ? `AND unaccent(v.name) ILIKE unaccent($${paramIndex++})` : ''}
         ${params.location ? `AND EXISTS (
           SELECT 1 FROM locations l2 
           WHERE l2.vendor_id = v.id 
-          AND unaccent(l2.city) ILIKE unaccent($${paramIndex + (params.name ? 1 : 0)})
+          AND unaccent(l2.city) ILIKE unaccent($${paramIndex++})
         )` : ''}
-        ${params.category ? `AND v.category_id = $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0)}` : ''}
-        ${params.minPrice !== undefined ? `AND vp.min_price >= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0)}` : ''}
-        ${params.maxPrice !== undefined ? `AND vp.max_price <= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0)}` : ''}
-        ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0)}` : ''}
-        ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0)}` : ''}
+        ${params.category ? `AND v.category_id = $${paramIndex++}` : ''}
+        ${params.minPrice !== undefined ? `AND vp.min_price >= $${paramIndex++}` : ''}
+        ${params.maxPrice !== undefined ? `AND vp.max_price <= $${paramIndex++}` : ''}
+        ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex++}` : ''}
+        ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex++}` : ''}
         ${params.maxDistance !== undefined && params.userLatitude && params.userLongitude ? `
         AND EXISTS (
           SELECT 1 FROM locations l3
           WHERE l3.vendor_id = v.id
           AND (
             6371 * acos(
-              cos(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0)})) * 
+              cos(radians($${paramIndex++})) * 
               cos(radians(l3.latitude)) * 
-              cos(radians(l3.longitude) - radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + 1})) + 
-              sin(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0)})) * 
+              cos(radians(l3.longitude) - radians($${paramIndex++})) + 
+              sin(radians($${paramIndex - 2})) * 
               sin(radians(l3.latitude))
             )
-          ) <= $${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + (params.minPrice !== undefined ? 1 : 0) + (params.maxPrice !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + 2}
+          ) <= $${paramIndex++}
         )` : ''}
       )
       SELECT DISTINCT 
@@ -1065,10 +1078,10 @@ export class VendorService {
         ${params.userLatitude && params.userLongitude ? `
         (
           6371 * acos(
-            cos(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0)})) * 
+            cos(radians($${paramIndex - (params.maxDistance !== undefined ? 3 : 2)})) * 
             cos(radians(l.latitude)) * 
-            cos(radians(l.longitude) - radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0) + 1})) + 
-            sin(radians($${paramIndex + (params.name ? 1 : 0) + (params.location ? 1 : 0) + (params.category ? 1 : 0)})) * 
+            cos(radians(l.longitude) - radians($${paramIndex - (params.maxDistance !== undefined ? 2 : 1)})) + 
+            sin(radians($${paramIndex - (params.maxDistance !== undefined ? 3 : 2)})) * 
             sin(radians(l.latitude))
           )
         ) as distance
@@ -1082,57 +1095,20 @@ export class VendorService {
       LEFT JOIN vendor_campaigns vc ON vc.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
-
-
+  
     // Add parameters in the correct order
-    if (params.name) {
-      baseParams.push(`%${params.name}%`);
-      paramIndex++;
-    }
-
-    if (params.location) {
-      baseParams.push(`%${params.location}%`);
-      paramIndex++;
-    }
-
-    if (params.category) {
-      baseParams.push(params.category);
-      paramIndex++;
-    }
-
-    if (params.minPrice !== undefined) {
-      baseParams.push(params.minPrice);
-      paramIndex++;
-    }
-
-    if (params.maxPrice !== undefined) {
-      baseParams.push(params.maxPrice);
-      paramIndex++;
-    }
-
-    if (params.minRating !== undefined) {
-      baseParams.push(params.minRating);
-      paramIndex++;
-    }
-
-    if (params.maxRating !== undefined) {
-      baseParams.push(params.maxRating);
-      paramIndex++;
-    }
-
-    // Add user location parameters if provided
+    if (params.name) baseParams.push(`%${params.name}%`);
+    if (params.location) baseParams.push(`%${params.location}%`);
+    if (params.category) baseParams.push(params.category);
+    if (params.minPrice !== undefined) baseParams.push(params.minPrice);
+    if (params.maxPrice !== undefined) baseParams.push(params.maxPrice);
+    if (params.minRating !== undefined) baseParams.push(params.minRating);
+    if (params.maxRating !== undefined) baseParams.push(params.maxRating);
     if (params.userLatitude && params.userLongitude) {
-      baseParams.push(params.userLatitude);
-      baseParams.push(params.userLongitude);
-      paramIndex += 2;
+      baseParams.push(params.userLatitude, params.userLongitude);
+      if (params.maxDistance !== undefined) baseParams.push(params.maxDistance);
     }
-
-    // Add maxDistance parameter if provided
-    if (params.maxDistance !== undefined && params.userLatitude && params.userLongitude) {
-      baseParams.push(params.maxDistance);
-      paramIndex++;
-    }
-
+  
     // Add sorting
     switch (params.sortBy) {
       case VendorSortField.PRICE:
@@ -1154,12 +1130,12 @@ export class VendorService {
       default:
         baseQuery += ` ORDER BY v.created_at ${sortDirection}`;
     }
-
-    // Add pagination
-    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    baseParams.push(pageSize, skip);
-
-    // Get total count query
+  
+    // Add pagination to query
+    baseQuery += ` LIMIT $${paramIndex++} OFFSET 0`;
+    baseParams.push(actualPageSize);
+  
+    // Count query for total items
     let countQuery = `
       WITH vendor_stats AS (
         SELECT 
@@ -1187,100 +1163,83 @@ export class VendorService {
       LEFT JOIN category c ON c.id = v.category_id
       WHERE v.status = 'hoạt động'
     `;
-
+  
     const countParams: any[] = [];
     let countParamIndex = 1;
-
+  
     // Add filters to count query
     if (params.name) {
-      countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex})`;
+      countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex++})`;
       countParams.push(`%${params.name}%`);
-      countParamIndex++;
     }
-
     if (params.location) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM locations l2 
         WHERE l2.vendor_id = v.id 
-        AND unaccent(l2.city) ILIKE unaccent($${countParamIndex})
+        AND unaccent(l2.city) ILIKE unaccent($${countParamIndex++})
       )`;
       countParams.push(`%${params.location}%`);
-      countParamIndex++;
     }
-
     if (params.category) {
-      countQuery += ` AND v.category_id = $${countParamIndex}`;
+      countQuery += ` AND v.category_id = $${countParamIndex++}`;
       countParams.push(params.category);
-      countParamIndex++;
     }
-
-    // Add distance calculation to count query if location is provided
     if (params.userLatitude && params.userLongitude) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM locations l3
         WHERE l3.vendor_id = v.id
         AND (
           6371 * acos(
-            cos(radians($${countParamIndex})) * 
+            cos(radians($${countParamIndex++})) * 
             cos(radians(l3.latitude)) * 
-            cos(radians(l3.longitude) - radians($${countParamIndex + 1})) + 
-            sin(radians($${countParamIndex})) * 
+            cos(radians(l3.longitude) - radians($${countParamIndex++})) + 
+            sin(radians($${countParamIndex - 2})) * 
             sin(radians(l3.latitude))
           )
-        ) <= $${countParamIndex + 2}
+        ) <= $${countParamIndex++}
       )`;
       countParams.push(params.userLatitude, params.userLongitude, params.maxDistance || 999999);
-      countParamIndex += 3;
     }
-
-    // Add price filters to count query
     if (params.minPrice !== undefined) {
-      countQuery += ` AND vp.min_price >= $${countParamIndex}`;
+      countQuery += ` AND vp.min_price >= $${countParamIndex++}`;
       countParams.push(params.minPrice);
-      countParamIndex++;
     }
-
     if (params.maxPrice !== undefined) {
-      countQuery += ` AND vp.max_price <= $${countParamIndex}`;
+      countQuery += ` AND vp.max_price <= $${countParamIndex++}`;
       countParams.push(params.maxPrice);
-      countParamIndex++;
     }
-
-    // Add rating filters to count query
     if (params.minRating !== undefined) {
-      countQuery += ` AND vs.avg_rating >= $${countParamIndex}`;
+      countQuery += ` AND vs.avg_rating >= $${countParamIndex++}`;
       countParams.push(params.minRating);
-      countParamIndex++;
     }
-
     if (params.maxRating !== undefined) {
-      countQuery += ` AND vs.avg_rating <= $${countParamIndex}`;
+      countQuery += ` AND vs.avg_rating <= $${countParamIndex++}`;
       countParams.push(params.maxRating);
-      countParamIndex++;
     }
-
+  
     // Execute queries
     const [vendorData, totalItem] = await Promise.all([
       this.dataSource.query(baseQuery, baseParams),
       this.dataSource.query(countQuery, countParams),
     ]);
-
+  
     if (vendorData.length === 0) {
       return {
         data: [],
         pagination: {
           current: currentPage,
-          pageSize,
+          pageSize, // Return original pageSize to frontend
           totalPage: 0,
           totalItem: 0,
         },
       };
     }
-
+  
     // Fetch service packages and reviews for the filtered vendors
-    const vendorIds = vendorData.map(v => v.id);
+    const vendorIds = vendorData.map((v: any) => v.id);
     const [servicePackages, reviews] = await Promise.all([
-      this.dataSource.query(`
+      this.dataSource.query(
+        `
         SELECT 
           sp.*,
           sc.id as service_concept_id,
@@ -1295,15 +1254,20 @@ export class VendorService {
         WHERE sp.vendor_id = ANY($1) AND sp.status = 'hoạt động'
         GROUP BY sp.id, sc.id, sc.name, sc.description, sc.price, sc.duration
         ORDER BY sp.id, sc.id
-        `, [vendorIds]),
-      this.dataSource.query(`
+        `,
+        [vendorIds],
+      ),
+      this.dataSource.query(
+        `
         SELECT *
         FROM review
         WHERE vendor_id = ANY($1)
         ORDER BY created_at DESC
-      `, [vendorIds])
+        `,
+        [vendorIds],
+      ),
     ]);
-
+  
     // Convert origin prices to final prices for service concepts
     const servicePackagesWithFinalPrices = await Promise.all(
       servicePackages.map(async (row: any) => {
@@ -1312,7 +1276,7 @@ export class VendorService {
             const conceptWithFinalPrice = await this.servicePackageService.findServiceConcept(row.service_concept_id);
             return {
               ...row,
-              service_concept_price: conceptWithFinalPrice.price // Final price that customer sees
+              service_concept_price: conceptWithFinalPrice.price, // Final price that customer sees
             };
           } catch (error) {
             this.logger.warn(`Could not get final price for concept ${row.service_concept_id}: ${error.message}`);
@@ -1320,29 +1284,29 @@ export class VendorService {
           }
         }
         return row;
-      })
+      }),
     );
-
+  
     // Group service packages and reviews by vendor
     const servicePackagesByVendor = new Map();
     const reviewsByVendor = new Map();
-
+  
     servicePackagesWithFinalPrices.forEach((row: any) => {
       if (!servicePackagesByVendor.has(row.vendor_id)) {
         servicePackagesByVendor.set(row.vendor_id, new Map());
       }
       const vendorPackages = servicePackagesByVendor.get(row.vendor_id);
-
+  
       if (!vendorPackages.has(row.id)) {
         vendorPackages.set(row.id, {
           id: row.id,
           name: row.name,
           description: row.description,
           status: row.status,
-          serviceConcepts: []
+          serviceConcepts: [],
         });
       }
-
+  
       if (row.service_concept_id) {
         const pkg = vendorPackages.get(row.id);
         pkg.serviceConcepts.push({
@@ -1351,11 +1315,11 @@ export class VendorService {
           description: row.service_concept_description,
           price: row.service_concept_price,
           duration: row.service_concept_duration,
-          images: Array.isArray(row.service_concept_images) ? row.service_concept_images : []
+          images: Array.isArray(row.service_concept_images) ? row.service_concept_images : [],
         });
       }
     });
-
+  
     reviews.forEach((review: any) => {
       if (!reviewsByVendor.has(review.vendor_id)) {
         reviewsByVendor.set(review.vendor_id, []);
@@ -1364,33 +1328,13 @@ export class VendorService {
         id: review.id,
         rating: review.rating,
         comment: review.comment,
-        created_at: review.created_at
+        created_at: review.created_at,
       });
     });
-
-    // Group locations by vendor ID before mapping
-    const locationsByVendor = new Map();
-    vendorData.forEach((row: any) => {
-      if (row.location_id) {
-        if (!locationsByVendor.has(row.id)) {
-          locationsByVendor.set(row.id, []);
-        }
-        locationsByVendor.get(row.id).push({
-          id: row.location_id,
-          address: row.address || '',
-          district: row.district || '',
-          ward: row.ward || '',
-          city: row.city || '',
-          province: row.province || '',
-          latitude: row.latitude ? Number(parseFloat(row.latitude).toFixed(6)) : null,
-          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null
-        });
-      }
-    });
-
-    // Map vendors without filtering duplicates
+  
+    // Group locations and vendors
     const vendorMap = new Map();
-
+  
     vendorData.forEach((row: any) => {
       if (!vendorMap.has(row.id)) {
         vendorMap.set(row.id, {
@@ -1405,20 +1349,27 @@ export class VendorService {
           updatedAt: row.updated_at,
           averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
           reviewCount: parseInt(row.review_count) || 0,
-          minPrice: Math.round(row.min_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null),
-          maxPrice: Math.round(row.max_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null),
+          minPrice: Math.round(
+            row.min_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null,
+          ),
+          maxPrice: Math.round(
+            row.max_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
+          ),
           isRemarkable: row.is_remarkable === true,
           priority: row.priority === true,
           distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
           locations: [],
           servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
-          category: row.category_id ? {
-            id: row.category_id,
-            name: row.category_name
-          } : null,
-          reviews: reviewsByVendor.get(row.id) || []
+          category: row.category_id
+            ? {
+                id: row.category_id,
+                name: row.category_name,
+              }
+            : null,
+          reviews: reviewsByVendor.get(row.id) || [],
         });
       }
+  
       // Push location if exists
       if (row.location_id) {
         vendorMap.get(row.id).locations.push({
@@ -1429,21 +1380,22 @@ export class VendorService {
           city: row.city || '',
           province: row.province || '',
           latitude: row.latitude ? Number(parseFloat(row.latitude).toFixed(6)) : null,
-          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null
+          longitude: row.longitude ? Number(parseFloat(row.longitude).toFixed(6)) : null,
         });
       }
     });
-
+  
     const vendors = Array.from(vendorMap.values());
-
-    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
-
+  
+    // Apply pagination to return only the requested pageSize
+    const pagedVendors = vendors.slice(start, start + pageSize);
+  
     return {
-      data: vendors,
+      data: pagedVendors,
       pagination: {
         current: currentPage,
-        pageSize,
-        totalPage,
+        pageSize, // Return original pageSize to frontend
+        totalPage: Math.ceil(Number(totalItem[0].count) / pageSize),
         totalItem: Number(totalItem[0].count),
       },
     };
@@ -1534,8 +1486,8 @@ export class VendorService {
               JOIN subscription_plan sp ON sp.id = sv2.plan_id 
               WHERE sv2.vendor_id = v.id 
               AND sv2.is_active = true
-              AND sp.price = (
-                SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+              AND sp.price_for_month = (
+                SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
               )
             ) THEN true 
             ELSE false 
@@ -1878,8 +1830,8 @@ export class VendorService {
         JOIN subscription_plan sp ON sp.id = sv2.plan_id 
         WHERE sv2.vendor_id = v.id 
         AND sv2.is_active = true
-        AND sp.price = (
-          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        AND sp.price_for_month = (
+          SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
         )
       )`;
     }
@@ -1890,8 +1842,8 @@ export class VendorService {
         JOIN subscription_plan sp ON sp.id = sv2.plan_id 
         WHERE sv2.vendor_id = v.id 
         AND sv2.is_active = true
-        AND sp.price = (
-          SELECT MAX(price) FROM subscription_plan WHERE is_active = true
+        AND sp.price_for_month = (
+          SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
         )
       )`;
     }

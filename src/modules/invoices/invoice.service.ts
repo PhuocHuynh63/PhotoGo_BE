@@ -15,6 +15,10 @@ import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { Commission } from '../commission/entities/commission.entity';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { BookingService } from '../bookings/booking.service';
+import { SubscriptionStatus } from '../../constants/subscription.enum';
+import { Inject, forwardRef } from '@nestjs/common';
 
 @Injectable()
 export class InvoiceService {
@@ -29,6 +33,9 @@ export class InvoiceService {
     private readonly voucherUserRepository: Repository<VoucherUser>,
     @InjectRepository(Commission)
     private readonly commissionRepository: Repository<Commission>,
+    private readonly subscriptionService: SubscriptionService,
+    @Inject(forwardRef(() => BookingService))
+    private readonly bookingService: BookingService, // Inject BookingService
   ) { }
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
@@ -66,7 +73,17 @@ export class InvoiceService {
     // For invoice display: originalPrice = originPrice + commission (hidden from customer)
     const price = Math.round(originPrice + commissionAmount);
     const totalAmount = finalPrice; // This is what customer sees
-    
+
+    // --- TÍNH PHÍ PHÁT SINH (RUSH FEE) ---
+    // Lấy ngày booking từ booking.date (kiểu Date hoặc string)
+    let bookingDate: Date = null;
+    if (booking.date) {
+      bookingDate = new Date(booking.date);
+    }
+    // Gọi bookingService.calculateRushFee
+    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, finalPrice);
+    // --- END RUSH FEE ---
+
     let discountAmount = 0;
     let voucher = null;
     if (voucherId) {
@@ -111,10 +128,10 @@ export class InvoiceService {
     }
 
     // Calculate final amounts after discount
-    const discountedPrice = Math.round(price - discountAmount); // Apply discount to price (origin + commission)
-    const discountedTotal = Math.round(totalAmount - discountAmount); // Apply discount to total amount
+    const discountedPrice = Math.round(price - discountAmount + rushFee); // Apply discount to price (origin + commission) + rushFee
+    const discountedTotal = Math.round(totalAmount - discountAmount + rushFee); // Apply discount to total amount + rushFee
     
-    const feeAmount = 0;
+    const feeAmount = rushFee; // Lưu rushFee vào feeAmount
     const payablePrice = Math.round(discountedTotal); // Final amount customer needs to pay
 
     let depositAmount = 0;
@@ -356,16 +373,19 @@ export class InvoiceService {
           }
         }
       }
-      
-      // Calculate final amounts after discount
-      const recalculatedDiscountedPrice = Math.round(recalculatedPrice - recalculatedDiscountAmount);
-      const recalculatedDiscountedTotal = Math.round(recalculatedTotalAmount - recalculatedDiscountAmount);
+      // Tính lại rushFee (feeAmount)
+      let bookingDate: Date = null;
+      if (invoice.booking.date) {
+        bookingDate = new Date(invoice.booking.date);
+      }
+      const rushFee = await this.bookingService.calculateRushFee(invoice.booking.userId, bookingDate, finalPrice);
+      // Calculate final amounts after discount + rushFee
+      const recalculatedDiscountedPrice = Math.round(recalculatedPrice - recalculatedDiscountAmount + rushFee);
+      const recalculatedDiscountedTotal = Math.round(recalculatedTotalAmount - recalculatedDiscountAmount + rushFee);
       const recalculatedPayablePrice = Math.round(recalculatedDiscountedTotal);
-      
       // Recalculate deposit and remaining amounts
       let recalculatedDepositAmount = 0;
       let recalculatedRemainingAmount = 0;
-      
       if (invoice.booking.depositType === BookingDepositType.PERCENTAGE) {
         recalculatedDepositAmount = Math.round(recalculatedPayablePrice * (invoice.booking.depositAmount / 100));
         recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
@@ -373,16 +393,15 @@ export class InvoiceService {
         recalculatedDepositAmount = Math.round(invoice.booking.depositAmount || 0);
         recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
       }
-      
       // Update invoice with recalculated values
       invoice.originalPrice = recalculatedPrice;
       invoice.discountAmount = recalculatedDiscountAmount;
       invoice.discountedPrice = recalculatedDiscountedPrice;
       invoice.taxAmount = recalculatedTaxAmount;
+      invoice.feeAmount = rushFee;
       invoice.payablePrice = recalculatedPayablePrice;
       invoice.depositAmount = recalculatedDepositAmount;
       invoice.remainingAmount = recalculatedRemainingAmount;
-      
       return invoice;
     } catch (error) {
       console.error('Error applying pricing logic to invoice:', error);

@@ -27,9 +27,12 @@ import { LessThan } from 'typeorm';
 import { UserRank } from '../../constants/user.enum';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
-import { SubscriptionStatus } from '../../constants/subscription.enum';
+import { BillingCycle, SubscriptionStatus } from '../../constants/subscription.enum';
 import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
 import { VoucherTypeDiscount } from '../../constants/voucher.enum';
+import { AlbumStatus } from 'src/constants/album.enum';
+import { Album } from '../album/entities/album.entity';
+import { VendorAlbum } from '../album/entities/vendor-album.entity';
 
 @Injectable()
 export class BookingService {
@@ -63,6 +66,10 @@ export class BookingService {
     private mailService: MailService,
     private readonly subscriptionService: SubscriptionService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
+    @InjectRepository(Album)
+    private albumRepository: Repository<Album>,
+    @InjectRepository(VendorAlbum)
+    private vendorAlbumRepository: Repository<VendorAlbum>,
   ) { }
 
   // Helper function to convert DD/MM/YYYY to YYYY-MM-DD
@@ -324,7 +331,7 @@ export class BookingService {
     return {
       isAvailable: unavailableDates.length === 0,
       unavailableDates,
-      reason: unavailableDates.length > 0 
+      reason: unavailableDates.length > 0
         ? `Các ngày sau đã được đặt hoặc không khả dụng: ${unavailableDates.join(', ')}`
         : undefined
     };
@@ -348,7 +355,7 @@ export class BookingService {
           const dateStr = typeof schedule.date === 'string' ? schedule.date : this.formatDate(schedule.date);
           const [day, month, year] = dateStr.split('/');
           const convertedDate = `${year}-${month}-${day}`;
-          
+
           // Find and reopen the working date
           const workingDate = await this.locationWorkingDateRepository.findOne({
             where: {
@@ -691,6 +698,14 @@ export class BookingService {
         }
       }
 
+      // Delete album if booking is timeout, cancelled or failed
+      const album = await this.albumRepository.findOne({
+        where: { bookingId: booking.id },
+      });
+      if (album) {
+        await this.albumRepository.delete(album.id);
+      }
+
       cancelledCount++;
     }
 
@@ -809,12 +824,14 @@ export class BookingService {
       const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
       if (campaignVoucher) {
         const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
         if (campaignVendor) {
           const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
           if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
             throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
           }
+        } else {
+          throw new BadRequestException('Voucher này chưa được xác nhận mời vendor hoặc vendor chưa xác nhận tham gia campaign');
         }
       }
     }
@@ -861,10 +878,10 @@ export class BookingService {
 
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
+
     // Convert date format from DD/MM/YYYY to YYYY-MM-DD
     const convertedDate = this.convertDateFormat(createBookingDto.date);
-    
+
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
@@ -954,6 +971,26 @@ export class BookingService {
       }
     }, 15 * 60 * 1000); // 15 minutes timeout
 
+    // create album with status not_upload
+    // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
+    const vendorAlbum = await this.vendorAlbumRepository.findOne({
+      where: { location: { id: savedBooking.locationId } }
+    });
+    if (!vendorAlbum) {
+      throw new NotFoundException('Không tìm thấy vendor album cho location này');
+    }
+
+    const album = this.albumRepository.create({
+      bookingId: savedBooking.id,
+      status: AlbumStatus.NOT_UPLOAD,
+      date: savedBooking.date,
+      driveLink: null,
+      photos: [],
+      behindTheScenes: [],
+      vendorAlbum: vendorAlbum,
+    });
+    await this.albumRepository.save(album);
+
     return {
       booking: this.formatBookingDates(savedBooking),
       paymentLink: paymentLinkData.checkoutUrl,
@@ -977,12 +1014,14 @@ export class BookingService {
       const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
       if (campaignVoucher) {
         const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, relations: ['vendor'] });
+        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
         if (campaignVendor) {
           const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
           if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
             throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
           }
+        } else {
+          throw new BadRequestException('Voucher này chưa được xác nhận mời vendor hoặc vendor chưa xác nhận tham gia campaign');
         }
       }
     }
@@ -1029,11 +1068,11 @@ export class BookingService {
 
     // Generate a random code for booking 6 characters uppercase
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
+
     // Use the first schedule for the main booking date
     const firstSchedule = createBookingDto.schedules[0];
     const convertedDate = this.convertDateFormat(firstSchedule.date);
-    
+
     const booking = this.bookingRepository.create({
       ...createBookingDto,
       date: convertedDate,
@@ -1050,7 +1089,7 @@ export class BookingService {
     const savedBooking = await this.bookingRepository.save(booking);
 
     // Create booking schedules for all dates
-    const scheduleEntities = createBookingDto.schedules.map(schedule => 
+    const scheduleEntities = createBookingDto.schedules.map(schedule =>
       this.bookingScheduleRepository.create({
         bookingId: savedBooking.id,
         date: new Date(this.convertDateFormat(schedule.date)),
@@ -1089,6 +1128,26 @@ export class BookingService {
 
     // For multi-day booking, we don't set timeout because we don't lock slots
     // The entire day is closed when booking is created
+
+    // create album with status not_upload
+    // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
+    const vendorAlbum = await this.vendorAlbumRepository.findOne({
+      where: { location: { id: savedBooking.locationId } }
+    });
+    if (!vendorAlbum) {
+      throw new NotFoundException('Không tìm thấy vendor album cho location này');
+    }
+
+    const album = this.albumRepository.create({
+      bookingId: savedBooking.id,
+      status: AlbumStatus.NOT_UPLOAD,
+      date: savedBooking.date,
+      driveLink: null,
+      photos: [],
+      behindTheScenes: [],
+      vendorAlbum: vendorAlbum,
+    });
+    await this.albumRepository.save(album);
 
     return {
       booking: this.formatBookingDates(savedBooking),
@@ -1201,6 +1260,17 @@ export class BookingService {
     if (!booking) {
       throw new NotFoundException(`Booking với ID ${id} không tìm thấy`);
     }
+
+    //location
+    const location = await this.locationRepository.findOne({
+      where: { id: booking.locationId },
+      relations: ['vendor']
+    });
+    if (!location) {
+      throw new NotFoundException(`Chi nhánh với ID ${booking.locationId} không tìm thấy`);
+    }
+    booking.location = location;
+
 
     const formatted = this.formatBookingDates(booking);
     // Lấy payablePrice từ invoice cuối cùng (nếu có)
@@ -1335,10 +1405,10 @@ export class BookingService {
       const updatedBooking = await this.bookingRepository.save(booking);
 
       // NEW: Reopen scheduled dates if booking is cancelled and it's a multi-day booking
-      if (updateBookingDto.status === BookingStatus.CANCELLED && 
-          oldStatus !== BookingStatus.CANCELLED &&
-          booking.schedules && 
-          booking.schedules.length > 0) {
+      if (updateBookingDto.status === BookingStatus.CANCELLED &&
+        oldStatus !== BookingStatus.CANCELLED &&
+        booking.schedules &&
+        booking.schedules.length > 0) {
         try {
           await this.reopenScheduledDates(id);
         } catch (error) {
@@ -1364,7 +1434,7 @@ export class BookingService {
 
   async remove(id: string): Promise<void> {
     const booking = await this.findOne(id);
-    
+
     // NEW: Reopen scheduled dates if this is a multi-day booking
     if (booking.schedules && booking.schedules.length > 0) {
       try {
@@ -1373,7 +1443,7 @@ export class BookingService {
         console.error('Error reopening scheduled dates when removing booking:', error);
       }
     }
-    
+
     await this.bookingRepository.remove(booking);
   }
 
@@ -1432,17 +1502,50 @@ export class BookingService {
     return this.formatBookingDates(booking);
   }
 
+  // Thêm hàm kiểm tra membership
+  private async hasActiveMembership(userId: string): Promise<boolean> {
+    const activeMemberships = await this.subscriptionService.findAll({
+      userId,
+      status: SubscriptionStatus.ACTIVE,
+      current: 1,
+      pageSize: 10
+    });
+
+    if (!activeMemberships.data || activeMemberships.data.length === 0) return false;
+
+    return activeMemberships.data.some(sub => sub.plan?.name?.toLowerCase() === 'membership');
+  }
+
+  /**
+   * Tính phí phát sinh (rush fee) dựa trên membership và số ngày đặt trước
+   */
+  public async calculateRushFee(userId: string, bookingDate: Date, finalPrice: number): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let diffDays = 0;
+    if (bookingDate) {
+      diffDays = Math.ceil((bookingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    }
+    const hasMembership = await this.hasActiveMembership(userId);
+    if (hasMembership && diffDays >= 3) {
+      return 0;
+    } else if (diffDays < 7) {
+      return Math.round(finalPrice * 0.05);
+    }
+    return 0;
+  }
+
   async getDiscountAmount(
     userId: string,
     serviceConceptId: string,
     getDiscountAmountDto: GetDiscountAmountDto
-  ): Promise<{ discount: number, depositAmount: number, remainingAmount: number }> {
+  ): Promise<{ discount: number, depositAmount: number, remainingAmount: number, rushFee?: number, totalPayable?: number }> {
     // 1. Find the service concept
-    const serviceConcept = await this.serviceConceptRepository.findOne({ 
-      where: { id: serviceConceptId }, 
-      relations: ['servicePackage', 'servicePackage.vendor'] 
+    const serviceConcept = await this.serviceConceptRepository.findOne({
+      where: { id: serviceConceptId },
+      relations: ['servicePackage', 'servicePackage.vendor']
     });
-    
+
     if (!serviceConcept) {
       throw new NotFoundException(`Service Concept với ID ${serviceConceptId} không tìm thấy`);
     }
@@ -1458,37 +1561,50 @@ export class BookingService {
       throw new BadRequestException('Tỷ lệ đặt cọc phải từ 30% đến 100%');
     }
 
+    // --- TÍNH PHÍ PHÁT SINH (RUSH FEE) ---
+    // Lấy ngày booking từ DTO
+    const bookingDateStr = getDiscountAmountDto.date;
+    let bookingDate: Date = null;
+    if (bookingDateStr) {
+      bookingDate = new Date(this.convertDateFormat(bookingDateStr));
+    }
+    // Gọi hàm calculateRushFee
+    const rushFee = await this.calculateRushFee(userId, bookingDate, finalPrice);
+    // --- END RUSH FEE ---
+
     // If no voucher, return calculation based on final price
     if (!getDiscountAmountDto.voucherId) {
       const depositAmount = (finalPrice * depositPercentage / 100);
       const remainingAmount = finalPrice - depositAmount;
-      
+      const totalPayable = finalPrice + rushFee;
       return {
         discount: 0,
         depositAmount: Math.round(depositAmount),
-        remainingAmount: Math.round(remainingAmount)
+        remainingAmount: Math.round(remainingAmount),
+        rushFee: Math.round(rushFee),
+        totalPayable: Math.round(totalPayable)
       };
     }
 
     // 2. Find and validate voucher
-    const voucher = await this.voucherRepository.findOne({ 
-      where: { id: getDiscountAmountDto.voucherId } 
+    const voucher = await this.voucherRepository.findOne({
+      where: { id: getDiscountAmountDto.voucherId }
     });
-    
+
     if (!voucher) {
       throw new NotFoundException(`Voucher với ID ${getDiscountAmountDto.voucherId} không tìm thấy`);
     }
 
     // 3. Check voucher availability and ownership
-    const campaignVoucher = await this.campaignVoucherRepository.findOne({ 
-      where: { voucherId: voucher.id, isAvailable: true }, 
-      relations: ['campaign'] 
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({
+      where: { voucherId: voucher.id, isAvailable: true },
+      relations: ['campaign']
     });
-    
-    const voucherUser = await this.voucherUserRepository.findOne({ 
-      where: { voucher_id: voucher.id, user_id: userId } 
+
+    const voucherUser = await this.voucherUserRepository.findOne({
+      where: { voucher_id: voucher.id, user_id: userId }
     });
-    
+
     if (!campaignVoucher && !voucherUser) {
       throw new NotFoundException('Voucher không thuộc campaign hoặc không thuộc user');
     }
@@ -1496,16 +1612,16 @@ export class BookingService {
     // 4. Validate vendor compatibility for campaign vouchers
     if (campaignVoucher) {
       const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-      const campaignVendor = await campaignVendorRepo.findOne({ 
-        where: { campaign: { id: campaignVoucher.campaign.id }, isAvailable: true }, 
-        relations: ['vendor'] 
+      // Lấy tất cả các vendor khả dụng của campaign
+      const campaignVendors = await campaignVendorRepo.find({
+        where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true },
+        relations: ['vendor']
       });
-      
-      if (campaignVendor) {
-        const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
-        if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
-          throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
-        }
+      const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
+      // Kiểm tra vendor của dịch vụ có nằm trong danh sách các vendor khả dụng không
+      const isValid = campaignVendors.some(cv => cv.vendor.id === conceptVendorId);
+      if (!isValid) {
+        throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
       }
     }
 
@@ -1518,7 +1634,7 @@ export class BookingService {
     const currentDate = new Date();
     const startDate = new Date(voucher.start_date);
     const endDate = new Date(voucher.end_date);
-    
+
     if (currentDate < startDate || currentDate > endDate) {
       throw new BadRequestException('Voucher đã hết hạn hoặc chưa đến thời gian sử dụng');
     }
@@ -1530,7 +1646,7 @@ export class BookingService {
 
     // 6. Calculate discount amount
     let discountAmount = 0;
-    
+
     if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
       // Percentage discount
       discountAmount = finalPrice * (Number(voucher.discount_value) / 100);
@@ -1548,7 +1664,7 @@ export class BookingService {
 
     // 8. Calculate final price after discount and ensure it's not negative
     let discountedFinalPrice = finalPrice - discountAmount;
-    
+
     // Ensure final price is not negative
     if (discountedFinalPrice < 0) {
       discountAmount = finalPrice;
@@ -1557,14 +1673,19 @@ export class BookingService {
 
     // 9. Calculate deposit amount based on final price
     const depositAmount = (discountedFinalPrice * depositPercentage / 100);
-    
+
     // 10. Calculate remaining amount
     const remainingAmount = discountedFinalPrice - depositAmount;
+
+    // 11. Tổng tiền phải trả (cộng rushFee)
+    const totalPayable = discountedFinalPrice + rushFee;
 
     return {
       discount: Math.round(discountAmount),
       depositAmount: Math.round(depositAmount),
-      remainingAmount: Math.round(remainingAmount)
+      remainingAmount: Math.round(remainingAmount),
+      rushFee: Math.round(rushFee),
+      totalPayable: Math.round(totalPayable)
     };
   }
 
@@ -1635,22 +1756,31 @@ export class BookingService {
       if (allPlans.length === 0) {
         return 0;
       }
-
-      // Calculate total price of all plans
-      const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.price), 0);
-
-      if (totalPlanPrice === 0) {
-        return 0;
+      // check which cycle of plan
+      const planCycle = allPlans[0].billingCycle;
+      if (planCycle === BillingCycle.MONTHLY) {
+        // Tính tổng giá theo priceForMonth
+        const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.priceForMonth), 0);
+        if (totalPlanPrice === 0) {
+          return 0;
+        }
+        const userSubscription = subscriptions.data[0];
+        const userPlanPrice = Number(userSubscription.plan.priceForMonth);
+        const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
+        return subscriptionScore;
+      } else if (planCycle === BillingCycle.YEARLY) {
+        // Tính tổng giá theo priceForYear
+        const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.priceForYear), 0);
+        if (totalPlanPrice === 0) {
+          return 0;
+        }
+        const userSubscription = subscriptions.data[0];
+        const userPlanPrice = Number(userSubscription.plan.priceForYear);
+        const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
+        return subscriptionScore;
       }
-
-      // Get the user's subscription plan price
-      const userSubscription = subscriptions.data[0]; // One-to-one relationship
-      const userPlanPrice = Number(userSubscription.plan.price);
-
-      // Calculate subscription score: (user plan price / total plan price) * 100
-      const subscriptionScore = (userPlanPrice / totalPlanPrice) * 100;
-
-      return subscriptionScore;
+      // Nếu không phải monthly/yearly thì trả về 0
+      return 0;
     } catch (error) {
       console.error('Error calculating subscription score:', error);
       return 0;

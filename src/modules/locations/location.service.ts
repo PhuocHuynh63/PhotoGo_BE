@@ -99,7 +99,17 @@ export class LocationService {
       vendor,
     });
 
-    return this.locationRepository.save(location);
+    const savedLocation = await this.locationRepository.save(location);
+
+    // Tạo vendor-album cho location nếu chưa có
+    const vendorAlbumRepo = this.locationRepository.manager.getRepository('VendorAlbum');
+    let vendorAlbum = await vendorAlbumRepo.findOne({ where: { location: { id: savedLocation.id } } });
+    if (!vendorAlbum) {
+      vendorAlbum = vendorAlbumRepo.create({ location: savedLocation });
+      await vendorAlbumRepo.save(vendorAlbum);
+    }
+
+    return savedLocation;
   }
   //#endregion create
 
@@ -667,7 +677,10 @@ export class LocationService {
         service: booking.serviceConcept?.name || '',
         notes: booking.userNote,
         phone: booking.phone,
-        email: booking.email
+        email: booking.email,
+        alreadyPaid: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].paidAmount : 0,
+        remain: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice - booking.invoices[0].paidAmount : 0,
+        total: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice : 0
       };
       if (booking.time) {
         // booking 1 ngày

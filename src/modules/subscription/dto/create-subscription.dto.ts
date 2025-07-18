@@ -1,6 +1,6 @@
 import { IsUUID, IsDateString, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { BillingCycle } from '../../../constants/subscription.enum';
+import { BillingCycle, PlanType } from '../../../constants/subscription.enum';
 import { Transform } from 'class-transformer';
 
 export class CreateSubscriptionDto {
@@ -21,6 +21,10 @@ export class CreateSubscriptionDto {
   @IsOptional()
   @ApiProperty({ description: 'Ngày kết thúc đăng ký (tự động tính nếu không cung cấp)', required: false })
   endDate?: string;
+
+  @IsEnum(PlanType)
+  @ApiProperty({ description: 'Loại gói đăng ký', enum: PlanType })
+  planType: PlanType; //USER or VENDOR
 
   @IsEnum(BillingCycle)
   @ApiProperty({ 
