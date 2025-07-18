@@ -41,20 +41,24 @@ export class GeminiService {
     private embeddingModel: any = null;
 
     private readonly systemContext = `
-        Bạn là AI phân tích ảnh chuyên nghiệp của PhotoGo - nền tảng đặt lịch studio chụp ảnh.
+        Bạn là trợ lý AI của ứng dụng PhotoGo, một nền tảng đặt lịch studio, freelancer về chủ đề chụp ảnh với nhiều concept và make up.
+        Khi phân tích ảnh:
+        - Tập trung vào các yếu tố nghệ thuật trong ảnh
+        - Đề cập đến bố cục, màu sắc, ánh sáng
+        - Đánh giá chất lượng ảnh
+        - Đưa ra gợi ý cải thiện nếu cần
         
-        Nguyên tắc phân tích ảnh:
-        - Phân tích kỹ thuật: bố cục, ánh sáng, màu sắc, composition
-        - Đánh giá chất lượng nghệ thuật với tone thân thiện
-        - Đưa ra gợi ý cải thiện cụ thể và khuyến khích
-        - Chào hỏi ngắn gọn rồi đi thẳng vào phân tích
-        
-        Khi trả lời về dịch vụ:
-        - Thông tin dựa trên dữ liệu thực tế của PhotoGo
-        - Gợi ý concept, gói chụp có sẵn trong hệ thống
-        - Ngôn ngữ thân thiện, nhiệt tình nhưng không dài dòng
-        - Tập trung vào giải pháp nhiếp ảnh thực tế
+        Khi trả lời câu hỏi:
+        - Đưa ra các thông tin liên quan đến nhiếp ảnh
+        - Đưa ra các thông tin (gói, concept, make up) có sẵn trong ứng dụng PhotoGo
+        - Sử dụng ngôn ngữ thân thiện
+        - Tập trung vào chủ đề nhiếp ảnh, concept của ảnh đã đính kèm
+        - Đưa ra các gợi ý thực tế, có sẵn trong ứng dụng PhotoGo
+        - Không đưa ra các thông tin không liên quan đến nhiếp ảnh
+        - Không đưa ra các thông tin không có trong ảnh đã đính kèm
+        - Không đưa ra các thông tin không có trong ứng dụng PhotoGo
     `;
+
 
     constructor(
         private configService: ConfigService,
@@ -673,49 +677,69 @@ ${prompt || ''}`;
                 // Jump to fallback logic
                 concepts_same = [];
             } else {
-                // ✅ FIX: Enhanced semantic filtering với logic balanced hơn
+                // ✅ FIX: Enhanced semantic filtering với strict category matching
                 concepts_same = concepts_same.filter(c => {
                     // Điều kiện 1: Relevance score đủ cao
                     if (c.relevanceScore <= RELEVANCE_THRESHOLD) {
                         return false;
                     }
 
-                    // Điều kiện 2: Enhanced semantic filtering với tolerance
+                    // Điều kiện 2: Strict semantic filtering - KHÔNG cho phép bypass
                     const conceptType = this.categorizeConceptByName(c.name || '');
 
                     // ✅ DEBUG: Log categorization results
                     this.logger.debug(`Concept "${c.name}" categorized as "${conceptType}" for "${inputImageType}" image`);
 
-                    // ✅ FIX: RELAXED FILTERING - cho phép unknown concepts và cross-category matches với score cao
+                    // ✅ FIX: STRICT FILTERING - không cho phép cross-category matches
                     if (inputImageType !== 'unknown') {
-                        // High relevance score có thể bỏ qua semantic filtering
-                        if (c.relevanceScore > 0.35) {
-                            this.logger.debug(`High relevance concept "${c.name}" passed semantic filtering (score: ${c.relevanceScore})`);
-                            return true;
-                        }
-
-                        // Nếu ảnh là động vật -> ưu tiên concept động vật, nhưng cho phép unknown
+                        // Nếu ảnh là động vật -> CHỈ cho phép concept động vật hoặc unknown
                         if (inputImageType === 'animal' && conceptType !== 'animal' && conceptType !== 'unknown') {
-                            this.logger.debug(`Filtered out non-animal concept "${c.name}" for animal image (concept type: ${conceptType})`);
+                            this.logger.debug(`🚫 Filtered out non-animal concept "${c.name}" for animal image (concept type: ${conceptType})`);
                             return false;
                         }
 
-                        // Nếu ảnh là người -> ưu tiên concept người, nhưng cho phép unknown  
+                        // Nếu ảnh là người -> CHỈ cho phép concept người hoặc unknown  
                         if (inputImageType === 'people' && conceptType !== 'people' && conceptType !== 'unknown') {
-                            this.logger.debug(`Filtered out non-people concept "${c.name}" for people image (concept type: ${conceptType})`);
+                            this.logger.debug(`🚫 Filtered out non-people concept "${c.name}" for people image (concept type: ${conceptType})`);
                             return false;
                         }
 
                         // Nếu ảnh là cảnh vật -> CHỈ cho phép concept cảnh vật hoặc unknown
                         if (inputImageType === 'landscape' && conceptType !== 'landscape' && conceptType !== 'unknown') {
-                            this.logger.debug(`Filtered out non-landscape concept "${c.name}" for landscape image (concept type: ${conceptType})`);
+                            this.logger.debug(`🚫 Filtered out non-landscape concept "${c.name}" for landscape image (concept type: ${conceptType})`);
                             return false;
                         }
 
                         // Nếu ảnh là đồ vật -> CHỈ cho phép concept đồ vật hoặc unknown
                         if (inputImageType === 'object' && conceptType !== 'object' && conceptType !== 'unknown') {
-                            this.logger.debug(`Filtered out non-object concept "${c.name}" for object image (concept type: ${conceptType})`);
+                            this.logger.debug(`🚫 Filtered out non-object concept "${c.name}" for object image (concept type: ${conceptType})`);
                             return false;
+                        }
+
+                        // ✅ NEW: Extra strict filtering for strong animal images
+                        if (inputImageType === 'animal') {
+                            const hasStrongAnimalKeywords = ['mèo', 'chó', 'cat', 'dog', 'thú cưng', 'pet', 'động vật', 'animal'].some(kw =>
+                                keywords.join(' ').toLowerCase().includes(kw)
+                            );
+
+                            if (hasStrongAnimalKeywords && conceptType === 'unknown') {
+                                // For strong animal images, unknown concepts must have animal-related terms
+                                const conceptName = (c.name || '').toLowerCase();
+                                const hasAnimalRelatedTerms = ['pet', 'thú cưng', 'mèo', 'chó', 'cat', 'dog', 'animal', 'động vật', 'cute', 'dễ thương'].some(term =>
+                                    conceptName.includes(term)
+                                );
+
+                                if (!hasAnimalRelatedTerms) {
+                                    this.logger.debug(`🚫 Filtered out unknown concept "${c.name}" for strong animal image (no animal terms)`);
+                                    return false;
+                                }
+                            }
+                        }
+
+                        // ✅ NEW: Chỉ cho phép high relevance score bypass cho unknown concepts với điều kiện
+                        if (conceptType === 'unknown' && c.relevanceScore > 0.6) {
+                            this.logger.debug(`✅ High relevance unknown concept "${c.name}" passed filtering (score: ${c.relevanceScore})`);
+                            return true;
                         }
                     }
 
@@ -792,19 +816,25 @@ ${prompt || ''}`;
                         take: 50 // ✅ FIX: Lấy nhiều hơn để có nhiều lựa chọn filter
                     });
 
-                    // ✅ FIX: Prioritize concepts có từ khóa động vật rõ ràng
-                    const animalKeywords = ['con vật', 'động vật', 'thú cưng', 'pet', 'mèo', 'chó', 'cat', 'dog', 'animal'];
+                    // ✅ FIX: Prioritize concepts có từ khóa động vật rõ ràng với expanded keywords
+                    const strongAnimalKeywords = ['con vật', 'động vật', 'thú cưng', 'pet', 'mèo', 'chó', 'cat', 'dog', 'animal', 'kitten', 'puppy', 'pet portrait'];
+                    const weakAnimalKeywords = ['cute', 'dễ thương', 'adorable', 'furry', 'fluffy'];
+
                     const strongAnimalConcepts = allConcepts.filter(concept => {
                         const name = concept.name?.toLowerCase() || '';
-                        return animalKeywords.some(keyword => name.includes(keyword));
+                        return strongAnimalKeywords.some(keyword => name.includes(keyword));
                     });
 
-                    // Filter concept động vật với priority
+                    // Filter concept động vật với extended categorization
                     const otherAnimalConcepts = allConcepts.filter(concept => {
                         const name = concept.name?.toLowerCase() || '';
-                        if (animalKeywords.some(keyword => name.includes(keyword))) return false; // Đã có trong strong
+                        if (strongAnimalKeywords.some(keyword => name.includes(keyword))) return false; // Đã có trong strong
+
+                        // Check if it's categorized as animal OR has weak animal indicators
                         const conceptType = this.categorizeConceptByName(concept.name || '');
-                        return conceptType === 'animal';
+                        const hasWeakAnimalKeywords = weakAnimalKeywords.some(keyword => name.includes(keyword));
+
+                        return conceptType === 'animal' || hasWeakAnimalKeywords;
                     });
 
                     // ✅ FIX: Combine với priority: strong animal concepts trước
@@ -1090,6 +1120,28 @@ Tone thân thiện, tích cực và khuyến khích.`;
     private detectAdvancedImageCategory(keywords: string[]): string {
         const keywordString = keywords.join(' ').toLowerCase();
 
+        // ✅ FIX: Check standard categories FIRST to avoid misclassification
+        // Animals - highest priority to avoid confusion
+        if (['mèo', 'chó', 'cat', 'dog', 'pet', 'thú cưng', 'động vật', 'animal', 'kitten', 'puppy'].some(kw => keywordString.includes(kw))) {
+            return 'animal';
+        }
+
+        // People - high priority
+        if (['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình', 'portrait', 'chân dung', 'baby', 'bé'].some(kw => keywordString.includes(kw))) {
+            return 'people';
+        }
+
+        // Landscape - high priority  
+        if (['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain', 'biển', 'sea', 'thiên nhiên', 'nature'].some(kw => keywordString.includes(kw))) {
+            return 'landscape';
+        }
+
+        // Objects - high priority
+        if (['đồ ăn', 'food', 'sản phẩm', 'product', 'object', 'still life'].some(kw => keywordString.includes(kw))) {
+            return 'object';
+        }
+
+        // Special categories only checked AFTER standard categories
         // Sci-fi & Technology
         if (['vũ trụ', 'space', 'galaxy', 'star', 'planet', 'satellite', 'astronaut', 'rocket', 'cosmos', 'nebula'].some(kw => keywordString.includes(kw))) {
             return 'sci-fi-space';
@@ -1123,23 +1175,6 @@ Tone thân thiện, tích cực và khuyến khích.`;
         // Sports & Extreme
         if (['extreme sport', 'thể thao mạo hiểm', 'skydiving', 'bungee', 'racing', 'motorsport'].some(kw => keywordString.includes(kw))) {
             return 'extreme-sport';
-        }
-
-        // Standard categories (existing logic)
-        if (['mèo', 'chó', 'cat', 'dog', 'pet', 'thú cưng', 'động vật', 'animal'].some(kw => keywordString.includes(kw))) {
-            return 'animal';
-        }
-
-        if (['người', 'nam', 'nữ', 'cặp đôi', 'couple', 'family', 'gia đình', 'portrait', 'chân dung'].some(kw => keywordString.includes(kw))) {
-            return 'people';
-        }
-
-        if (['phong cảnh', 'landscape', 'thác', 'waterfall', 'núi', 'mountain', 'biển', 'sea', 'thiên nhiên', 'nature'].some(kw => keywordString.includes(kw))) {
-            return 'landscape';
-        }
-
-        if (['đồ ăn', 'food', 'sản phẩm', 'product', 'object', 'still life'].some(kw => keywordString.includes(kw))) {
-            return 'object';
         }
 
         return 'unknown';
@@ -1736,6 +1771,7 @@ Hãy phân tích ảnh:`;
             'trẻ em', 'children', 'kid', 'child', 'thiếu niên', 'teenager', 'teen',
             'người', 'nam', 'nữ', 'girl', 'boy', 'woman', 'man', 'adult', 'người lớn',
             'elderly', 'senior', 'grandmother', 'grandfather', 'bà', 'ông',
+            'lady', 'ladies', 'quý phái', 'phái đẹp', 'miss', 'ms', 'mrs',
 
             // Loại chụp & sự kiện
             'portrait', 'chân dung', 'headshot', 'selfie', 'family', 'gia đình',
@@ -1743,11 +1779,13 @@ Hãy phân tích ảnh:`;
             'wedding', 'cưới', 'bride', 'cô dâu', 'groom', 'chú rể', 'engagement', 'đính hôn',
             'maternity', 'bầu bí', 'mang thai', 'pregnancy', 'thai sản',
             'graduation', 'tốt nghiệp', 'birthday', 'sinh nhật', 'anniversary', 'kỷ niệm',
+            'profile', 'hồ sơ', 'avatar', 'sự kiện', 'event', 'quay', 'filming', 'video',
 
-            // Phong cách
+            // Phong cách & modeling
             'beauty', 'fashion', 'thời trang', 'model', 'modeling', 'makeup', 'trang điểm',
             'cosplay', 'costume', 'trang phục', 'áo dài', 'traditional dress',
-            'street style', 'casual', 'formal', 'trang trọng'
+            'street style', 'casual', 'formal', 'trang trọng', 'secret', 'bí mật',
+            'elegant', 'thanh lịch', 'sexy', 'quyến rũ', 'cute', 'dễ thương'
         ];
 
         // Keywords chi tiết để identify concept CON VẬT với độ ưu tiên
@@ -1818,7 +1856,7 @@ Hãy phân tích ảnh:`;
 
         // Enhanced scoring system với priority weights
         const animalHighPriorityWords = ['pet', 'thú cưng', 'mèo', 'chó', 'cat', 'dog', 'animal', 'động vật'];
-        const peopleHighPriorityWords = ['người', 'bé', 'baby', 'family', 'gia đình', 'wedding', 'cưới', 'portrait', 'chân dung'];
+        const peopleHighPriorityWords = ['người', 'bé', 'baby', 'family', 'gia đình', 'wedding', 'cưới', 'portrait', 'chân dung', 'model', 'girl', 'boy', 'lady', 'quý phái', 'woman', 'man', 'profile', 'sự kiện', 'event'];
 
         let animalScore = 0;
         let peopleScore = 0;

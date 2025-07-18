@@ -15,7 +15,7 @@ import { AlbumFilterDto } from './dto/filter.dto';
 @Controller('vendor-albums')
 @ApiBearerAuth('access-token')
 export class AlbumController {
-  constructor(private readonly albumService: AlbumService) {}
+  constructor(private readonly albumService: AlbumService) { }
 
   @Post(':locationId')
   @ApiOperation({ summary: 'Tạo vendor-album cho vendor' })
@@ -86,8 +86,8 @@ export class AlbumController {
     @UploadedFiles() files: { photos?: Express.Multer.File[]; behindTheScenes?: Express.Multer.File[] },
   ) {
     return this.albumService.createAlbumWithUpload(
-      body, 
-      files?.photos || [], 
+      body,
+      files?.photos || [],
       files?.behindTheScenes || []
     );
   }
@@ -135,8 +135,8 @@ export class AlbumController {
   @ApiOperation({ summary: 'Lấy danh sách album theo bookingId' })
   @ApiParam({ name: 'bookingId', type: 'string' })
   @ApiOkResponse({ description: 'Danh sách album theo bookingId' })
-  async getAlbumsByBookingId(@Param('bookingId') bookingId: string, @Query() query: AlbumPaginationDto) {
-    return this.albumService.getAlbumsByBookingId(bookingId, query);
+  async getAlbumsByBookingId(@Param('bookingId') bookingId: string) {
+    return this.albumService.getAlbumsByBookingId(bookingId);
   }
 
   @Get('album/:albumId')
@@ -204,9 +204,9 @@ export class AlbumController {
     @UploadedFiles() files: { photos?: Express.Multer.File[]; behindTheScenes?: Express.Multer.File[] },
   ) {
     return this.albumService.updateAlbumWithUpload(
-      albumId, 
-      body, 
-      files?.photos || [], 
+      albumId,
+      body,
+      files?.photos || [],
       files?.behindTheScenes || []
     );
   }
