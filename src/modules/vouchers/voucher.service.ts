@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Voucher } from './entities/voucher.entity';
@@ -16,9 +16,12 @@ import { Point } from '../points/entities/point.entity';
 import { PointTransactionType } from 'src/constants/point.enum';
 import { PointTransaction } from '../points/entities/point-transaction.entity';
 import { PointHelperService } from '../points/point-helper.service';
+import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
 export class VoucherService {
+  private readonly logger = new Logger(VoucherService.name);
+
   constructor(
     @InjectRepository(Voucher)
     private readonly voucherRepository: Repository<Voucher>,
@@ -35,6 +38,7 @@ export class VoucherService {
     @InjectRepository(PointTransaction)
     private readonly pointTransactionRepository: Repository<PointTransaction>,
     private readonly pointHelperService: PointHelperService,
+    private readonly notificationService: NotificationService,
   ) { }
 
   //#region Voucher Operations
@@ -421,6 +425,7 @@ export class VoucherService {
     await this.voucherRepository.save(voucher);
   }
 
+  //#region exchangeVoucherByPoint
   /**
    * Đổi thưởng: user dùng điểm để đổi lấy voucher
    */
@@ -452,7 +457,16 @@ export class VoucherService {
       `${voucher.code} - ${voucher.description}`
     );
 
-    // 4. Gán voucher cho user với from = 'đổi điểm'
+    // 4. Gửi thông báo trừ điểm ngay sau khi trừ điểm thành công
+    try {
+      await this.notificationService.notifyPointDeduction(user, voucher.point, `đổi voucher "${voucher.code}"`);
+      this.logger.log(`Gửi thông báo trừ điểm thành công cho user ${userId}, trừ ${voucher.point} điểm`);
+    } catch (error) {
+      this.logger.warn(`Gửi thông báo trừ điểm không thành công cho user ${userId}: ${error.message}`);
+      // Không throw error để không ảnh hưởng đến quá trình đổi voucher
+    }
+
+    // 5. Gán voucher cho user với from = 'đổi điểm'
     const voucherUser = this.voucherUserRepository.create({
       user_id: userId,
       voucher_id: voucherId,
@@ -463,12 +477,23 @@ export class VoucherService {
     });
     await this.voucherUserRepository.save(voucherUser);
 
-    // 5. Giảm số lượng voucher
+    // 6. Giảm số lượng voucher
     voucher.quantity -= 1;
     await this.voucherRepository.save(voucher);
 
+    // 7. Gửi thông báo đổi voucher thành công sau khi hoàn thành
+    try {
+      await this.notificationService.notifyVoucherExchange(user, voucher.code);
+      this.logger.log(`Gửi thông báo đổi voucher thành công cho user ${userId}, voucher: ${voucher.code}`);
+    } catch (error) {
+      this.logger.warn(`Gửi thông báo đổi voucher không thành công cho user ${userId}: ${error.message}`);
+      // Không throw error để không ảnh hưởng đến quá trình đổi voucher
+    }
+
     return voucherUser;
   }
+  //#endregion exchangeVoucherByPoint
+
   //#endregion VoucherUser Operations
 
   //#region VoucherUser Campaign Operations

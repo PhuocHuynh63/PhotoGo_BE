@@ -69,6 +69,9 @@ export class PaymentService {
     return `${day}/${month}/${year}`;
   }
 
+  //#region create 
+
+  // thêm bull vào để biết time gia hạn và thông báo cho người dùng khi hết hạn
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
     // Validate required fields
     if (!createPaymentDto.invoiceId) {
@@ -115,6 +118,8 @@ export class PaymentService {
     const payment = this.paymentRepository.create(createPaymentDto);
     return await this.paymentRepository.save(payment);
   }
+
+  //#endregion create 
 
   async findAll(paginationDto: PaginationDto): Promise<{
     data: Payment[];

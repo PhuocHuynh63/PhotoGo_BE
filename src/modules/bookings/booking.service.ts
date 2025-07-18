@@ -779,6 +779,8 @@ export class BookingService {
   }
 
   //#region Create Booking
+
+  // thêm bull vào để biết time gia hạn và thông báo cho người dùng khi hết hạn
   async create(
     createBookingDto: CreateBookingDto,
     userId: string,
@@ -803,7 +805,9 @@ export class BookingService {
       throw new BadRequestException('Loại concept không hợp lệ');
     }
   }
+  //#endregion Create Booking
 
+  
   // Create booking with old logic (single day)
   private async createBookingWithOldLogic(
     createBookingDto: CreateBookingDto,

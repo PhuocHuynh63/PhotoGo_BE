@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,15 +10,19 @@ import { UserService } from '../../users/user.service';
 import { PointHelperService } from '../../points/point-helper.service';
 import { Attendance } from './entities/attendance.entity';
 import { PointTransactionType } from 'src/constants/point.enum';
+import { NotificationService } from '../../notifications/notification.service';
 
 @Injectable()
 export class AttendanceService {
+  private readonly logger = new Logger(AttendanceService.name);
+
   constructor(
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
     private userService: UserService,
     private pointHelperService: PointHelperService,
-  ) {}
+    private notificationService: NotificationService,
+  ) { }
 
   //#region Điểm danh hàng ngày
   async checkIn(userId: string): Promise<Attendance> {
@@ -31,6 +36,12 @@ export class AttendanceService {
     if (attendance) {
       // Nếu đã điểm danh hôm nay, ném lỗi
       throw new BadRequestException('Bạn đã điểm danh hôm nay rồi!');
+    }
+
+    // Lấy thông tin user để gửi notification
+    const user = await this.userService.findOne(userId);
+    if (!user) {
+      throw new NotFoundException('User không tồn tại');
     }
 
     // kiểm tra xem người dùng có điểm danh hôm qua không
@@ -57,6 +68,15 @@ export class AttendanceService {
     // Thêm điểm vào tài khoản người dùng
     await this.addPointsToUser(userId, pointsEarned);
 
+    // Gửi thông báo điểm danh thành công
+    try {
+      await this.notificationService.notifyDailyCheckin(user, pointsEarned, streak);
+      this.logger.log(`Gửi thông báo điểm danh thành công cho user ${userId}`);
+    } catch (error) {
+      this.logger.warn(`Gửi thông báo điểm danh không thành công cho user ${userId}: ${error.message}`);
+      // Không throw error để không ảnh hưởng đến quá trình điểm danh
+    }
+
     return savedAttendance;
   }
   //#endregion
@@ -65,12 +85,12 @@ export class AttendanceService {
   private async addPointsToUser(userId: string, points: number): Promise<void> {
     try {
       console.log(`Adding ${points} points to user ${userId}`);
-      
+
       // Sử dụng method chung từ PointHelperService
       const result = await this.pointHelperService.handleDailyCheckIn(userId, points);
-      
+
       console.log('Successfully added points:', result.transaction.id);
-      
+
     } catch (error) {
       console.error('Error adding points to user:', error);
       // Không throw error để không ảnh hưởng đến việc điểm danh
