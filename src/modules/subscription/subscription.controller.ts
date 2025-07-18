@@ -237,9 +237,11 @@ export class SubscriptionController {
     const nextBillingAt = new Date();
     nextBillingAt.setHours(nextBillingAt.getHours() + hoursFromNow);
 
+    const plan = await this.subscriptionPlanService.findOne(planId);
     const subscription = await this.subscriptionService.create({
       userId,
       planId,
+      planType: plan.planType,
       startDate: new Date().toISOString(),
       billingCycle: BillingCycle.MONTHLY,
       nextBilledAt: nextBillingAt.toISOString(),

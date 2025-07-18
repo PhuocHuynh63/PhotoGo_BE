@@ -5,7 +5,7 @@ import { Subscription } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { FindSubscriptionDto } from './dto/find-subscription.dto';
-import { SubscriptionStatus, SubscriptionHistoryAction, PlanType } from '../../constants/subscription.enum';
+import { BillingCycle, PlanType, SubscriptionStatus, SubscriptionHistoryAction } from 'src/constants/subscription.enum';
 import { PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
 import { SubscriptionPlanService } from './subscription-plan.service';

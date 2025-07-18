@@ -275,8 +275,8 @@ export class SubscriptionPaymentService {
         const renewalAction = isRenewal ? SubscriptionHistoryAction.RENEWED : SubscriptionHistoryAction.ACTIVATED;
 
         const renewalDescription = isRenewal
-          ? `Gia hạn subscription thêm ${plan.duration} ngày`
-          : `Kích hoạt subscription mới với ${plan.duration} ngày`;
+          ? `Gia hạn subscription thêm ${(plan.duration || extensionDays)} ngày`
+          : `Kích hoạt subscription mới với ${(plan.duration || extensionDays)} ngày`;
 
         // Tự động assign user với subscription nếu là lần thanh toán đầu tiên
         if (!isRenewal) {
@@ -509,5 +509,5 @@ export class SubscriptionPaymentService {
   }
   //#endregion getInvoicePayments
 
- 
+
 } 
