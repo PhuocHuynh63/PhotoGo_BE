@@ -15,7 +15,7 @@ import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum, VoucherTypePoint } from 'src/constants/voucher.enum';
 import { CAMPAIGN_NAMES, VOUCHER_CODES } from 'src/constants/campaign.enum';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
@@ -317,10 +317,15 @@ export class CampaignService {
       throw new NotFoundException('Campaign không tồn tại');
     }
 
-    // Check if voucher exists (you might need to inject VoucherRepository)
+    // Check if voucher exists and is of CAMPAIGN type
     const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
       throw new NotFoundException('Voucher không tồn tại');
+    }
+    
+    // Validate voucher type for campaign
+    if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
+      throw new BadRequestException('Voucher này không phải loại chiến dịch');
     }
 
     // Check if voucher is already assigned to any user
@@ -405,10 +410,16 @@ export class CampaignService {
 
     for (const voucherId of voucherIds) {
       try {
-        // Check if voucher exists
+        // Check if voucher exists and is of CAMPAIGN type
         const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
         if (!voucher) {
           errors.push(`Voucher ${voucherId} không tồn tại`);
+          continue;
+        }
+        
+        // Validate voucher type for campaign
+        if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
+          errors.push(`Voucher ${voucherId} không phải loại chiến dịch`);
           continue;
         }
 
@@ -917,6 +928,11 @@ export class CampaignService {
         throw new NotFoundException(`Voucher "${VOUCHER_CODES.WELCOME}" không tồn tại`);
       }
 
+      // Validate voucher type for campaign
+      if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
+        throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" không phải loại chiến dịch`);
+      }
+
       if (voucher.status !== VoucherStatusEnum.ACTIVE) {
         throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" không còn hiệu lực`);
       }
@@ -1148,5 +1164,41 @@ export class CampaignService {
     }
     
     return { message: 'Xóa voucher khỏi campaign thành công' };
+  }
+
+  /**
+   * Helper method to create a voucher with CAMPAIGN type
+   * @param voucherData Partial voucher data
+   * @returns Promise<Voucher>
+   */
+  async createVoucherWithCampaignType(voucherData: Partial<Voucher>): Promise<Voucher> {
+    const voucher = this.voucherRepository.create({
+      ...voucherData,
+      type: VoucherTypePoint.CAMPAIGN, // Always set type to CAMPAIGN for campaign vouchers
+    });
+    return this.voucherRepository.save(voucher);
+  }
+
+  /**
+   * Helper method to validate voucher is of CAMPAIGN type
+   * @param voucherId string
+   * @returns Promise<boolean>
+   */
+  async validateCampaignVoucher(voucherId: string): Promise<boolean> {
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    return voucher?.type === VoucherTypePoint.CAMPAIGN;
+  }
+
+  /**
+   * Get available vouchers with CAMPAIGN type that can be added to campaigns
+   */
+  async getAvailableCampaignVouchers(): Promise<Voucher[]> {
+    return this.voucherRepository.createQueryBuilder('voucher')
+      .leftJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
+      .where('voucher.type = :voucherType', { voucherType: VoucherTypePoint.CAMPAIGN })
+      .andWhere('voucher.status IN (:...status)', { status: [VoucherStatusEnum.ACTIVE, VoucherStatusEnum.INACTIVE] })
+      .andWhere('voucher.quantity > 0')
+      .andWhere('cv.voucherId IS NULL') // Loại bỏ voucher đã có trong campaign
+      .getMany();
   }
 } 

@@ -32,7 +32,7 @@ export class Voucher {
   @Column({ type: 'integer', nullable: false, name: 'usedcount' })
   usedCount: number;
 
-  @Column({ type: 'varchar', nullable: false })
+  @Column({ type: 'enum', enum: VoucherTypePoint, nullable: false, default: VoucherTypePoint.POINT })
   type: VoucherTypePoint;
 
   @Column({ type: 'integer', nullable: false })

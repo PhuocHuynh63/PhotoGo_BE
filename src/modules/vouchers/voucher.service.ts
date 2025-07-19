@@ -7,7 +7,7 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { FindVoucherDto } from './dto/find-voucher.dto';
 import { CreateVoucherUserDto } from './dto/create-voucher.dto';
 import { FindVoucherUserDto } from './dto/find-voucher.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum, VoucherTypePoint } from 'src/constants/voucher.enum';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { User } from '../users/entities/user.entity';
 import { UserCampaign } from '../campaign/entities/user-campaign.entity';
@@ -430,9 +430,14 @@ export class VoucherService {
    * Đổi thưởng: user dùng điểm để đổi lấy voucher
    */
   async exchangeVoucherByPoint(userId: string, voucherId: string): Promise<VoucherUser> {
-    // 1. Lấy thông tin voucher
-    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
-    if (!voucher) throw new NotFoundException('Voucher không tồn tại');
+    // 1. Lấy thông tin voucher - cho phép cả POINT và CAMPAIGN type
+    const voucher = await this.voucherRepository.findOne({ 
+      where: { 
+        id: voucherId, 
+        type: VoucherTypePoint.POINT // Chỉ cho phép đổi voucher loại POINT
+      } 
+    });
+    if (!voucher) throw new NotFoundException('Voucher không tồn tại hoặc không hỗ trợ đổi điểm');
     if (voucher.status !== VoucherStatusEnum.ACTIVE) throw new BadRequestException('Voucher không còn hiệu lực');
     if (voucher.quantity <= 0) throw new BadRequestException('Voucher đã hết số lượng');
     if (!voucher.point || voucher.point <= 0) throw new BadRequestException('Voucher này không hỗ trợ đổi điểm');
@@ -520,7 +525,7 @@ export class VoucherService {
       throw new NotFoundException(`Người dùng với ID ${userId} không tồn tại`);
     }
 
-    // 2. Tạo query builder cho voucher từ campaign
+    // 2. Tạo query builder cho voucher từ campaign - chỉ lấy voucher có type CAMPAIGN
     const queryBuilder = this.voucherRepository.createQueryBuilder('voucher')
       .innerJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
       .innerJoin('campaign', 'c', 'c.id = cv.campaignId')
@@ -533,7 +538,8 @@ export class VoucherService {
       ])
       .where('uc.userId = :userId', { userId })
       .andWhere('cv.isavailable = :isAvailable', { isAvailable: true })
-      .andWhere('uc.isavailable = :userCampaignAvailable', { userCampaignAvailable: true });
+      .andWhere('uc.isavailable = :userCampaignAvailable', { userCampaignAvailable: true })
+      .andWhere('voucher.type = :voucherType', { voucherType: VoucherTypePoint.CAMPAIGN }); // Chỉ lấy voucher loại CAMPAIGN
 
     // 3. Thêm filter theo term (tìm kiếm)
     if (query.term) {
@@ -674,6 +680,34 @@ export class VoucherService {
       where: { userId, campaignId: campaignVoucher.campaignId, isAvailable: true },
     });
     return !!userCampaign;
+  }
+
+  /**
+   * Validate voucher type consistency
+   * @param voucherId string
+   * @param expectedType VoucherTypePoint
+   * @returns {Promise<boolean>} true if voucher type matches expected type
+   */
+  async validateVoucherType(voucherId: string, expectedType: VoucherTypePoint): Promise<boolean> {
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    if (!voucher) return false;
+    return voucher.type === expectedType;
+  }
+
+  /**
+   * Get voucher with type validation
+   * @param voucherId string
+   * @param expectedType VoucherTypePoint
+   * @returns {Promise<Voucher>} voucher if type matches
+   */
+  async getVoucherWithTypeValidation(voucherId: string, expectedType: VoucherTypePoint): Promise<Voucher> {
+    const voucher = await this.voucherRepository.findOne({ 
+      where: { id: voucherId, type: expectedType } 
+    });
+    if (!voucher) {
+      throw new NotFoundException(`Voucher không tồn tại hoặc không đúng loại ${expectedType}`);
+    }
+    return voucher;
   }
   //#endregion VoucherUser Campaign Operations
 }

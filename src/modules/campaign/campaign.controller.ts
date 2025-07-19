@@ -4,6 +4,7 @@ import { Campaign } from './entities/campaign.entity';
 import { CampaignVoucher } from './entities/campaign-voucher.entity';
 import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
+import { Voucher } from '../vouchers/entities/voucher.entity';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { Public } from 'src/decorator/custom';
 import { FindAllDto, FindAllVendorWithInvitedDto } from './dto/find-all.dto';
@@ -94,6 +95,18 @@ export class CampaignController {
    ) {
      return this.campaignService.findCampaignsByVendorId(vendorId, Number(current) || 1, Number(pageSize) || 10);
    }
+
+  @Get('available-vouchers')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách voucher khả dụng loại chiến dịch để thêm vào campaign' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách voucher khả dụng loại chiến dịch',
+    type: [Voucher]
+  })
+  async getAvailableCampaignVouchers() {
+    return this.campaignService.getAvailableCampaignVouchers();
+  }
 
   @Get('confirm-invite')
   @Public()
