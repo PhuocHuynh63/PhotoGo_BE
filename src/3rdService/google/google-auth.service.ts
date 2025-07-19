@@ -57,7 +57,7 @@ export class GoogleAuthService {
     const accessToken = this.jwtService.sign({
       email: existingUser.email,
       sub: existingUser.id,
-      role: existingUser.role, // Include role name in the token
+      role: existingUser.role.id, // Include role name in the token
     });
 
     return { user: existingUser, access_token_jwt: accessToken };
