@@ -821,17 +821,16 @@ export class PaymentService {
     if (paymentType === PaymentType.DEPOSIT) {
     // Thanh toán thành công - chuyển từ NOT_PAID sang PAID
     if (booking.status === BookingStatus.NOT_PAID) {
-      booking.status = BookingStatus.PAID;
-      
+      booking.status = BookingStatus.PENDING;
+      await this.bookingRepository.save(booking);
       // Create booking history
       const history = this.bookingHistoryRepository.create({
-        bookingId: booking.id,
-        status: BookingStatus.PAID,
+        booking: booking,
+        status: BookingStatus.PENDING,
       });
       await this.bookingHistoryRepository.save(history);
       }
     }
-    await this.bookingRepository.save(booking);
   }
   //#endregion handleBookingStatusUpdate
 }
