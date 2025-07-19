@@ -53,13 +53,13 @@ export class AuthService {
     const wishlist = await this.wishlistService.findWishlistByUserId(user.id);
 
     // Send login notification
-    try {
-      await this.notificationService.notifyLogin(user, 'Web Browser', 'Email/Password');
-      this.logger.log(`Login notification sent to user ${user.id}`);
-    } catch (error) {
-      this.logger.warn(`Failed to send login notification to user ${user.id}: ${error.message}`);
-      // Không throw error để không ảnh hưởng đến quá trình đăng nhập
-    }
+    // try {
+    //   await this.notificationService.notifyLogin(user, 'Web Browser', 'Email/Password');
+    //   this.logger.log(`Login notification sent to user ${user.id}`);
+    // } catch (error) {
+    //   this.logger.warn(`Failed to send login notification to user ${user.id}: ${error.message}`);
+    //   // Không throw error để không ảnh hưởng đến quá trình đăng nhập
+    // }
 
     return {
       user: {
