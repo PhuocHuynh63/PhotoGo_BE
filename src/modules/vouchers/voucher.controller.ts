@@ -144,6 +144,7 @@ export class VoucherController {
   }
 
   @Post('user/:userId/exchange/:voucherId')
+  @Public()
   @ApiOperation({ summary: 'User đổi điểm lấy voucher' })
   @ApiResponse({ status: 201, description: 'Đổi điểm lấy voucher thành công', type: VoucherUser })
   @ApiResponse({ status: 400, description: 'Không đủ điểm hoặc điều kiện không hợp lệ' })

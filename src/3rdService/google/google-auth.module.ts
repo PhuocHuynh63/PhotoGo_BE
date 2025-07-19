@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { FacebookAuthService } from './facebook.service';
-import { FacebookStrategy } from './passport/facebook.strategy';
-import { FacebookAuthController } from './facebook.controller';
+import { GoogleAuthService } from './google-auth.service';
+import { GoogleAuthController } from './google-auth.controller';
+import { GoogleStrategy } from './passport/google.strategy';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from 'src/modules/users/user.module';
@@ -18,7 +18,7 @@ import { UserModule } from 'src/modules/users/user.module';
         }),
         UserModule,
     ],
-    providers: [FacebookAuthService, FacebookStrategy],
-    controllers: [FacebookAuthController],
+    providers: [GoogleAuthService, GoogleStrategy],
+    controllers: [GoogleAuthController],
 })
-export class FacebookAuthModule { }
+export class GoogleAuthModule { } 

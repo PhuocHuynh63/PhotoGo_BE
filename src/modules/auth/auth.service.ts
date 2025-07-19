@@ -10,6 +10,7 @@ import { RestPasswordhDto } from './dto/rest-password.dto';
 import { CartService } from 'src/modules/carts/cart.service';
 import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 import { CampaignService } from 'src/modules/campaign/campaign.service';
+import { NotificationService } from 'src/modules/notifications/notification.service';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +23,7 @@ export class AuthService {
     private readonly cartService: CartService,
     private readonly wishlistService: WishlistService,
     private readonly campaignService: CampaignService,
+    private readonly notificationService: NotificationService,
   ) { }
 
   //#region Validate User
@@ -49,6 +51,16 @@ export class AuthService {
     // Lấy cart của user
     const cart = await this.cartService.findCartByUserId(user.id);
     const wishlist = await this.wishlistService.findWishlistByUserId(user.id);
+
+    // Send login notification
+    try {
+      await this.notificationService.notifyLogin(user, 'Web Browser', 'Email/Password');
+      this.logger.log(`Login notification sent to user ${user.id}`);
+    } catch (error) {
+      this.logger.warn(`Failed to send login notification to user ${user.id}: ${error.message}`);
+      // Không throw error để không ảnh hưởng đến quá trình đăng nhập
+    }
+
     return {
       user: {
         id: user.id,
@@ -112,7 +124,7 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('Email không tồn tại');
     }
-    
+
     // create cart for user
     await this.cartService.createCart(user.id);
     // create wishlist for user
@@ -125,7 +137,7 @@ export class AuthService {
       this.logger.warn(`Không thể thêm user ${user.id} vào campaign "Chào Bạn Mới": ${error.message}`);
       // Không throw error để không ảnh hưởng đến quá trình kích hoạt tài khoản
     }
-    
+
     return await this.userService.activeAccount(emailLower)
   }
   //#endregion
