@@ -1139,7 +1139,14 @@ export class CampaignService {
   async removeVoucherOutOfCampaign(campaignId: string, voucherId: string) {
     const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { campaignId, voucherId } });
     if (!campaignVoucher) throw new NotFoundException('Campaign voucher không tồn tại');
-    await this.campaignVoucherRepository.delete(campaignVoucher);
+    
+    // Sử dụng delete với điều kiện thay vì object
+    const result = await this.campaignVoucherRepository.delete({ campaignId, voucherId });
+    
+    if (result.affected === 0) {
+      throw new NotFoundException('Campaign voucher không tồn tại');
+    }
+    
     return { message: 'Xóa voucher khỏi campaign thành công' };
   }
 } 
