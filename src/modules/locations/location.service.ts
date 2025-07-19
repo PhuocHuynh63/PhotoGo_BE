@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Between } from 'typeorm';
+import { Repository, ILike, Between, In } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
@@ -654,7 +654,7 @@ export class LocationService {
       where: {
         locationId,
         date: Between(fromDate, toDate),
-        status: BookingStatus.PAID, // Chỉ lấy những booking đã thanh toán
+        status: In([BookingStatus.CONFIRMED, BookingStatus.PENDING, BookingStatus.PROGRESSING, BookingStatus.COMPLETED]),
       },
       relations: ['user', 'serviceConcept', 'invoices', 'schedules'],
       order: { date: 'ASC', time: 'ASC' }
