@@ -14,7 +14,7 @@ import {
 import { BookingService } from './booking.service';
 import { BookingScheduleService } from './booking-schedule.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
-import { UpdateBookingDto } from './dto/update-booking.dto';
+import { UpdateBookingDto, UpdateStatusDto } from './dto/update-booking.dto';
 import { CheckMultiDayAvailabilityDto, CheckMultiDayAvailabilityResponseDto } from './dto/check-multi-day-availability.dto';
 import { Booking } from './entities/booking.entity';
 import {
@@ -116,6 +116,35 @@ export class BookingController {
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy danh sách booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('priorityScore')
+  @Public()
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy danh sách booking được sắp xếp theo độ ưu tiên',
+    type: [Booking],
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy danh sách booking được sắp xếp theo độ ưu tiên' })
+  async getPriorityScore(@Query() paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      return await this.bookingService.getPriorityScore(paginationDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking được sắp xếp theo độ ưu tiên',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -444,5 +473,15 @@ export class BookingController {
     @Param('paymentOSId') paymentOSId: string,
   ): Promise<Booking> {
     return await this.bookingService.getBookingByPaymentOSId(paymentOSId);
+  }
+
+  // api for update status booking
+  @Patch(':id/update-status')
+  @ApiOperation({ summary: 'Cập nhật trạng thái booking' })
+  @ApiResponse({ status: 200, description: 'Cập nhật trạng thái booking thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  async updateStatus(@Param('id') id: string, @Body() updateStatusDto: UpdateStatusDto): Promise<Booking> {
+    return await this.bookingService.updateStatus(id, updateStatusDto);
   }
 }

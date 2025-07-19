@@ -7,7 +7,7 @@ import { ConceptRangeType } from '../../constants/servicePackage.enum';
 import { BookingHistory } from './entities/booking-history.entity';
 import { BookingSchedule } from './entities/booking-schedule.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
-import { UpdateBookingDto } from './dto/update-booking.dto';
+import { UpdateBookingDto, UpdateStatusDto } from './dto/update-booking.dto';
 import { ServiceConcept } from '../service-package/entities/service-concept.entity';
 import { InvoiceService } from '../invoices/invoice.service';
 import { Voucher } from '../vouchers/entities/voucher.entity';
@@ -1867,5 +1867,50 @@ export class BookingService {
         totalItem: total
       }
     };
+  }
+
+  async getPriorityScore(paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10 } = paginationDto;
+    const skip = (current - 1) * pageSize;
+
+    const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.user', 'user')
+      .leftJoin('booking.location', 'location')
+      .leftJoin('booking.serviceConcept', 'serviceConcept')
+      .leftJoin('booking.invoices', 'invoices')
+      .leftJoin('booking.histories', 'histories')
+      .where('booking.status = :status', { status: BookingStatus.PENDING })
+      .orderBy('booking.priorityScore', 'DESC')
+      .skip(skip)
+      .take(pageSize);
+
+    const [data, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: data.map(booking => this.formatBookingDates(booking)),
+      pagination: {
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total
+      }
+    };
+  }
+
+  async updateStatus(id: string, updateStatusDto: UpdateStatusDto): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({ where: { id } });
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${id} not found`);
+    }
+    booking.status = updateStatusDto.status;
+    return await this.bookingRepository.save(booking);
   }
 }
