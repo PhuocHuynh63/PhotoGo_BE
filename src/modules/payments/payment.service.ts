@@ -703,13 +703,13 @@ export class PaymentService {
 
     // Update booking status - chỉ hủy nếu booking đang ở trạng thái NOT_PAID
     if (booking && booking.status === BookingStatus.NOT_PAID) {
-      booking.status = BookingStatus.CANCELLED_TIMEOUT;
+      booking.status = BookingStatus.CANCELLED_USER;
       await this.bookingRepository.save(booking);
 
       // Create booking history
       const history = this.bookingHistoryRepository.create({
         bookingId: booking.id,
-        status: BookingStatus.CANCELLED_TIMEOUT,
+        status: BookingStatus.CANCELLED_USER,
       });
       await this.bookingHistoryRepository.save(history);
     }
@@ -819,28 +819,16 @@ export class PaymentService {
    */
   private async updateBookingStatus(booking: Booking, paymentType: PaymentType): Promise<void> {
     if (paymentType === PaymentType.DEPOSIT) {
-      // Chuyển từ NOT_PAID sang PAID
-      if (booking.status === BookingStatus.NOT_PAID) {
-        booking.status = BookingStatus.PAID;
-        
-        // Create booking history
-        const history = this.bookingHistoryRepository.create({
-          bookingId: booking.id,
-          status: BookingStatus.PAID,
-        });
-        await this.bookingHistoryRepository.save(history);
-      }
-    } else if (paymentType === PaymentType.REMAINING) {
-      // Thanh toán remaining - hoàn thành booking
-      if (booking.status === BookingStatus.PAID || booking.status === BookingStatus.PENDING) {
-        booking.status = BookingStatus.COMPLETED;
-        
-        // Create booking history
-        const history = this.bookingHistoryRepository.create({
-          bookingId: booking.id,
-          status: BookingStatus.COMPLETED,
-        });
-        await this.bookingHistoryRepository.save(history);
+    // Thanh toán thành công - chuyển từ NOT_PAID sang PAID
+    if (booking.status === BookingStatus.NOT_PAID) {
+      booking.status = BookingStatus.PAID;
+      
+      // Create booking history
+      const history = this.bookingHistoryRepository.create({
+        bookingId: booking.id,
+        status: BookingStatus.PAID,
+      });
+      await this.bookingHistoryRepository.save(history);
       }
     }
     await this.bookingRepository.save(booking);
