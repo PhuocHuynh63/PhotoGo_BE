@@ -1,8 +1,10 @@
 export enum BookingStatus {
-  PENDING = 'chờ xử lý',
+  NOT_PAID = 'chưa thanh toán',
+  PENDING = 'chờ xác nhận',
   CONFIRMED = 'đã xác nhận',
-  CANCELLED = 'đã hủy',
+  PROGRESSING = 'đang thực hiện',
   COMPLETED = 'đã hoàn thành',
+  CANCELLED = 'đã hủy',
   PAID = 'đã thanh toán',
 }
 

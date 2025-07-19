@@ -132,9 +132,9 @@ export class AuthService {
     // join welcome campaign
     try {
       await this.campaignService.joinWelcomeCampaign(user.id, 'User mới đăng ký');
-      this.logger.log(`User ${user.id} đã được thêm vào campaign "Chào Bạn Mới"`);
+      this.logger.log(`User ${user.id} đã được thêm vào welcome campaign`);
     } catch (error) {
-      this.logger.warn(`Không thể thêm user ${user.id} vào campaign "Chào Bạn Mới": ${error.message}`);
+      this.logger.warn(`Không thể thêm user ${user.id} vào welcome campaign: ${error.message}`);
       // Không throw error để không ảnh hưởng đến quá trình kích hoạt tài khoản
     }
 

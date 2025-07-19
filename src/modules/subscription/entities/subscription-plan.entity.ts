@@ -30,9 +30,6 @@ export class SubscriptionPlan {
   @Column({ type: 'enum', enum: BillingCycle, name: 'billing_cycle' })
   billingCycle: BillingCycle;
 
-  @Column({ type: 'int', name: 'duration', default: 30 })
-  duration: number;
-
   @OneToMany(() => SubscriptionVendor, subscriptionVendor => subscriptionVendor.plan)
   subscriptionVendors: SubscriptionVendor[];
 

@@ -274,9 +274,11 @@ export class SubscriptionPaymentService {
         const isRenewal = payment.type === PaymentType.RENEWAL;
         const renewalAction = isRenewal ? SubscriptionHistoryAction.RENEWED : SubscriptionHistoryAction.ACTIVATED;
 
+        // Calculate duration based on billing cycle
+        const planDuration = plan.billingCycle === BillingCycle.MONTHLY ? 30 : 365;
         const renewalDescription = isRenewal
-          ? `Gia hạn subscription thêm ${(plan.duration || extensionDays)} ngày`
-          : `Kích hoạt subscription mới với ${(plan.duration || extensionDays)} ngày`;
+          ? `Gia hạn subscription thêm ${(planDuration || extensionDays)} ngày`
+          : `Kích hoạt subscription mới với ${(planDuration || extensionDays)} ngày`;
 
         // Tự động assign user với subscription nếu là lần thanh toán đầu tiên
         if (!isRenewal) {

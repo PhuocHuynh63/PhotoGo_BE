@@ -16,6 +16,7 @@ import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
+import { CAMPAIGN_NAMES, VOUCHER_CODES } from 'src/constants/campaign.enum';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { InviteVendorDto } from './dto/invite-vendor.dto';
@@ -870,101 +871,104 @@ export class CampaignService {
     userCampaign: UserCampaign;
     voucherUser: VoucherUser;
   }> {
-    // 1. Tìm campaign "Chào Bạn Mới"
-    const campaign = await this.campaignRepository.findOne({
-      where: { name: 'Chào Bạn Mới' }
-    });
+    // Sử dụng transaction để đảm bảo atomicity
+    return await this.campaignRepository.manager.transaction(async (manager) => {
+      // 1. Tìm campaign "Chào Bạn Mới"
+      const campaign = await manager.findOne(Campaign, {
+        where: { name: CAMPAIGN_NAMES.WELCOME }
+      });
 
-    if (!campaign) {
-      throw new NotFoundException('Campaign "Chào Bạn Mới" không tồn tại');
-    }
+      if (!campaign) {
+        throw new NotFoundException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" không tồn tại`);
+      }
 
-    if (!campaign.status) {
-      throw new BadRequestException('Campaign "Chào Bạn Mới" đã bị vô hiệu hóa');
-    }
+      if (!campaign.status) {
+        throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" đã bị vô hiệu hóa`);
+      }
 
-    // 2. Kiểm tra thời gian campaign
-    const now = new Date();
-    const startDate = new Date(campaign.startDate);
-    const endDate = new Date(campaign.endDate);
-    
-    if (now < startDate) {
-      throw new BadRequestException('Campaign "Chào Bạn Mới" chưa bắt đầu');
-    }
-    
-    if (now > endDate) {
-      throw new BadRequestException('Campaign "Chào Bạn Mới" đã kết thúc');
-    }
+      // 2. Kiểm tra thời gian campaign
+      const now = new Date();
+      const startDate = new Date(campaign.startDate);
+      const endDate = new Date(campaign.endDate);
+      
+      if (now < startDate) {
+        throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" chưa bắt đầu`);
+      }
+      
+      if (now > endDate) {
+        throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" đã kết thúc`);
+      }
 
-    // 3. Tìm voucher "CHAOBANMOI" trong campaign
-    const campaignVoucher = await this.campaignVoucherRepository.findOne({
-      where: { 
+      // 3. Tìm voucher "CHAOBANMOI" trong campaign
+      const campaignVoucher = await manager.findOne(CampaignVoucher, {
+        where: { 
+          campaignId: campaign.id,
+          isAvailable: true 
+        },
+        relations: ['voucher']
+      });
+
+      if (!campaignVoucher) {
+        throw new NotFoundException(`Voucher "${VOUCHER_CODES.WELCOME}" không có trong campaign "${CAMPAIGN_NAMES.WELCOME}"`);
+      }
+
+      const voucher = campaignVoucher.voucher;
+      if (!voucher) {
+        throw new NotFoundException(`Voucher "${VOUCHER_CODES.WELCOME}" không tồn tại`);
+      }
+
+      if (voucher.status !== VoucherStatusEnum.ACTIVE) {
+        throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" không còn hiệu lực`);
+      }
+
+      if (voucher.quantity <= 0) {
+        throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" đã hết số lượng`);
+      }
+
+      // 4. Kiểm tra user có tồn tại không
+      const user = await manager.findOne(User, {
+        where: { id: userId }
+      });
+
+      if (!user) {
+        throw new NotFoundException('User không tồn tại');
+      }
+
+      // 5. Kiểm tra user đã tham gia campaign chưa
+      const existingUserCampaign = await manager.findOne(UserCampaign, {
+        where: { campaignId: campaign.id, userId }
+      });
+
+      if (existingUserCampaign) {
+        throw new BadRequestException(`User đã tham gia campaign "${CAMPAIGN_NAMES.WELCOME}"`);
+      }
+
+      // 6. Thêm user vào campaign
+      const userCampaign = manager.create(UserCampaign, {
         campaignId: campaign.id,
-        isAvailable: true 
-      },
-      relations: ['voucher']
+        userId,
+        isAvailable: true,
+      });
+
+      // 7. Tạo voucher-user record
+      const voucherUser = manager.create(VoucherUser, {
+        user_id: userId,
+        voucher_id: voucher.id,
+        status: VoucherUserStatusEnum.AVAILABLE,
+        from: VoucherUserFromEnum.CAMPAIGN,
+        assigned_at: new Date(),
+        used_at: null,
+      });
+
+      const savedUserCampaign = await manager.save(UserCampaign, userCampaign);
+      const savedVoucherUser = await manager.save(VoucherUser, voucherUser);
+
+      return {
+        message: `Thêm user vào campaign "${CAMPAIGN_NAMES.WELCOME}" thành công. Voucher "${VOUCHER_CODES.WELCOME}" đã được gán cho user.`,
+        userCampaign: savedUserCampaign,
+        voucherUser: savedVoucherUser
+      };
     });
-
-    if (!campaignVoucher) {
-      throw new NotFoundException('Voucher "CHAOBANMOI" không có trong campaign "Chào Bạn Mới"');
-    }
-
-    const voucher = campaignVoucher.voucher;
-    if (!voucher) {
-      throw new NotFoundException('Voucher "CHAOBANMOI" không tồn tại');
-    }
-
-    if (voucher.status !== VoucherStatusEnum.ACTIVE) {
-      throw new BadRequestException('Voucher "CHAOBANMOI" không còn hiệu lực');
-    }
-
-    if (voucher.quantity <= 0) {
-      throw new BadRequestException('Voucher "CHAOBANMOI" đã hết số lượng');
-    }
-
-    // 4. Kiểm tra user có tồn tại không
-    const user = await this.userRepository.findOne({
-      where: { id: userId }
-    });
-
-    if (!user) {
-      throw new NotFoundException('User không tồn tại');
-    }
-
-    // 5. Kiểm tra user đã tham gia campaign chưa
-    const existingUserCampaign = await this.userCampaignRepository.findOne({
-      where: { campaignId: campaign.id, userId }
-    });
-
-    if (existingUserCampaign) {
-      throw new BadRequestException('User đã tham gia campaign "Chào Bạn Mới"');
-    }
-
-    // 6. Thêm user vào campaign
-    const userCampaign = this.userCampaignRepository.create({
-      campaignId: campaign.id,
-      userId,
-      isAvailable: true,
-    });
-
-    // 7. Tạo voucher-user record
-    const voucherUser = this.voucherUserRepository.create({
-      user_id: userId, // Sử dụng userId trực tiếp thay vì query lại
-      voucher_id: voucher.id,
-      status: VoucherUserStatusEnum.AVAILABLE,
-      from: VoucherUserFromEnum.CAMPAIGN,
-      assigned_at: new Date(),
-      used_at: null,
-    });
-
-    const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
-    const savedVoucherUser = await this.voucherUserRepository.save(voucherUser);
-
-    return {
-      message: 'Thêm user vào campaign "Chào Bạn Mới" thành công. Voucher "CHAOBANMOI" đã được gán cho user.',
-      userCampaign: savedUserCampaign,
-      voucherUser: savedVoucherUser
-    };
   }
   
   // CRUD cho campaign-vendor

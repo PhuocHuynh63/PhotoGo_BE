@@ -18,6 +18,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { CartService } from 'src/modules/carts/cart.service';
 import { WishlistService } from 'src/modules/wishlists/wishlist.service';
+import { CampaignService } from 'src/modules/campaign/campaign.service';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -28,6 +29,7 @@ export class UserService {
     private readonly MailService: MailService,
     private readonly cartService: CartService,
     private readonly wishlistService: WishlistService,
+    private readonly campaignService: CampaignService,
     private readonly bullQueueService: BullQueueService,
     @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
   ) { }
@@ -70,6 +72,9 @@ export class UserService {
       this.cartService.createCart(savedUser.id),
       this.wishlistService.createWishlist(savedUser.id)
     ]);
+
+    // Join welcome campaign for new user
+    await this.assignWelcomeCampaign(savedUser.id, 'Admin tạo user mới');
 
     return savedUser;
   }
@@ -124,6 +129,9 @@ export class UserService {
 
       // create wishlist for user
       await this.wishlistService.createWishlist(savedUser.id);
+
+      // Join welcome campaign for new user (even if inactive)
+      await this.assignWelcomeCampaign(savedUser.id, 'Admin tạo user mới (chưa active)');
 
       return savedUser;
     } catch (error) {
@@ -558,5 +566,22 @@ export class UserService {
     }
   }
   //#endregion processDeletionQueue
+
+  //#region assignWelcomeCampaign
+  /**
+   * Assign user to welcome campaign
+   * @param userId User ID
+   * @param note Note for the assignment
+   */
+  private async assignWelcomeCampaign(userId: string, note?: string): Promise<void> {
+    try {
+      await this.campaignService.joinWelcomeCampaign(userId, note);
+      this.logger.log(`User ${userId} đã được thêm vào welcome campaign`);
+    } catch (error) {
+      this.logger.warn(`Không thể thêm user ${userId} vào welcome campaign: ${error.message}`);
+      // Không throw error để không ảnh hưởng đến quá trình tạo user
+    }
+  }
+  //#endregion assignWelcomeCampaign
 
 }
