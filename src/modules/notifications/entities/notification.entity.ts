@@ -4,7 +4,7 @@ import { NotificationType } from '../../../constants/notification.enum';
 
 
 
-@Entity('notifications')  
+@Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -24,6 +24,9 @@ export class Notification {
 
   @Column({ type: 'boolean', nullable: false, default: false })
   is_read: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  data: string;
 
   @CreateDateColumn({ type: 'timestamptz', default: () => 'NOW()' })
   created_at: Date;

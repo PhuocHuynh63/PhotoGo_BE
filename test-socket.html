@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+
+<body>
+    <h1>WebSocket Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    <button onclick="testGetNotifications()">Get Notifications</button>
+    <button onclick="testGetUnreadCount()">Get Unread Count</button>
+
+    <script>
+        const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6eyJpZCI6IlIwMDUiLCJuYW1lIjoiYWRtaW4iLCJkZXNjcmlwdGlvbiI6IlF14bqjbiB0cuG7iyB2acOqbiho4buHIHRo4buRbmcifSwiaWF0IjoxNzQ0NDczNzUwLCJleHAiOjE3NzYwMDk3NTB9.tYQuBDHXHNR01GUaL4-bR3eT6YTe43mo1kZE0m-3nzo';
+
+        const socket = io('http://localhost:8000', {
+            auth: { token },
+            transports: ['websocket', 'polling']
+        });
+
+        function addMessage(message) {
+            const div = document.createElement('div');
+            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            document.getElementById('messages').appendChild(div);
+        }
+
+        socket.on('connect', () => {
+            document.getElementById('status').textContent = 'Connected!';
+            addMessage('Connected to server');
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('status').textContent = 'Disconnected';
+            addMessage('Disconnected from server');
+        });
+
+        socket.on('connected', (data) => {
+            addMessage('Server connected: ' + JSON.stringify(data));
+        });
+
+        socket.on('notificationsList', (data) => {
+            addMessage('Notifications: ' + JSON.stringify(data));
+        });
+
+        socket.on('unreadCount', (data) => {
+            addMessage('Unread count: ' + JSON.stringify(data));
+        });
+
+        socket.on('error', (data) => {
+            addMessage('Error: ' + JSON.stringify(data));
+        });
+
+        function testGetNotifications() {
+            socket.emit('getNotifications', {
+                userId: 'R001',
+                current: 1,
+                pageSize: 10
+            });
+            addMessage('Sent getNotifications request');
+        }
+
+        function testGetUnreadCount() {
+            socket.emit('getUnreadCount', {
+                userId: 'R001'
+            });
+            addMessage('Sent getUnreadCount request');
+        }
+    </script>
+</body>
+
+</html>

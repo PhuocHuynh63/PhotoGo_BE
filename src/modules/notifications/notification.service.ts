@@ -107,6 +107,68 @@ export class NotificationService {
   }
   //#endregion remove
 
+  //#region findNotificationsByUser
+  /**
+   * Lấy notifications của user cụ thể với pagination và filter
+   */
+  async findNotificationsByUser(userId: string, query: FindNotificationDtoByUser): Promise<{
+    data: any[]; // Đổi sang any[] để map lại structure
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = query.current ? Number(query.current) : 1;
+    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+
+    const queryBuilder = this.notificationRepository.createQueryBuilder('notification');
+
+    // Add relations to the query builder
+    queryBuilder.leftJoinAndSelect('notification.user', 'user');
+
+    // Filter by user ID
+    queryBuilder.andWhere('notification.user.id = :userId', { userId });
+
+    if (query.type) {
+      queryBuilder.andWhere('notification.type = :type', { type: query.type });
+    }
+
+    // Sort by created_at descending (newest first)  
+    queryBuilder.orderBy('notification.created_at', 'DESC');
+
+    // Pagination
+    queryBuilder.skip(skip).take(pageSize);
+
+    const [data, totalItem] = await queryBuilder.getManyAndCount();
+    const totalPage = Math.ceil(totalItem / pageSize);
+    console.log('DEBUG full query:', query);
+
+    // Map lại để chỉ trả về userId thay vì object user
+    const mappedData = data.map((n) => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      is_read: n.is_read,
+      created_at: n.created_at,
+      userId: n.user?.id || userId,
+    }));
+
+    return {
+      data: mappedData,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
+    };
+  }
+  //#endregion findNotificationsByUser
+
   //#region notifyLogin
   /**
    * 1. Thông báo đăng nhập thành công
@@ -216,68 +278,6 @@ export class NotificationService {
     });
   }
   //#endregion getUnreadCount
-
-  //#region findNotificationsByUser
-  /**
-   * Lấy notifications của user cụ thể với pagination và filter
-   */
-  async findNotificationsByUser(userId: string, query: FindNotificationDtoByUser): Promise<{
-    data: any[]; // Đổi sang any[] để map lại structure
-    pagination: {
-      current: number;
-      pageSize: number;
-      totalPage: number;
-      totalItem: number;
-    };
-  }> {
-    const currentPage = query.current ? Number(query.current) : 1;
-    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
-    const skip = (currentPage - 1) * pageSize;
-
-    const queryBuilder = this.notificationRepository.createQueryBuilder('notification');
-
-    // Add relations to the query builder
-    queryBuilder.leftJoinAndSelect('notification.user', 'user');
-
-    // Filter by user ID
-    queryBuilder.andWhere('notification.user.id = :userId', { userId });
-
-    if (query.type) {
-      queryBuilder.andWhere('notification.type = :type', { type: query.type });
-    }
-
-    // Sort by created_at descending (newest first)  
-    queryBuilder.orderBy('notification.created_at', 'DESC');
-
-    // Pagination
-    queryBuilder.skip(skip).take(pageSize);
-
-    const [data, totalItem] = await queryBuilder.getManyAndCount();
-    const totalPage = Math.ceil(totalItem / pageSize);
-    console.log('DEBUG full query:', query);
-
-    // Map lại để chỉ trả về userId thay vì object user
-    const mappedData = data.map((n) => ({
-      id: n.id,
-      title: n.title,
-      message: n.message,
-      type: n.type,
-      is_read: n.is_read,
-      created_at: n.created_at,
-      userId: n.user?.id || userId,
-    }));
-
-    return {
-      data: mappedData,
-      pagination: {
-        current: currentPage,
-        pageSize,
-        totalPage,
-        totalItem,
-      },
-    };
-  }
-  //#endregion findNotificationsByUser
 
   //#region notifySubscriptionRenewalReminder
   /**

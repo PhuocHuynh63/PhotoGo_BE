@@ -22,4 +22,8 @@ export class CreateNotificationDto {
   @IsBoolean()
   @IsOptional()
   is_read?: boolean;
+
+  @IsString()
+  @IsOptional()
+  data?: string;
 }
