@@ -33,6 +33,11 @@ export class GeminiService {
     private readonly MAX_IMAGE_SIZE = 1024; // Max width/height in pixels
     private readonly IMAGE_QUALITY = 85; // JPEG quality for compression
 
+    // Pricing calculation constants (same as ServicePackageService)
+    private readonly COMMISSION_RATE = 0.30; // 30%
+    private readonly TAX_RATE = 0.05; // 5%
+    private readonly TOTAL_MULTIPLIER = 1 + this.COMMISSION_RATE + this.TAX_RATE; // 1.35
+
     // Tối ưu: Request queue management
     private activeRequests = 0;
     private requestQueue: Array<() => Promise<any>> = [];
@@ -76,9 +81,17 @@ export class GeminiService {
         }
 
         this.genAI = new GoogleGenerativeAI(apiKey);
-        this.modelName = this.configService.get<string>('gemini.model') || 'models/gemini-2.0-flash-001';
-        this.generationConfig = this.configService.get('gemini.generationConfig') || {};
-        this.safetySettings = this.configService.get('gemini.safetySettings') || [];
+        this.modelName = this.configService.get<string>('gemini.modelName') || 'gemini-2.0-flash-exp';
+        this.generationConfig = this.configService.get('gemini.generationConfig');
+        this.safetySettings = this.configService.get('gemini.safetySettings');
+    }
+
+    /**
+     * Calculate final price from origin price (x1.35 and round)
+     * Same logic as ServicePackageService.getFinalPrice()
+     */
+    private getFinalPrice(originPrice: number): number {
+        return Math.round(originPrice * this.TOTAL_MULTIPLIER);
     }
 
     private async initializeModel(modelName?: string) {
@@ -158,7 +171,7 @@ export class GeminiService {
             const concepts_same = selected.map(concept => ({
                 id: concept.id,
                 name: concept.name ?? null,
-                price: concept.price ?? null,
+                price: this.getFinalPrice(concept.price ?? 0), // Convert origin price to final price (x1.35 and round)
                 imageUrl: Array.isArray(concept.images) && concept.images.length > 0 ? concept.images[0].imageUrl : null,
                 vendorSlug: concept.servicePackage?.vendor?.slug ?? null,
                 location: concept.servicePackage?.vendor?.locations ?? null,
@@ -502,7 +515,7 @@ ${prompt || ''}`;
                     conceptDataMap.set(sci.id, {
                         conceptId: sci.serviceConceptId,
                         name: sci.serviceConcept?.name ?? null,
-                        price: sci.serviceConcept?.price ?? null,
+                        price: this.getFinalPrice(sci.serviceConcept?.price ?? 0), // Convert origin price to final price (x1.35 and round)
                         imageUrl: sci.serviceConcept?.images?.[0]?.imageUrl ?? null,
                         vendorSlug: sci.serviceConcept?.servicePackage?.vendor?.slug ?? null,
                         location: sci.serviceConcept?.servicePackage?.vendor?.locations ?? null,
@@ -893,7 +906,7 @@ ${prompt || ''}`;
                     return {
                         id: concept.id,
                         name: concept.name ?? null,
-                        price: concept.price ?? null,
+                        price: this.getFinalPrice(concept.price ?? 0), // Convert origin price to final price (x1.35 and round)
                         imageUrl: concept.images?.[0]?.imageUrl ?? null,
                         vendorSlug,
                         location: vendorLocations,
