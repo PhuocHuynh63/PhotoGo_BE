@@ -402,20 +402,8 @@ export class PaymentService {
       }
       await this.invoiceRepo.save(invoice);
 
-      // Update booking status
-      if (payment.type === PaymentType.DEPOSIT) {
-        booking.status = BookingStatus.PAID;
-      } else if (payment.type === PaymentType.REMAINING) {
-        booking.status = BookingStatus.COMPLETED;
-      }
-      await this.bookingRepository.save(booking);
-
-      // Create booking history
-      const history = this.bookingHistoryRepository.create({
-        bookingId: booking.id,
-        status: booking.status,
-      });
-      await this.bookingHistoryRepository.save(history);
+      // Update booking status using helper method
+      await this.updateBookingStatus(booking, payment.type);
 
       // Handle payment priority - cancel overlapping bookings
       if (payment.type === PaymentType.DEPOSIT) {
@@ -565,20 +553,8 @@ export class PaymentService {
     }
     await this.invoiceRepo.save(invoice);
 
-    // Update booking status
-    if (payment.type === PaymentType.DEPOSIT) {
-      booking.status = BookingStatus.PAID;
-    } else if (payment.type === PaymentType.REMAINING) {
-      booking.status = BookingStatus.COMPLETED;
-    }
-    await this.bookingRepository.save(booking);
-
-    // Create booking history
-    const history = this.bookingHistoryRepository.create({
-      bookingId: booking.id,
-      status: booking.status,
-    });
-    await this.bookingHistoryRepository.save(history);
+    // Update booking status using helper method
+    await this.updateBookingStatus(booking, payment.type);
 
     // Handle payment priority - cancel overlapping bookings
     if (payment.type === PaymentType.DEPOSIT) {
@@ -725,15 +701,15 @@ export class PaymentService {
       await this.invoiceRepo.save(invoice);
     }
 
-    // Update booking status (nếu muốn)
-    if (booking) {
-      booking.status = BookingStatus.CANCELLED;
+    // Update booking status - chỉ hủy nếu booking đang ở trạng thái NOT_PAID
+    if (booking && booking.status === BookingStatus.NOT_PAID) {
+      booking.status = BookingStatus.CANCELLED_TIMEOUT;
       await this.bookingRepository.save(booking);
 
       // Create booking history
       const history = this.bookingHistoryRepository.create({
         bookingId: booking.id,
-        status: BookingStatus.CANCELLED,
+        status: BookingStatus.CANCELLED_TIMEOUT,
       });
       await this.bookingHistoryRepository.save(history);
     }
@@ -834,4 +810,40 @@ export class PaymentService {
       throw error;
     }
   }
+
+  //#region handleBookingStatusUpdate
+  /**
+   * Update booking status based on payment type and current status
+   * @param booking Booking entity
+   * @param paymentType Payment type (DEPOSIT or REMAINING)
+   */
+  private async updateBookingStatus(booking: Booking, paymentType: PaymentType): Promise<void> {
+    if (paymentType === PaymentType.DEPOSIT) {
+      // Chuyển từ NOT_PAID sang PAID
+      if (booking.status === BookingStatus.NOT_PAID) {
+        booking.status = BookingStatus.PAID;
+        
+        // Create booking history
+        const history = this.bookingHistoryRepository.create({
+          bookingId: booking.id,
+          status: BookingStatus.PAID,
+        });
+        await this.bookingHistoryRepository.save(history);
+      }
+    } else if (paymentType === PaymentType.REMAINING) {
+      // Thanh toán remaining - hoàn thành booking
+      if (booking.status === BookingStatus.PAID || booking.status === BookingStatus.PENDING) {
+        booking.status = BookingStatus.COMPLETED;
+        
+        // Create booking history
+        const history = this.bookingHistoryRepository.create({
+          bookingId: booking.id,
+          status: BookingStatus.COMPLETED,
+        });
+        await this.bookingHistoryRepository.save(history);
+      }
+    }
+    await this.bookingRepository.save(booking);
+  }
+  //#endregion handleBookingStatusUpdate
 }

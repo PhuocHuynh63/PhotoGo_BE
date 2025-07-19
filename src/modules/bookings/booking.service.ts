@@ -553,11 +553,11 @@ export class BookingService {
     const bookingTime = currentBooking.time;
     const bookingDuration = currentBooking.serviceConcept.duration;
 
-    // Find all overlapping PENDING bookings for the same time slot
+    // Find all overlapping NOT_PAID bookings for the same time slot
     const overlappingBookings = await this.bookingRepository.find({
       where: {
         date: bookingDate,
-        status: BookingStatus.PENDING,
+        status: BookingStatus.NOT_PAID,
         id: Not(bookingId), // Exclude current booking
       },
       relations: ['serviceConcept', 'user'],
@@ -576,13 +576,13 @@ export class BookingService {
         (startTimeMinutes >= bookingStartMinutes && startTimeMinutes < bookingEndMinutes)
       ) {
         // Cancel the overlapping booking
-        booking.status = BookingStatus.CANCELLED;
+        booking.status = BookingStatus.CANCELLED_USER;
         await this.bookingRepository.save(booking);
 
         // Create cancellation history
         const history = this.bookingHistoryRepository.create({
           bookingId: booking.id,
-          status: BookingStatus.CANCELLED,
+          status: BookingStatus.CANCELLED_USER,
         });
         await this.bookingHistoryRepository.save(history);
 
@@ -614,11 +614,11 @@ export class BookingService {
       return false;
     }
 
-    // Check if there are any CONFIRMED bookings for the same time slot
+    // Check if there are any PAID or CONFIRMED bookings for the same time slot
     const confirmedBookings = await this.bookingRepository.find({
       where: {
         date: booking.date,
-        status: BookingStatus.CONFIRMED,
+        status: In([BookingStatus.PAID, BookingStatus.CONFIRMED]),
         id: Not(bookingId),
       },
       relations: ['serviceConcept'],
@@ -648,10 +648,10 @@ export class BookingService {
     const timeoutMinutes = 15; // 15 minutes timeout for unpaid bookings
     const timeoutDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
-    // Find all PENDING bookings older than timeout
+    // Find all NOT_PAID bookings older than timeout
     const expiredBookings = await this.bookingRepository.find({
       where: {
-        status: BookingStatus.PENDING,
+        status: BookingStatus.NOT_PAID,
         created_at: LessThan(timeoutDate),
       },
       relations: ['user', 'serviceConcept'],
@@ -661,13 +661,13 @@ export class BookingService {
 
     for (const booking of expiredBookings) {
       // Cancel the expired booking
-      booking.status = BookingStatus.CANCELLED;
+      booking.status = BookingStatus.CANCELLED_TIMEOUT;
       await this.bookingRepository.save(booking);
 
       // Create cancellation history
       const history = this.bookingHistoryRepository.create({
         bookingId: booking.id,
-        status: BookingStatus.CANCELLED,
+        status: BookingStatus.CANCELLED_TIMEOUT,
       });
       await this.bookingHistoryRepository.save(history);
 
@@ -888,7 +888,7 @@ export class BookingService {
       userId,
       serviceConceptId,
       locationId: createBookingDto.locationId,
-      status: BookingStatus.PENDING,
+      status: BookingStatus.NOT_PAID,
       depositAmount: createBookingDto.depositAmount,
       depositType: BookingDepositType.PERCENTAGE,
       bookingType: BookingType.SINGLE_DAY,
@@ -907,7 +907,7 @@ export class BookingService {
 
     const history = this.bookingHistoryRepository.create({
       bookingId: savedBooking.id,
-      status: BookingStatus.PENDING,
+      status: BookingStatus.NOT_PAID,
     });
     await this.bookingHistoryRepository.save(history);
 
@@ -931,7 +931,7 @@ export class BookingService {
           where: { id: savedBooking.id }
         });
 
-        if (currentBooking && currentBooking.status === BookingStatus.PENDING) {
+        if (currentBooking && currentBooking.status === BookingStatus.NOT_PAID) {
           // Unlock the slot
           await this.locationAvailabilityService.unlockSlot(
             createBookingDto.date,
@@ -940,13 +940,13 @@ export class BookingService {
           );
 
           // Cancel the booking
-          currentBooking.status = BookingStatus.CANCELLED;
+          currentBooking.status = BookingStatus.CANCELLED_TIMEOUT;
           await this.bookingRepository.save(currentBooking);
 
           // Create cancellation history
           const timeoutHistory = this.bookingHistoryRepository.create({
             bookingId: currentBooking.id,
-            status: BookingStatus.CANCELLED,
+            status: BookingStatus.CANCELLED_TIMEOUT,
           });
           await this.bookingHistoryRepository.save(timeoutHistory);
 
@@ -1110,7 +1110,7 @@ export class BookingService {
 
     const history = this.bookingHistoryRepository.create({
       bookingId: savedBooking.id,
-      status: BookingStatus.PENDING,
+      status: BookingStatus.NOT_PAID,
     });
     await this.bookingHistoryRepository.save(history);
 
@@ -1297,17 +1297,8 @@ export class BookingService {
       const currentStatus = booking.status;
       const newStatus = updateBookingDto.status;
 
-      // Define valid status transitions
-      const validTransitions = {
-        [BookingStatus.PENDING]: [BookingStatus.CONFIRMED, BookingStatus.CANCELLED],
-        [BookingStatus.CONFIRMED]: [BookingStatus.COMPLETED, BookingStatus.CANCELLED],
-        [BookingStatus.COMPLETED]: [],
-        [BookingStatus.CANCELLED]: [],
-      };
-
-      if (!validTransitions[currentStatus].includes(newStatus)) {
-        throw new BadRequestException(`Không thể chuyển trạng thái từ ${currentStatus} sang ${newStatus}`);
-      }
+      // Validate booking flow using helper method
+      this.validateBookingFlow(currentStatus, newStatus);
     }
 
     // Validate date if provided
@@ -1405,8 +1396,10 @@ export class BookingService {
       const updatedBooking = await this.bookingRepository.save(booking);
 
       // NEW: Reopen scheduled dates if booking is cancelled and it's a multi-day booking
-      if (updateBookingDto.status === BookingStatus.CANCELLED &&
-        oldStatus !== BookingStatus.CANCELLED &&
+      if ((updateBookingDto.status === BookingStatus.CANCELLED_TIMEOUT || 
+           updateBookingDto.status === BookingStatus.CANCELLED_USER ||
+           updateBookingDto.status === BookingStatus.CANCELLED_VENDOR) &&
+        oldStatus !== updateBookingDto.status &&
         booking.schedules &&
         booking.schedules.length > 0) {
         try {
@@ -1854,7 +1847,7 @@ export class BookingService {
       // .leftJoinAndSelect('booking.invoices', 'invoices')
       // .leftJoinAndSelect('booking.histories', 'histories')
       .where('location.vendorId = :vendorId', { vendorId })
-      .andWhere('booking.status = :status', { status: BookingStatus.PENDING || BookingStatus.CONFIRMED })
+      .andWhere('booking.status IN (:...statuses)', { statuses: [BookingStatus.PAID, BookingStatus.PENDING, BookingStatus.CONFIRMED] })
       .orderBy('booking.priorityScore', 'DESC')
       .addOrderBy('booking.created_at', 'ASC')
       .skip(skip)
@@ -1891,7 +1884,7 @@ export class BookingService {
       .leftJoin('booking.serviceConcept', 'serviceConcept')
       .leftJoin('booking.invoices', 'invoices')
       .leftJoin('booking.histories', 'histories')
-      .where('booking.status = :status', { status: BookingStatus.PENDING })
+      .where('booking.status IN (:...statuses)', { statuses: [BookingStatus.PAID, BookingStatus.PENDING] })
       .orderBy('booking.priorityScore', 'DESC')
       .skip(skip)
       .take(pageSize);
@@ -1910,11 +1903,266 @@ export class BookingService {
   }
 
   async updateStatus(id: string, updateStatusDto: UpdateStatusDto): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({ where: { id } });
+    const booking = await this.bookingRepository.findOne({ 
+      where: { id },
+      relations: ['schedules']
+    });
+    
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${id} not found`);
     }
-    booking.status = updateStatusDto.status;
-    return await this.bookingRepository.save(booking);
+
+    const currentStatus = booking.status;
+    const newStatus = updateStatusDto.status;
+
+    // Validate booking flow using helper method
+    this.validateBookingFlow(currentStatus, newStatus);
+
+    // Update booking status
+    const oldStatus = booking.status;
+    booking.status = newStatus;
+    await this.bookingRepository.save(booking);
+
+    // Create booking history
+    const history = this.bookingHistoryRepository.create({
+      bookingId: booking.id,
+      status: newStatus,
+    });
+    await this.bookingHistoryRepository.save(history);
+
+    // Handle slot unlocking for cancellation statuses
+    if (newStatus === BookingStatus.CANCELLED_TIMEOUT || 
+        newStatus === BookingStatus.CANCELLED_USER ||
+        newStatus === BookingStatus.CANCELLED_VENDOR) {
+      
+      // Reopen scheduled dates for multi-day booking
+      if (booking.schedules && booking.schedules.length > 0) {
+        try {
+          await this.reopenScheduledDates(id);
+        } catch (error) {
+          console.error('Error reopening scheduled dates when cancelling booking:', error);
+        }
+      }
+
+      // Unlock slot for single day booking
+      if (!booking.schedules && booking.time) {
+        try {
+          await this.locationAvailabilityService.unlockSlot(
+            this.formatDate(booking.date),
+            booking.time,
+            booking.locationId
+          );
+        } catch (error) {
+          console.error('Error unlocking slot when cancelling booking:', error);
+        }
+      }
+    }
+
+    return this.formatBookingDates(booking);
   }
+
+  //#region validateBookingFlow
+  /**
+   * Validate booking status transition follows the correct flow
+   * @param currentStatus Current booking status
+   * @param newStatus New booking status to transition to
+   * @returns true if valid, throws BadRequestException if invalid
+   */
+  private validateBookingFlow(currentStatus: BookingStatus, newStatus: BookingStatus): boolean {
+    // Define the main flow sequence for strict validation
+    const mainFlowSequence = [
+      BookingStatus.NOT_PAID,
+      BookingStatus.PAID,
+      BookingStatus.PENDING,
+      BookingStatus.CONFIRMED,
+      BookingStatus.PROGRESSING,
+      BookingStatus.COMPLETED
+    ];
+
+    // Define valid status transitions
+    const validTransitions = {
+      [BookingStatus.NOT_PAID]: [BookingStatus.PAID, BookingStatus.CANCELLED_TIMEOUT, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.PAID]: [BookingStatus.PENDING, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.PENDING]: [BookingStatus.CONFIRMED, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.CONFIRMED]: [BookingStatus.PROGRESSING, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.PROGRESSING]: [BookingStatus.COMPLETED, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.COMPLETED]: [],
+      [BookingStatus.CANCELLED_TIMEOUT]: [],
+      [BookingStatus.CANCELLED_USER]: [],
+      [BookingStatus.CANCELLED_VENDOR]: [],
+    };
+
+    // Check if transition is in valid transitions list
+    if (!validTransitions[currentStatus].includes(newStatus)) {
+      throw new BadRequestException(
+        `Không thể chuyển từ ${currentStatus} sang ${newStatus}`
+      );
+    }
+
+    // Validate that the transition follows the main flow sequence
+    const currentStatusIndex = mainFlowSequence.indexOf(currentStatus);
+    const newStatusIndex = mainFlowSequence.indexOf(newStatus);
+
+    // If both statuses are in the main flow, validate the sequence
+    if (currentStatusIndex !== -1 && newStatusIndex !== -1) {
+      // Allow only next step in sequence
+      const allowedNextIndex = currentStatusIndex + 1;
+      if (newStatusIndex !== allowedNextIndex) {
+        throw new BadRequestException(
+          `Không thể chuyển từ ${currentStatus} sang ${newStatus}. ` +
+          `Trình tự hợp lệ là: ${currentStatus} → ${mainFlowSequence[allowedNextIndex] || 'COMPLETED'}`
+        );
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Get the next valid status in the main flow
+   * @param currentStatus Current booking status
+   * @returns Next valid status or null if at the end
+   */
+  getNextValidStatus(currentStatus: BookingStatus): BookingStatus | null {
+    const mainFlowSequence = [
+      BookingStatus.NOT_PAID,
+      BookingStatus.PAID,
+      BookingStatus.PENDING,
+      BookingStatus.CONFIRMED,
+      BookingStatus.PROGRESSING,
+      BookingStatus.COMPLETED
+    ];
+
+    const currentIndex = mainFlowSequence.indexOf(currentStatus);
+    if (currentIndex === -1 || currentIndex === mainFlowSequence.length - 1) {
+      return null; // Not in main flow or already at the end
+    }
+
+    return mainFlowSequence[currentIndex + 1];
+  }
+
+  /**
+   * Get all valid next statuses for a booking
+   * @param currentStatus Current booking status
+   * @returns Array of valid next statuses
+   */
+  getValidNextStatuses(currentStatus: BookingStatus): BookingStatus[] {
+    const validTransitions = {
+      [BookingStatus.NOT_PAID]: [BookingStatus.PAID, BookingStatus.CANCELLED_TIMEOUT, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.PAID]: [BookingStatus.PENDING, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.PENDING]: [BookingStatus.CONFIRMED, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.CONFIRMED]: [BookingStatus.PROGRESSING, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.PROGRESSING]: [BookingStatus.COMPLETED, BookingStatus.CANCELLED_USER, BookingStatus.CANCELLED_VENDOR],
+      [BookingStatus.COMPLETED]: [],
+      [BookingStatus.CANCELLED_TIMEOUT]: [],
+      [BookingStatus.CANCELLED_USER]: [],
+      [BookingStatus.CANCELLED_VENDOR]: [],
+    };
+
+    return validTransitions[currentStatus] || [];
+  }
+  //#endregion validateBookingFlow
+
+  //#region vendorCancelBooking
+  /**
+   * Vendor cancels a booking
+   * @param bookingId Booking ID
+   * @param vendorId Vendor ID (for validation)
+   * @param reason Reason for cancellation
+   */
+  async vendorCancelBooking(bookingId: string, vendorId: string, reason?: string): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['serviceConcept', 'serviceConcept.servicePackage', 'servicePackage.vendor', 'schedules']
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    // Validate that the vendor owns this booking
+    const bookingVendorId = booking.serviceConcept?.servicePackage?.vendor?.id;
+    if (bookingVendorId !== vendorId) {
+      throw new BadRequestException('Bạn không có quyền hủy booking này');
+    }
+
+    // Check if booking can be cancelled by vendor
+    const cancellableStatuses = [
+      BookingStatus.NOT_PAID,
+      BookingStatus.PAID,
+      BookingStatus.PENDING,
+      BookingStatus.CONFIRMED,
+      BookingStatus.PROGRESSING
+    ];
+
+    if (!cancellableStatuses.includes(booking.status)) {
+      throw new BadRequestException(`Không thể hủy booking với trạng thái ${booking.status}`);
+    }
+
+    // Update booking status
+    const oldStatus = booking.status;
+    booking.status = BookingStatus.CANCELLED_VENDOR;
+    await this.bookingRepository.save(booking);
+
+    // Create booking history
+    const history = this.bookingHistoryRepository.create({
+      bookingId: booking.id,
+      status: BookingStatus.CANCELLED_VENDOR,
+    });
+    await this.bookingHistoryRepository.save(history);
+
+    // Reopen scheduled dates for multi-day booking
+    if (booking.schedules && booking.schedules.length > 0) {
+      try {
+        await this.reopenScheduledDates(bookingId);
+      } catch (error) {
+        console.error('Error reopening scheduled dates when vendor cancels booking:', error);
+      }
+    }
+
+    // Unlock slot for single day booking
+    if (!booking.schedules && booking.time) {
+      try {
+        await this.locationAvailabilityService.unlockSlot(
+          this.formatDate(booking.date),
+          booking.time,
+          booking.locationId
+        );
+      } catch (error) {
+        console.error('Error unlocking slot when vendor cancels booking:', error);
+      }
+    }
+
+    // Send notification to user about vendor cancellation
+    if (booking.email) {
+      try {
+        await this.mailService.sendBookingCancellationEmail(
+          booking.email,
+          booking.fullName,
+          booking.code,
+          booking.date,
+          booking.time,
+          `Vendor đã hủy booking: ${reason || 'Không có lý do cụ thể'}`
+        );
+      } catch (error) {
+        console.error('Error sending vendor cancellation email:', error);
+      }
+    }
+
+    // Handle refund if booking was already paid
+    if (oldStatus === BookingStatus.PAID || oldStatus === BookingStatus.PENDING || 
+        oldStatus === BookingStatus.CONFIRMED || oldStatus === BookingStatus.PROGRESSING) {
+      try {
+        // Create refund record for manual processing
+        // This would typically call a refund service
+        console.log(`Vendor cancelled paid booking ${bookingId}. Refund processing required.`);
+      } catch (error) {
+        console.error('Error processing refund for vendor cancelled booking:', error);
+      }
+    }
+
+    return this.formatBookingDates(booking);
+  }
+  //#endregion vendorCancelBooking
+
 }
