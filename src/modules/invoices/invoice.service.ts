@@ -11,7 +11,7 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherTypeDiscount } from '../../constants/voucher.enum';
 import { BookingStatus, BookingDepositType } from '../../constants/booking.enum';
 import { Booking } from '../bookings/entities/booking.entity';
-import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
+import { FilterInvoiceByUserIdDto, PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { Commission } from '../commission/entities/commission.entity';
@@ -216,7 +216,7 @@ export class InvoiceService {
     };
   }
 
-  async findAllByUserId(userId: string, paginationDto: PaginationInvoiceDto): Promise<{
+  async findAllByUserId(userId: string, paginationDto: FilterInvoiceByUserIdDto): Promise<{
     data: Invoice[];
     pagination: {
       current: number;
@@ -225,20 +225,41 @@ export class InvoiceService {
       totalItem: number;
     };
   }> {
-    const { current = 1, pageSize = 10, sortBy = InvoiceSortField.ISSUED_AT, sortDirection = SortDirection.DESC } = paginationDto;
+    const { current = 1, pageSize = 10, sortBy = InvoiceSortField.ISSUED_AT, sortDirection = SortDirection.DESC, status, term } = paginationDto;
     const currentPage = Number(current);
     const pageSizeNum = Number(pageSize);
     const skip = (currentPage - 1) * pageSizeNum;
 
-    const [invoices, total] = await this.invoiceRepository.findAndCount({
-      where: { booking: { userId } },
-      relations: ['booking', 'payments', 'booking.serviceConcept', 'booking.serviceConcept.servicePackage'],
-      skip,
-      take: pageSizeNum,
-      order: {
-        [sortBy]: sortDirection
-      }
-    });
+    // Use query builder for complex filtering
+    const queryBuilder = this.invoiceRepository
+      .createQueryBuilder('invoice')
+      .leftJoinAndSelect('invoice.booking', 'booking')
+      .leftJoinAndSelect('invoice.payments', 'payments')
+      .leftJoinAndSelect('booking.serviceConcept', 'serviceConcept')
+      .leftJoinAndSelect('serviceConcept.servicePackage', 'servicePackage')
+      .where('booking.userId = :userId', { userId });
+
+    // Add status filter if provided
+    if (status) {
+      queryBuilder.andWhere('invoice.status = :status', { status });
+    }
+
+    // Add term filter for service concept name if provided
+    if (term) {
+      queryBuilder.andWhere('LOWER(serviceConcept.name) LIKE LOWER(:term)', { term: `%${term}%` });
+    }
+
+    // Add ordering
+    queryBuilder.orderBy(`invoice.${sortBy}`, sortDirection.toUpperCase() as 'ASC' | 'DESC');
+
+    // Get total count for pagination
+    const total = await queryBuilder.getCount();
+
+    // Add pagination
+    queryBuilder.skip(skip).take(pageSizeNum);
+
+    // Execute query
+    const invoices = await queryBuilder.getMany();
     const totalPages = Math.ceil(total / pageSizeNum);
 
     // Apply pricing logic to each invoice

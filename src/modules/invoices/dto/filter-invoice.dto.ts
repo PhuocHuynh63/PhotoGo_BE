@@ -52,3 +52,24 @@ export class PaginationInvoiceDto {
   })
   sortDirection?: SortDirection;
 }
+
+export class FilterInvoiceByUserIdDto extends PaginationInvoiceDto {
+  @IsEnum(InvoiceStatus)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trạng thái hóa đơn',
+    enum: InvoiceStatus,
+    example: InvoiceStatus.PAID,
+    required: false,
+  })
+  status?: InvoiceStatus;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Từ khóa tìm kiếm theo tên concept',
+    example: 'chụp ảnh',
+    required: false,
+  })
+  term?: string;
+}
