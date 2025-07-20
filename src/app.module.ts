@@ -190,8 +190,8 @@ if (!fs.existsSync(templateDir)) {
     NotificationModule,
     GoongModule,
     AlbumModule,
-    LuckyWheelModule
-    OverviewModule
+    LuckyWheelModule,
+    OverviewModule,
 
 
   ],
