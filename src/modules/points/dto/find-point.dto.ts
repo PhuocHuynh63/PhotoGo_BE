@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumberString , IsUUID} from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsUUID, IsDateString } from 'class-validator';
 
 export class FindPointDto {
   @IsNumberString()
@@ -32,15 +32,17 @@ export class FindPointDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    example: 'user_id',
-    description: 'ID của người dùng để lọc điểm',
+    example: 'balance',
+    description: 'Trường để sắp xếp',
     required: false,
+    enum: ['created_at', 'updated_at', 'balance', 'user.email', 'user.full_name'],
   })
   sortBy?: string;
 
   @IsString()
   @IsOptional()
   @ApiProperty({
+    enum: ['asc', 'desc'],
     example: 'asc',
     description: 'Sort direction (asc or desc)',
     required: false,
@@ -86,9 +88,58 @@ export class FindMyTransactionsDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
+    enum: ['asc', 'desc'],
     example: 'asc',
     description: 'Sort direction (asc or desc)',
     required: false,
   })
   sortDirection?: 'asc' | 'desc';
+}
+
+export class FindMyPointHistoryDto extends FindMyTransactionsDto {
+  @IsDateString()
+  @IsOptional()
+  @ApiProperty({
+    example: '2024-01-01T00:00:00.000Z',
+    description: 'Ngày bắt đầu để lọc giao dịch',
+    required: false,
+  })
+  startDate?: string;
+
+  @IsDateString()
+  @IsOptional()
+  @ApiProperty({
+    example: '2024-12-31T23:59:59.999Z',
+    description: 'Ngày kết thúc để lọc giao dịch',
+    required: false,
+  })
+  endDate?: string;
+
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    example: '100',
+    description: 'Số điểm tối thiểu (dựa trên giá trị tuyệt đối, bất kể cộng hay trừ)',
+    required: false,
+  })
+  minAmount?: string;
+
+  @IsNumberString()
+  @IsOptional()
+  @ApiProperty({
+    example: '1000',
+    description: 'Số điểm tối đa (dựa trên giá trị tuyệt đối, bất kể cộng hay trừ)',
+    required: false,
+  })
+  maxAmount?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: 'positive',
+    description: 'Lọc theo hướng thay đổi điểm',
+    required: false,
+    enum: ['positive', 'negative', 'all'],
+  })
+  direction?: 'positive' | 'negative' | 'all';
 }

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Point } from './entities/point.entity';
 import { CreatePointDto, CreatePointTransactionDto } from './dto/create-point.dto';
-import { FindPointDto, FindMyTransactionsDto } from './dto/find-point.dto';
+import { FindPointDto, FindMyTransactionsDto, FindMyPointHistoryDto } from './dto/find-point.dto';
 import { PointTransaction } from './entities/point-transaction.entity';
 import { isUUID } from 'class-validator';
 import { UpdatePointDto } from './dto/update-point.dto';
@@ -59,10 +59,20 @@ export class PointService {
 
     //#region Sort
     const allowedSortFields = ['created_at', 'updated_at', 'balance'];
-    const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
+    const allowedUserSortFields = ['user.email', 'user.full_name'];
+
+    let sortField = 'point.created_at';
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
 
-    queryBuilder.orderBy(`point.${sortField}`, sortDirection);
+    if (query.sortBy) {
+      if (allowedSortFields.includes(query.sortBy)) {
+        sortField = `point.${query.sortBy}`;
+      } else if (allowedUserSortFields.includes(query.sortBy)) {
+        sortField = query.sortBy;
+      }
+    }
+
+    queryBuilder.orderBy(sortField, sortDirection as 'ASC' | 'DESC');
     //#endregion
 
     //#region Pagination
@@ -103,39 +113,39 @@ export class PointService {
   //#region findMyPoints
   async findMyPoints(userId: string): Promise<Point> {
     console.log('Finding points for user ID:', userId);
-    
+
     let point = await this.pointRepository.findOne({
       where: { user: { id: userId } },
       relations: ['user'],
     });
-    
+
     console.log('Found point:', point);
-    
+
     // Nếu chưa có điểm, tạo mới với balance = 0
     if (!point) {
       console.log('Creating new point for user:', userId);
-      
+
       // Tìm user trước
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
         throw new NotFoundException(`Không tìm thấy người dùng với ID: ${userId}`);
       }
-      
+
       point = this.pointRepository.create({
         user: user,
         balance: 0,
       });
       point = await this.pointRepository.save(point);
-      
+
       // Load lại với relations
       point = await this.pointRepository.findOne({
         where: { id: point.id },
         relations: ['user'],
       });
-      
+
       console.log('Created new point:', point);
     }
-    
+
     return point;
   }
   //#endregion findMyPoints
@@ -151,12 +161,12 @@ export class PointService {
     };
   }> {
     console.log('Finding transactions for user ID:', userId);
-    
+
     // Tìm point của user trước
     const point = await this.pointRepository.findOne({
       where: { user: { id: userId } },
     });
-    
+
     if (!point) {
       console.log('No point found for user, creating new point');
       // Tạo point mới nếu chưa có
@@ -164,13 +174,13 @@ export class PointService {
       if (!user) {
         throw new NotFoundException(`Không tìm thấy người dùng với ID: ${userId}`);
       }
-      
+
       const newPoint = this.pointRepository.create({
         user: user,
         balance: 0,
       });
       await this.pointRepository.save(newPoint);
-      
+
       // Trả về mảng rỗng vì chưa có transaction
       return {
         data: [],
@@ -182,7 +192,7 @@ export class PointService {
         },
       };
     }
-    
+
     //#region Pagination
     const currentPage = query.current ? Number(query.current) : 1;
     const pageSize = query.pageSize ? Number(query.pageSize) : 10;
@@ -191,27 +201,27 @@ export class PointService {
 
     //#region Query Builder
     const queryBuilder = this.pointTransactionRepository.createQueryBuilder('transaction');
-    
+
     queryBuilder.where('transaction.point.id = :pointId', { pointId: point.id });
-    
+
     // Filter theo type
     if (query.type) {
       queryBuilder.andWhere('transaction.type = :type', { type: query.type });
     }
-    
+
     // Sort
     const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
     queryBuilder.orderBy('transaction.created_at', sortDirection);
-    
+
     // Pagination
     queryBuilder.skip(skip).take(pageSize);
     //#endregion
 
     const [data, totalItem] = await queryBuilder.getManyAndCount();
     const totalPage = Math.ceil(totalItem / pageSize);
-    
+
     console.log('Found transactions:', data.length);
-    
+
     return {
       data,
       pagination: {
@@ -229,16 +239,16 @@ export class PointService {
   //#region createTransaction
   async createTransaction(createPointTransactionDto: CreatePointTransactionDto): Promise<PointTransaction> {
     console.log('Creating transaction with DTO:', createPointTransactionDto);
-    
+
     // Tìm point trước
     const point = await this.pointRepository.findOne({
       where: { id: createPointTransactionDto.pointId },
     });
-    
+
     if (!point) {
       throw new NotFoundException(`Không tìm thấy point với ID: ${createPointTransactionDto.pointId}`);
     }
-    
+
     // Tạo transaction với reference đến point
     const transaction = this.pointTransactionRepository.create({
       point: point,
@@ -246,10 +256,10 @@ export class PointService {
       type: createPointTransactionDto.type,
       description: createPointTransactionDto.description,
     });
-    
+
     const savedTransaction = await this.pointTransactionRepository.save(transaction);
     console.log('Created transaction:', savedTransaction.id);
-    
+
     return savedTransaction;
   }
   //#endregion createTransaction
@@ -302,13 +312,13 @@ export class PointService {
 
   //#region addPointsToUser - Method chung để cộng điểm
   async addPointsToUser(
-    userId: string, 
-    amount: number, 
-    type: PointTransactionType, 
+    userId: string,
+    amount: number,
+    type: PointTransactionType,
     description: string
   ): Promise<{ point: Point; transaction: PointTransaction }> {
     console.log(`Adding ${amount} points to user ${userId} for ${description}`);
-    
+
     // Lấy hoặc tạo thông tin điểm của người dùng
     let userPoint;
     try {
@@ -321,7 +331,7 @@ export class PointService {
       if (!user) {
         throw new NotFoundException(`Không tìm thấy người dùng với ID: ${userId}`);
       }
-      
+
       userPoint = await this.create({
         user_id: userId,
         balance: 0,
@@ -344,23 +354,23 @@ export class PointService {
       description: description,
     });
     console.log('Created transaction:', transaction.id);
-    
+
     return { point: updatedPoint, transaction };
   }
   //#endregion addPointsToUser
 
   //#region deductPointsFromUser - Method chung để trừ điểm
   async deductPointsFromUser(
-    userId: string, 
-    amount: number, 
-    type: PointTransactionType, 
+    userId: string,
+    amount: number,
+    type: PointTransactionType,
     description: string
   ): Promise<{ point: Point; transaction: PointTransaction }> {
     console.log(`Deducting ${amount} points from user ${userId} for ${description}`);
-    
+
     // Lấy thông tin điểm của người dùng
     const userPoint = await this.findMyPoints(userId);
-    
+
     // Kiểm tra balance có đủ không
     if (userPoint.balance < amount) {
       throw new BadRequestException(`Số điểm không đủ. Hiện tại: ${userPoint.balance}, cần: ${amount}`);
@@ -381,9 +391,200 @@ export class PointService {
       description: description,
     });
     console.log('Created transaction:', transaction.id);
-    
+
     return { point: updatedPoint, transaction };
   }
   //#endregion deductPointsFromUser
+
+  //#region findMyPointHistory - Lấy lịch sử thay đổi điểm với thống kê
+  async findMyPointHistory(userId: string, query: FindMyPointHistoryDto): Promise<{
+    data: PointTransaction[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+    statistics: {
+      totalEarned: number;
+      totalRedeemed: number;
+      totalExpired: number;
+      currentBalance: number;
+    };
+  }> {
+    console.log('Finding point history for user ID:', userId);
+
+    // Tìm point của user trước
+    const point = await this.pointRepository.findOne({
+      where: { user: { id: userId } },
+    });
+
+    if (!point) {
+      console.log('No point found for user, creating new point');
+      // Tạo point mới nếu chưa có
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException(`Không tìm thấy người dùng với ID: ${userId}`);
+      }
+
+      const newPoint = this.pointRepository.create({
+        user: user,
+        balance: 0,
+      });
+      await this.pointRepository.save(newPoint);
+
+      // Trả về mảng rỗng vì chưa có transaction
+      return {
+        data: [],
+        pagination: {
+          current: 1,
+          pageSize: 10,
+          totalPage: 1,
+          totalItem: 0,
+        },
+        statistics: {
+          totalEarned: 0,
+          totalRedeemed: 0,
+          totalExpired: 0,
+          currentBalance: 0,
+        },
+      };
+    }
+
+    //#region Pagination
+    const currentPage = query.current ? Number(query.current) : 1;
+    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
+    const skip = (currentPage - 1) * pageSize;
+    //#endregion
+
+    //#region Query Builder cho transactions
+    const queryBuilder = this.pointTransactionRepository.createQueryBuilder('transaction');
+
+    queryBuilder.where('transaction.point.id = :pointId', { pointId: point.id });
+
+    // Filter theo type
+    if (query.type) {
+      queryBuilder.andWhere('transaction.type = :type', { type: query.type });
+    }
+
+    // Filter theo khoảng thời gian
+    if (query.startDate) {
+      queryBuilder.andWhere('transaction.created_at >= :startDate', {
+        startDate: new Date(query.startDate)
+      });
+    }
+
+    if (query.endDate) {
+      queryBuilder.andWhere('transaction.created_at <= :endDate', {
+        endDate: new Date(query.endDate)
+      });
+    }
+
+    // Filter theo hướng thay đổi điểm
+    if (query.direction && query.direction !== 'all') {
+      if (query.direction === 'positive') {
+        queryBuilder.andWhere('transaction.amount > 0');
+      } else if (query.direction === 'negative') {
+        queryBuilder.andWhere('transaction.amount < 0');
+      }
+    }
+
+    // Filter theo khoảng số điểm (dựa trên giá trị tuyệt đối)
+    if (query.minAmount) {
+      queryBuilder.andWhere('ABS(transaction.amount) >= :minAmount', {
+        minAmount: Number(query.minAmount)
+      });
+    }
+
+    if (query.maxAmount) {
+      queryBuilder.andWhere('ABS(transaction.amount) <= :maxAmount', {
+        maxAmount: Number(query.maxAmount)
+      });
+    }
+
+    // Sort
+    const sortDirection = query.sortDirection === 'desc' ? 'DESC' : 'ASC';
+    queryBuilder.orderBy('transaction.created_at', sortDirection);
+
+    // Pagination
+    queryBuilder.skip(skip).take(pageSize);
+    //#endregion
+
+    const [data, totalItem] = await queryBuilder.getManyAndCount();
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    //#region Tính toán thống kê
+    const statisticsQueryBuilder = this.pointTransactionRepository.createQueryBuilder('transaction');
+    statisticsQueryBuilder.where('transaction.point.id = :pointId', { pointId: point.id });
+
+    // Áp dụng các filter tương tự cho thống kê
+    if (query.startDate) {
+      statisticsQueryBuilder.andWhere('transaction.created_at >= :startDate', {
+        startDate: new Date(query.startDate)
+      });
+    }
+
+    if (query.endDate) {
+      statisticsQueryBuilder.andWhere('transaction.created_at <= :endDate', {
+        endDate: new Date(query.endDate)
+      });
+    }
+
+    if (query.minAmount) {
+      statisticsQueryBuilder.andWhere('ABS(transaction.amount) >= :minAmount', {
+        minAmount: Number(query.minAmount)
+      });
+    }
+
+    if (query.maxAmount) {
+      statisticsQueryBuilder.andWhere('ABS(transaction.amount) <= :maxAmount', {
+        maxAmount: Number(query.maxAmount)
+      });
+    }
+
+    // Tính tổng điểm kiếm được
+    const totalEarnedResult = await statisticsQueryBuilder
+      .select('COALESCE(SUM(transaction.amount), 0)', 'total')
+      .andWhere('transaction.type = :type', { type: PointTransactionType.EARN })
+      .getRawOne();
+
+    // Tính tổng điểm đã đổi thưởng (số âm)
+    const totalRedeemedResult = await statisticsQueryBuilder
+      .select('COALESCE(ABS(SUM(transaction.amount)), 0)', 'total')
+      .andWhere('transaction.type = :type', { type: PointTransactionType.REDEEM })
+      .getRawOne();
+
+    // Tính tổng điểm hết hạn (số âm)
+    const totalExpiredResult = await statisticsQueryBuilder
+      .select('COALESCE(ABS(SUM(transaction.amount)), 0)', 'total')
+      .andWhere('transaction.type = :type', { type: PointTransactionType.EXPIRE })
+      .getRawOne();
+
+    const totalEarned = Number(totalEarnedResult?.total || 0);
+    const totalRedeemed = Number(totalRedeemedResult?.total || 0);
+    const totalExpired = Number(totalExpiredResult?.total || 0);
+    const currentBalance = point.balance;
+    //#endregion
+
+    console.log('Found transactions:', data.length);
+    console.log('Statistics:', { totalEarned, totalRedeemed, totalExpired, currentBalance });
+
+    return {
+      data,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
+      statistics: {
+        totalEarned,
+        totalRedeemed,
+        totalExpired,
+        currentBalance,
+      },
+    };
+  }
+  //#endregion findMyPointHistory
 
 }

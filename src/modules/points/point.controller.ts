@@ -5,7 +5,7 @@ import { UpdatePointDto } from './dto/update-point.dto';
 import { Point } from './entities/point.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
 import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { FindPointDto, FindMyTransactionsDto } from './dto/find-point.dto';
+import { FindPointDto, FindMyTransactionsDto, FindMyPointHistoryDto } from './dto/find-point.dto';
 import { PointTransaction } from './entities/point-transaction.entity';
 import { CurrentUserId } from 'src/decorator/user.decorator';
 
@@ -13,7 +13,7 @@ import { CurrentUserId } from 'src/decorator/user.decorator';
 @Controller('points')
 @ApiBearerAuth('access-token')
 export class PointController {
-  constructor(private readonly pointService: PointService) {}
+  constructor(private readonly pointService: PointService) { }
 
   @Post()
   @ApiOperation({ summary: 'Tạo mới một điểm (Protected)' })
@@ -45,10 +45,10 @@ export class PointController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Lấy tất cả điểm (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả điểm với phân trang, tìm kiếm và sắp xếp (Public)' })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách điểm với phân trang',
+    description: 'Danh sách điểm với phân trang, hỗ trợ tìm kiếm theo email/tên và sắp xếp theo balance, thời gian, email, tên',
     type: [Point],
   })
   @ResponseMessage('Lấy danh sách điểm thành công')
@@ -100,6 +100,72 @@ export class PointController {
   }> {
     console.log('Getting transactions for user ID:', userId);
     return this.pointService.findMyTransactions(userId, query);
+  }
+
+  @Get('/history/:userId')
+  @ApiOperation({ summary: 'Lấy lịch sử thay đổi điểm của người dùng' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lịch sử thay đổi điểm với phân trang và thống kê',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              amount: { type: 'number' },
+              type: { type: 'string' },
+              description: { type: 'string' },
+              created_at: { type: 'string', format: 'date-time' },
+              balance_after: { type: 'number' },
+            },
+          },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            current: { type: 'number' },
+            pageSize: { type: 'number' },
+            totalPage: { type: 'number' },
+            totalItem: { type: 'number' },
+          },
+        },
+        statistics: {
+          type: 'object',
+          properties: {
+            totalEarned: { type: 'number' },
+            totalRedeemed: { type: 'number' },
+            totalExpired: { type: 'number' },
+            currentBalance: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  @ResponseMessage('Lấy lịch sử thay đổi điểm thành công')
+  async findMyPointHistory(
+    @Param('userId') userId: string,
+    @Query() query: FindMyPointHistoryDto,
+  ): Promise<{
+    data: PointTransaction[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+    statistics: {
+      totalEarned: number;
+      totalRedeemed: number;
+      totalExpired: number;
+      currentBalance: number;
+    };
+  }> {
+    console.log('Getting point history for user ID:', userId);
+    return this.pointService.findMyPointHistory(userId, query);
   }
 
   @Public()
