@@ -5,9 +5,14 @@ import { PaymentService } from '../payments/payment.service';
 import { InvoiceService } from '../invoices/invoice.service';
 import { BookingService } from '../bookings/booking.service';
 import { CommissionService } from '../commission/commission.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
+import { SubscriptionPaymentService } from '../subscription/subscription-payment.service';
+import { SubscriptionHistoryService } from '../subscription/subscription-history.service';
 import { BookingStatus } from '../../constants/booking.enum';
 import * as ExcelJS from 'exceljs';
 import { OverviewType } from 'src/constants/overview.enum';
+import { SubscriptionStatus, BillingCycle, PlanType } from '../../constants/subscription.enum';
 
 @Injectable()
 export class OverviewService {
@@ -16,6 +21,10 @@ export class OverviewService {
     private readonly invoicesService: InvoiceService,
     private readonly bookingService: BookingService,
     private readonly commissionService: CommissionService,
+    private readonly subscriptionService: SubscriptionService,
+    private readonly subscriptionPlanService: SubscriptionPlanService,
+    private readonly subscriptionPaymentService: SubscriptionPaymentService,
+    private readonly subscriptionHistoryService: SubscriptionHistoryService,
   ) {}
 
   /**
@@ -60,35 +69,43 @@ export class OverviewService {
     return `${day}/${month}/${year}`;
   }
 
-  async getStatistics(query: OverviewDto) {
-    if (query.type === OverviewType.FINANCE) {
-      return this.getFinanceStatistics(query);
+      async getStatistics(query: OverviewDto) {
+      if (query.type === OverviewType.FINANCE) {
+        return this.getFinanceStatistics(query);
+      }
+      
+      if (query.type === OverviewType.BOOKING) {
+        return this.getBookingStatistics(query);
+      }
+      
+      if (query.type === OverviewType.SUBSCRIPTION) {
+        return this.getSubscriptionStatistics(query);
+      }
+      
+      return {
+        message: 'Statistics endpoint - implementation pending',
+        query,
+      };
     }
-    
-    if (query.type === OverviewType.BOOKING) {
-      return this.getBookingStatistics(query);
-    }
-    
-    return {
-      message: 'Statistics endpoint - implementation pending',
-      query,
-    };
-  }
 
-  async exportToExcel(query: OverviewDto, res: Response) {
-    if (query.type === OverviewType.FINANCE) {
-      return this.exportFinanceToExcel(query, res);
+      async exportToExcel(query: OverviewDto, res: Response) {
+      if (query.type === OverviewType.FINANCE) {
+        return this.exportFinanceToExcel(query, res);
+      }
+      
+      if (query.type === OverviewType.BOOKING) {
+        return this.exportBookingToExcel(query, res);
+      }
+      
+      if (query.type === OverviewType.SUBSCRIPTION) {
+        return this.exportSubscriptionToExcel(query, res);
+      }
+      
+      return {
+        message: 'Excel export endpoint - implementation pending',
+        query,
+      };
     }
-    
-    if (query.type === OverviewType.BOOKING) {
-      return this.exportBookingToExcel(query, res);
-    }
-    
-    return {
-      message: 'Excel export endpoint - implementation pending',
-      query,
-    };
-  }
 
 
 
@@ -776,6 +793,477 @@ export class OverviewService {
     }
     
     return monthlyData;
+  }
+
+  private async getSubscriptionStatistics(query: OverviewDto) {
+    try {
+      // Convert UI date format (DD/MM/YYYY) to system format (YYYY-MM-DD) for processing
+      const startDateString = query.startDate ? this.convertDDMMYYYYToYYYYMMDD(query.startDate) : '';
+      const endDateString = query.endDate ? this.convertDDMMYYYYToYYYYMMDD(query.endDate) : '';
+      
+      const startDate = startDateString ? new Date(startDateString) : new Date(new Date().getFullYear(), 0, 1);
+      const endDate = endDateString ? new Date(endDateString) : new Date();
+
+      // Get all subscriptions
+      const subscriptionsResponse = await this.subscriptionService.findAll({
+        current: 1,
+        pageSize: 1000,
+      });
+
+      const subscriptions = subscriptionsResponse.data;
+
+      // Filter subscriptions by date range (created date)
+      const filteredSubscriptions = subscriptions.filter(subscription => {
+        const subscriptionDate = new Date(subscription.createdAt);
+        return subscriptionDate >= startDate && subscriptionDate <= endDate;
+      });
+
+      // Get subscription plans
+      const plans = await this.subscriptionPlanService.findAll({});
+
+      // Calculate basic statistics
+      const totalSubscriptions = filteredSubscriptions.length;
+      const activeSubscriptions = filteredSubscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE).length;
+      const canceledSubscriptions = filteredSubscriptions.filter(s => s.status === SubscriptionStatus.CANCELED).length;
+      const expiredSubscriptions = filteredSubscriptions.filter(s => s.status === SubscriptionStatus.EXPIRED).length;
+
+      // Calculate revenue from subscription payments - using repository directly
+      const subscriptionPayments = await this.subscriptionPaymentService['subscriptionPaymentRepository'].find({
+        relations: ['subscriptionInvoice'],
+      });
+
+      const filteredPayments = subscriptionPayments.filter(payment => {
+        const paymentDate = new Date(payment.createdAt);
+        return paymentDate >= startDate && paymentDate <= endDate && payment.status === 'đã hoàn thành';
+      });
+
+      const totalRevenue = filteredPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+      // Calculate retention rate (subscriptions that were renewed)
+      const renewedSubscriptions = filteredSubscriptions.filter(s => 
+        s.status === SubscriptionStatus.ACTIVE && s.endDate > new Date()
+      ).length;
+
+      const retentionRate = totalSubscriptions > 0 ? Math.round((renewedSubscriptions / totalSubscriptions) * 100) : 0;
+
+      // Calculate churn rate
+      const churnRate = totalSubscriptions > 0 ? Math.round(((canceledSubscriptions + expiredSubscriptions) / totalSubscriptions) * 100) : 0;
+
+      // Statistics by plan
+      const planStats = plans.map(plan => {
+        const planSubscriptions = filteredSubscriptions.filter(s => s.planId === plan.id);
+        const planRevenue = filteredPayments
+          .filter(payment => {
+            // Find subscription for this payment
+            const subscription = filteredSubscriptions.find(s => 
+              s.invoices?.some(invoice => 
+                invoice.payments?.some(p => p.id === payment.id)
+              )
+            );
+            return subscription?.planId === plan.id;
+          })
+          .reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+        return {
+          planId: plan.id,
+          planName: plan.name,
+          planType: plan.planType,
+          subscriptionCount: planSubscriptions.length,
+          revenue: planRevenue,
+          activeCount: planSubscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE).length,
+          canceledCount: planSubscriptions.filter(s => s.status === SubscriptionStatus.CANCELED).length,
+          expiredCount: planSubscriptions.filter(s => s.status === SubscriptionStatus.EXPIRED).length,
+        };
+      });
+
+      // Statistics by billing cycle
+      const monthlySubscriptions = filteredSubscriptions.filter(s => s.billingCycle === BillingCycle.MONTHLY).length;
+      const yearlySubscriptions = filteredSubscriptions.filter(s => s.billingCycle === BillingCycle.YEARLY).length;
+
+      // Monthly statistics
+      const monthlyStats = this.calculateMonthlySubscriptionStats(filteredSubscriptions, startDate, endDate);
+
+      return {
+        summary: {
+          totalSubscriptions,
+          activeSubscriptions,
+          canceledSubscriptions,
+          expiredSubscriptions,
+          totalRevenue,
+          retentionRate,
+          churnRate,
+          monthlySubscriptions,
+          yearlySubscriptions,
+        },
+        planStats,
+        monthlyStats,
+        dateRange: {
+          startDate: this.convertYYYYMMDDToDDMMYYYY(startDate.toISOString().split('T')[0]),
+          endDate: this.convertYYYYMMDDToDDMMYYYY(endDate.toISOString().split('T')[0]),
+        },
+      };
+    } catch (error) {
+      console.error('Error getting subscription statistics:', error);
+      throw error;
+    }
+  }
+
+  private calculateMonthlySubscriptionStats(subscriptions: any[], startDate: Date, endDate: Date) {
+    const monthlyData = [];
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+      const monthSubscriptions = subscriptions.filter(subscription => {
+        const subscriptionDate = new Date(subscription.createdAt);
+        return subscriptionDate >= monthStart && subscriptionDate <= monthEnd;
+      });
+
+      monthlyData.push({
+        month: currentDate.getMonth() + 1,
+        monthName: `Tháng ${currentDate.getMonth() + 1} ${currentDate.getFullYear()}`,
+        newSubscriptions: monthSubscriptions.length,
+        activeSubscriptions: monthSubscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE).length,
+        canceledSubscriptions: monthSubscriptions.filter(s => s.status === SubscriptionStatus.CANCELED).length,
+        expiredSubscriptions: monthSubscriptions.filter(s => s.status === SubscriptionStatus.EXPIRED).length,
+      });
+
+      currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+
+    return monthlyData;
+  }
+
+  private async exportSubscriptionToExcel(query: OverviewDto, res: Response) {
+    try {
+      // Convert UI date format (DD/MM/YYYY) to system format (YYYY-MM-DD) for processing
+      const startDateString = query.startDate ? this.convertDDMMYYYYToYYYYMMDD(query.startDate) : '';
+      const endDateString = query.endDate ? this.convertDDMMYYYYToYYYYMMDD(query.endDate) : '';
+      
+      const startDate = startDateString ? new Date(startDateString) : new Date(new Date().getFullYear(), 0, 1);
+      const endDate = endDateString ? new Date(endDateString) : new Date();
+
+      // Get all data
+      const subscriptionsResponse = await this.subscriptionService.findAll({
+        current: 1,
+        pageSize: 1000,
+      });
+
+      const plans = await this.subscriptionPlanService.findAll({});
+
+      const subscriptionPayments = await this.subscriptionPaymentService['subscriptionPaymentRepository'].find({
+        relations: ['subscriptionInvoice'],
+      });
+
+      const subscriptionHistory = await this.subscriptionHistoryService['subscriptionHistoryRepository'].find({
+        relations: ['subscription'],
+      });
+
+      const subscriptions = subscriptionsResponse.data;
+      const payments = subscriptionPayments;
+      const history = subscriptionHistory;
+
+      // Filter by date range
+      const filteredSubscriptions = subscriptions.filter(subscription => {
+        const subscriptionDate = new Date(subscription.createdAt);
+        return subscriptionDate >= startDate && subscriptionDate <= endDate;
+      });
+
+      const filteredPayments = payments.filter(payment => {
+        const paymentDate = new Date(payment.createdAt);
+        return paymentDate >= startDate && paymentDate <= endDate;
+      });
+
+      const filteredHistory = history.filter(hist => {
+        const historyDate = new Date(hist.createdAt);
+        return historyDate >= startDate && historyDate <= endDate;
+      });
+
+      // Create workbook with multiple sheets
+      const workbook = new ExcelJS.Workbook();
+
+      // ===== SHEET 1: SUBSCRIPTION OVERVIEW =====
+      const overviewSheet = workbook.addWorksheet('Tổng quan Subscription');
+      
+      // Set up overview headers
+      overviewSheet.columns = [
+        { header: 'Chỉ số', key: 'metric', width: 30 },
+        { header: 'Giá trị', key: 'value', width: 20 },
+        { header: 'Mô tả', key: 'description', width: 40 },
+      ];
+
+      // Style for overview header
+      const overviewHeaderRow = overviewSheet.getRow(1);
+      overviewHeaderRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+      overviewHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF366092' }
+      };
+      overviewHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Calculate overview statistics
+      const totalSubscriptions = filteredSubscriptions.length;
+      const activeSubscriptions = filteredSubscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE).length;
+      const canceledSubscriptions = filteredSubscriptions.filter(s => s.status === SubscriptionStatus.CANCELED).length;
+      const expiredSubscriptions = filteredSubscriptions.filter(s => s.status === SubscriptionStatus.EXPIRED).length;
+      const totalRevenue = filteredPayments
+        .filter(p => p.status === 'đã hoàn thành')
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      const retentionRate = totalSubscriptions > 0 ? Math.round((activeSubscriptions / totalSubscriptions) * 100) : 0;
+      const churnRate = totalSubscriptions > 0 ? Math.round(((canceledSubscriptions + expiredSubscriptions) / totalSubscriptions) * 100) : 0;
+
+      // Add overview data
+      let overviewRowNumber = 1;
+      const overviewData = [
+        { metric: 'Tổng số subscription', value: totalSubscriptions, description: 'Tổng số subscription trong khoảng thời gian' },
+        { metric: 'Subscription đang hoạt động', value: activeSubscriptions, description: 'Số subscription có trạng thái hoạt động' },
+        { metric: 'Subscription đã hủy', value: canceledSubscriptions, description: 'Số subscription đã bị hủy' },
+        { metric: 'Subscription hết hạn', value: expiredSubscriptions, description: 'Số subscription đã hết hạn' },
+        { metric: 'Tổng doanh thu', value: totalRevenue.toLocaleString('vi-VN') + ' VNĐ', description: 'Tổng doanh thu từ subscription' },
+        { metric: 'Tỷ lệ retention', value: retentionRate + '%', description: 'Tỷ lệ subscription được giữ lại' },
+        { metric: 'Tỷ lệ churn', value: churnRate + '%', description: 'Tỷ lệ subscription bị mất' },
+      ];
+
+      overviewData.forEach((data) => {
+        overviewRowNumber++;
+        overviewSheet.addRow({
+          metric: data.metric,
+          value: data.value,
+          description: data.description,
+        });
+      });
+
+      // ===== SHEET 2: SUBSCRIPTION DETAILS =====
+      const detailsSheet = workbook.addWorksheet('Chi tiết Subscription');
+      
+      // Set up details headers
+      detailsSheet.columns = [
+        { header: 'STT', key: 'stt', width: 5 },
+        { header: 'Mã subscription', key: 'id', width: 25 },
+        { header: 'Ngày tạo', key: 'createdAt', width: 15 },
+        { header: 'Ngày bắt đầu', key: 'startDate', width: 15 },
+        { header: 'Ngày kết thúc', key: 'endDate', width: 15 },
+        { header: 'Tên gói', key: 'planName', width: 25 },
+        { header: 'Loại gói', key: 'planType', width: 15 },
+        { header: 'Chu kỳ thanh toán', key: 'billingCycle', width: 20 },
+        { header: 'Trạng thái', key: 'status', width: 15 },
+        { header: 'Ngày thanh toán tiếp theo', key: 'nextBillingAt', width: 20 },
+      ];
+
+      // Style for details header
+      const detailsHeaderRow = detailsSheet.getRow(1);
+      detailsHeaderRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+      detailsHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2E7D32' }
+      };
+      detailsHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Add subscription details data
+      let detailsRowNumber = 1;
+      filteredSubscriptions.forEach((subscription, index) => {
+        const plan = plans.find(p => p.id === subscription.planId);
+        detailsRowNumber++;
+        detailsSheet.addRow({
+          stt: index + 1,
+          id: subscription.id,
+          createdAt: this.formatDate(subscription.createdAt),
+          startDate: this.formatDate(subscription.startDate),
+          endDate: this.formatDate(subscription.endDate),
+          planName: plan?.name || 'N/A',
+          planType: plan?.planType || 'N/A',
+          billingCycle: subscription.billingCycle,
+          status: subscription.status,
+          nextBillingAt: subscription.nextBillingAt ? this.formatDate(subscription.nextBillingAt) : 'N/A',
+        });
+      });
+
+      // ===== SHEET 3: SUBSCRIPTION PAYMENTS =====
+      const paymentsSheet = workbook.addWorksheet('Thanh toán Subscription');
+      
+      // Set up payments headers
+      paymentsSheet.columns = [
+        { header: 'STT', key: 'stt', width: 5 },
+        { header: 'Ngày thanh toán', key: 'createdAt', width: 15 },
+        { header: 'Mã thanh toán', key: 'id', width: 25 },
+        { header: 'Số tiền (VNĐ)', key: 'amount', width: 20 },
+        { header: 'Phương thức', key: 'paymentMethod', width: 15 },
+        { header: 'Trạng thái', key: 'status', width: 15 },
+        { header: 'Loại thanh toán', key: 'type', width: 15 },
+        { header: 'Mô tả', key: 'description', width: 30 },
+      ];
+
+      // Style for payments header
+      const paymentsHeaderRow = paymentsSheet.getRow(1);
+      paymentsHeaderRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+      paymentsHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD32F2F' }
+      };
+      paymentsHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Add payments data
+      let paymentsRowNumber = 1;
+      filteredPayments.forEach((payment, index) => {
+        paymentsRowNumber++;
+        paymentsSheet.addRow({
+          stt: index + 1,
+          createdAt: this.formatDate(payment.createdAt),
+          id: payment.id,
+          amount: payment.amount.toLocaleString('vi-VN'),
+          paymentMethod: payment.paymentMethod,
+          status: payment.status,
+          type: payment.type,
+          description: payment.description || 'N/A',
+        });
+      });
+
+      // Add payments summary
+      paymentsRowNumber += 2;
+      paymentsSheet.addRow(['TỔNG KẾT THANH TOÁN']);
+      const paymentsSummaryRow = paymentsSheet.getRow(paymentsRowNumber);
+      paymentsSummaryRow.font = { bold: true, size: 14 };
+      paymentsSummaryRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF2F2F2' }
+      };
+
+      const successfulPayments = filteredPayments.filter(p => p.status === 'đã hoàn thành');
+      const pendingPayments = filteredPayments.filter(p => p.status === 'chờ xử lý');
+      const failedPayments = filteredPayments.filter(p => p.status === 'thất bại');
+
+      paymentsRowNumber++;
+      paymentsSheet.addRow(['', 'Thanh toán thành công:', '', successfulPayments.length, '', '', '', '']);
+      paymentsRowNumber++;
+      paymentsSheet.addRow(['', 'Thanh toán đang chờ:', '', pendingPayments.length, '', '', '', '']);
+      paymentsRowNumber++;
+      paymentsSheet.addRow(['', 'Thanh toán thất bại:', '', failedPayments.length, '', '', '', '']);
+
+      // ===== SHEET 4: PLAN ANALYSIS =====
+      const planSheet = workbook.addWorksheet('Phân tích Gói');
+      
+      // Set up plan headers
+      planSheet.columns = [
+        { header: 'STT', key: 'stt', width: 5 },
+        { header: 'Tên gói', key: 'planName', width: 25 },
+        { header: 'Loại gói', key: 'planType', width: 15 },
+        { header: 'Số subscription', key: 'subscriptionCount', width: 15 },
+        { header: 'Đang hoạt động', key: 'activeCount', width: 15 },
+        { header: 'Đã hủy', key: 'canceledCount', width: 15 },
+        { header: 'Hết hạn', key: 'expiredCount', width: 15 },
+        { header: 'Doanh thu (VNĐ)', key: 'revenue', width: 20 },
+      ];
+
+      // Style for plan header
+      const planHeaderRow = planSheet.getRow(1);
+      planHeaderRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+      planHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF9C27B0' }
+      };
+      planHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Calculate plan statistics
+      const planStats = plans.map(plan => {
+        const planSubscriptions = filteredSubscriptions.filter(s => s.planId === plan.id);
+        const planRevenue = filteredPayments
+          .filter(payment => {
+            // Find subscription for this payment
+            const subscription = filteredSubscriptions.find(s => 
+              s.invoices?.some(invoice => 
+                invoice.payments?.some(p => p.id === payment.id)
+              )
+            );
+            return subscription?.planId === plan.id;
+          })
+          .reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+        return {
+          planId: plan.id,
+          planName: plan.name,
+          planType: plan.planType,
+          subscriptionCount: planSubscriptions.length,
+          revenue: planRevenue,
+          activeCount: planSubscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE).length,
+          canceledCount: planSubscriptions.filter(s => s.status === SubscriptionStatus.CANCELED).length,
+          expiredCount: planSubscriptions.filter(s => s.status === SubscriptionStatus.EXPIRED).length,
+        };
+      });
+
+      // Add plan data
+      let planRowNumber = 1;
+      planStats.forEach((plan, index) => {
+        planRowNumber++;
+        planSheet.addRow({
+          stt: index + 1,
+          planName: plan.planName,
+          planType: plan.planType,
+          subscriptionCount: plan.subscriptionCount,
+          activeCount: plan.activeCount,
+          canceledCount: plan.canceledCount,
+          expiredCount: plan.expiredCount,
+          revenue: plan.revenue.toLocaleString('vi-VN'),
+        });
+      });
+
+      // ===== SHEET 5: SUBSCRIPTION HISTORY =====
+      const historySheet = workbook.addWorksheet('Lịch sử Subscription');
+      
+      // Set up history headers
+      historySheet.columns = [
+        { header: 'STT', key: 'stt', width: 5 },
+        { header: 'Ngày', key: 'createdAt', width: 15 },
+        { header: 'Hành động', key: 'action', width: 20 },
+        { header: 'Mô tả', key: 'description', width: 40 },
+        { header: 'Loại người trả', key: 'payerType', width: 15 },
+      ];
+
+      // Style for history header
+      const historyHeaderRow = historySheet.getRow(1);
+      historyHeaderRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+      historyHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFF9800' }
+      };
+      historyHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Add history data
+      let historyRowNumber = 1;
+      filteredHistory.forEach((hist, index) => {
+        historyRowNumber++;
+        historySheet.addRow({
+          stt: index + 1,
+          createdAt: this.formatDate(hist.createdAt),
+          action: hist.action,
+          description: hist.description || 'N/A',
+          payerType: hist.payerType,
+        });
+      });
+
+      // Set response headers
+      const fileName = `bao-cao-subscription-${this.formatDate(new Date())}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      // Write to response
+      await workbook.xlsx.write(res);
+      res.end();
+
+    } catch (error) {
+      console.error('Error exporting subscription Excel:', error);
+      res.status(500).json({
+        message: 'Lỗi khi xuất file Excel',
+        error: error.message,
+      });
+    }
   }
 
   private async exportBookingToExcel(query: OverviewDto, res: Response) {

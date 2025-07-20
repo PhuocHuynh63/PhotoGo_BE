@@ -5,6 +5,7 @@ import { PaymentModule } from '../payments/payment.module';
 import { InvoiceModule } from '../invoices/invoice.module';
 import { BookingModule } from '../bookings/booking.module';
 import { CommissionModule } from '../commission/commission.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { CommissionModule } from '../commission/commission.module';
     InvoiceModule,
     BookingModule,
     CommissionModule,
+    SubscriptionModule,
   ],
   controllers: [OverviewController],
   providers: [OverviewService],

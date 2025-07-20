@@ -239,9 +239,9 @@ export class InvoiceService {
       .leftJoinAndSelect('serviceConcept.servicePackage', 'servicePackage')
       .where('booking.userId = :userId', { userId });
 
-    // Add status filter if provided
+    // Add booking status filter if provided
     if (status) {
-      queryBuilder.andWhere('invoice.status = :status', { status });
+      queryBuilder.andWhere('booking.status = :status', { status });
     }
 
     // Add term filter for service concept name if provided
