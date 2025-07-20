@@ -95,6 +95,10 @@ export class VoucherService {
       }
     }
 
+    if (query.type) {
+      queryBuilder.andWhere('voucher.type = :type', { type: query.type });
+    }
+
     const allowedSortFields = ['created_at', 'updated_at', 'code', 'discount_value', 'status'];
     const sortField = allowedSortFields.includes(query.sortBy) ? query.sortBy : 'created_at';
     const sortDirection = query.sortDirection === 'asc' ? 'ASC' : 'DESC';

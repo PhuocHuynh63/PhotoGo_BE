@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumberString } from 'class-validator';
-import { VoucherStatusEnum, VoucherUserFromEnum, VoucherUserStatusEnum } from '../../../constants/voucher.enum';
+import { VoucherStatusEnum, VoucherTypePoint, VoucherUserFromEnum, VoucherUserStatusEnum } from '../../../constants/voucher.enum';
 
 export class FindVoucherDto {
   @IsNumberString()
@@ -29,6 +29,16 @@ export class FindVoucherDto {
     required: false,
   })
   term?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    example: VoucherTypePoint.CAMPAIGN,
+    description: 'Nguồn gốc của voucher (chiến dịch, đổi điểm)',
+    enum: VoucherTypePoint,
+    required: false,
+  })
+  type?: VoucherTypePoint;
 
   @IsString()
   @IsOptional()
