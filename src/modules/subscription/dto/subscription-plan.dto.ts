@@ -109,7 +109,7 @@ export class FindSubscriptionPlanDto extends PaginationSubscriptionPlanDto {
   //   console.log('DEBUG DTO isActive raw:', value, typeof value);
   //   return undefined;
   // })
-  isActive?: boolean = false;
+  isActive?: boolean;
 
   @IsEnum(PlanType)
   @IsOptional()

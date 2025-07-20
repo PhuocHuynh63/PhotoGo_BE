@@ -36,11 +36,10 @@ export class SubscriptionPlanService {
     if (findSubscriptionPlanDto.name) {
       queryBuilder.andWhere('subscriptionPlan.name ILIKE :name', { name: `%${findSubscriptionPlanDto.name}%` });
     }
-    console.log('DEBUG findSubscriptionPlanDto:', findSubscriptionPlanDto);
-    const isActive = this.parseIsActive(findSubscriptionPlanDto.isActive);
-    console.log('DEBUG isActive:', isActive, typeof isActive);
-    if (isActive !== undefined) {
-      queryBuilder.andWhere('subscriptionPlan.isActive = :isActive', { isActive });
+
+    if (findSubscriptionPlanDto.isActive !== undefined) {
+      console.log('DEBUG isActive:', findSubscriptionPlanDto.isActive, typeof findSubscriptionPlanDto.isActive);
+      queryBuilder.andWhere('subscriptionPlan.isActive = :isActive', { isActive: findSubscriptionPlanDto.isActive });
     }
 
     if (findSubscriptionPlanDto.planType) {
@@ -58,11 +57,11 @@ export class SubscriptionPlanService {
     queryBuilder.orderBy(`subscriptionPlan.${sortBy}`, sortDirection);
 
     // Log the SQL query for data
-    console.log('DEBUG SQL (data):', queryBuilder.getSql());
+    // console.log('DEBUG SQL (data):', queryBuilder.getSql());
 
     // Get total count before pagination
     const countQueryBuilder = queryBuilder.clone();
-    console.log('DEBUG SQL (count):', countQueryBuilder.getSql());
+    // console.log('DEBUG SQL (count):', countQueryBuilder.getSql());
     const totalItem = await countQueryBuilder.getCount();
 
     // Get paginated data
@@ -102,14 +101,4 @@ export class SubscriptionPlanService {
     const subscriptionPlan = await this.findOne(id);
     await this.subscriptionPlanRepository.remove(subscriptionPlan);
   }
-
-  // Helper: parse isActive from string/boolean to boolean or undefined
-  private parseIsActive(value: string | boolean | undefined): boolean | undefined {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') {
-      if (value.toLowerCase() === 'true') return true;
-      if (value.toLowerCase() === 'false') return false;
-    }
-    return undefined;
-  }
-} 
+}
