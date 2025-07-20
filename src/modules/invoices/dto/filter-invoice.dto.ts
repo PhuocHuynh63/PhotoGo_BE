@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsEnum, IsUUID, IsNumber, IsString, IsNumberString } from 'class-validator';
+import { BookingStatus } from 'src/constants/booking.enum';
 import { InvoiceSortField, SortDirection } from 'src/constants/invoice.enum';
 import { InvoiceStatus } from 'src/constants/payment.enum';
 
@@ -51,4 +52,25 @@ export class PaginationInvoiceDto {
     required: false,
   })
   sortDirection?: SortDirection;
+}
+
+export class FilterInvoiceByUserIdDto extends PaginationInvoiceDto {
+  @IsEnum(BookingStatus)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Trạng thái booking',
+    enum: BookingStatus,
+    example: BookingStatus.NOT_PAID,
+    required: false,
+  })
+  status?: BookingStatus;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({
+    description: 'Từ khóa tìm kiếm theo tên concept',
+    example: 'chụp ảnh',
+    required: false,
+  })
+  term?: string;
 }

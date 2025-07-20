@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Between } from 'typeorm';
+import { Repository, ILike, Between, In } from 'typeorm';
 import { Location } from './entities/location.entity';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { FindLocationDto } from './dto/find-location.dto';
@@ -99,7 +99,17 @@ export class LocationService {
       vendor,
     });
 
-    return this.locationRepository.save(location);
+    const savedLocation = await this.locationRepository.save(location);
+
+    // Tạo vendor-album cho location nếu chưa có
+    const vendorAlbumRepo = this.locationRepository.manager.getRepository('VendorAlbum');
+    let vendorAlbum = await vendorAlbumRepo.findOne({ where: { location: { id: savedLocation.id } } });
+    if (!vendorAlbum) {
+      vendorAlbum = vendorAlbumRepo.create({ location: savedLocation });
+      await vendorAlbumRepo.save(vendorAlbum);
+    }
+
+    return savedLocation;
   }
   //#endregion create
 
@@ -644,7 +654,7 @@ export class LocationService {
       where: {
         locationId,
         date: Between(fromDate, toDate),
-        status: BookingStatus.PAID, // Chỉ lấy những booking đã thanh toán
+        status: In([BookingStatus.CONFIRMED, BookingStatus.PENDING, BookingStatus.PROGRESSING, BookingStatus.COMPLETED]),
       },
       relations: ['user', 'serviceConcept', 'invoices', 'schedules'],
       order: { date: 'ASC', time: 'ASC' }
@@ -667,7 +677,10 @@ export class LocationService {
         service: booking.serviceConcept?.name || '',
         notes: booking.userNote,
         phone: booking.phone,
-        email: booking.email
+        email: booking.email,
+        alreadyPaid: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].paidAmount : 0,
+        remain: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice - booking.invoices[0].paidAmount : 0,
+        total: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice : 0
       };
       if (booking.time) {
         // booking 1 ngày

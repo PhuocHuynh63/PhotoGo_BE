@@ -1,36 +1,8 @@
 import { IsOptional, IsString, IsNumber, Min, IsBoolean, IsDateString, ValidateIf, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-
-export class FindAllDto {
-    @ApiProperty({ required: false, example: 'Campaign 1' })
-    @IsString()
-    @IsOptional()
-    name?: string;
-
-    @ApiProperty({ required: false, example: true })
-    @IsBoolean()
-    @IsOptional()
-    status?: boolean;
-
-    @ApiProperty({ required: false, example: '01/01/2024' })
-    @IsString()
-    @IsOptional()
-    @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
-        message: 'Date must be in DD/MM/YYYY format',
-      })
-    startDate?: string;
-    
-    @ApiProperty({ required: false, example: '01/01/2024' })
-    @IsString()
-    @ValidateIf((o) => o.startDate !== undefined)
-    @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
-        message: 'Date must be in DD/MM/YYYY format',
-      })
-    @IsOptional()
-    endDate?: string;
-
-    @ApiProperty({ required: false, default: 1 })
+import { Transform, Type } from 'class-transformer';
+export class PaginationDto {
+  @ApiProperty({ required: false, default: 1 })
     @Type(() => Number)
     @IsNumber()
     @IsOptional()
@@ -61,9 +33,49 @@ export class FindAllDto {
     @IsString()
     @IsOptional()
     sortDirection?: string;
-
-    @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
-    @IsOptional()
-    showAll?: string;
 }
 
+export class FindAllDto extends PaginationDto {
+  @ApiProperty({ required: false, example: 'Campaign 1' })
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @ApiProperty({ required: false, example: true })
+  @IsBoolean()
+  @IsOptional()
+  status?: boolean;
+
+  @ApiProperty({ required: false, example: '01/01/2024' })
+  @IsString()
+  @IsOptional()
+  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+      message: 'Date must be in DD/MM/YYYY format',
+    })
+  startDate?: string;
+  
+  @ApiProperty({ required: false, example: '01/01/2024' })
+  @IsString()
+  @ValidateIf((o) => o.startDate !== undefined)
+  @Matches(/^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, {
+      message: 'Date must be in DD/MM/YYYY format',
+    })
+  @IsOptional()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: 'Hiển thị tất cả', type: String, example: 'false', required: false })
+  @IsOptional()
+  showAll?: string;
+}
+
+export class FindAllVendorWithInvitedDto extends PaginationDto {
+  @ApiProperty({ description: 'Campaign đã xác nhận chưa?', required: false, example: true })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  isAvailable?: boolean;
+
+  @ApiProperty({ description: 'Campaign đã được gửi mail xác nhận chưa?', required: false, example: true })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  invited?: boolean;
+}

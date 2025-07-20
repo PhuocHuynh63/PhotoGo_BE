@@ -14,7 +14,8 @@ import {
 import { BookingService } from './booking.service';
 import { BookingScheduleService } from './booking-schedule.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
-import { UpdateBookingDto } from './dto/update-booking.dto';
+import { UpdateBookingDto, UpdateStatusDto } from './dto/update-booking.dto';
+import { VendorCancelBookingDto } from './dto/vendor-cancel-booking.dto';
 import { CheckMultiDayAvailabilityDto, CheckMultiDayAvailabilityResponseDto } from './dto/check-multi-day-availability.dto';
 import { Booking } from './entities/booking.entity';
 import {
@@ -26,11 +27,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ApiExtraModels } from '@nestjs/swagger/dist/decorators/api-extra-models.decorator';
-import {
-  BookingDepositType,
-  BookingSourceType,
-  BookingStatus,
-} from 'src/constants/booking.enum';
 import { Public } from 'src/decorator/custom';
 import { PaginationDto } from './dto/pagination.dto';
 import { GetDiscountAmountDto } from './dto/get-booking.dto';
@@ -116,6 +112,35 @@ export class BookingController {
     } catch (error) {
       throw new HttpException(
         error.message || 'Có lỗi xảy ra khi lấy danh sách booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('priorityScore')
+  @Public()
+  @ApiResponse({
+    status: 200,
+    description: 'Lấy danh sách booking được sắp xếp theo độ ưu tiên',
+    type: [Booking],
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy danh sách booking được sắp xếp theo độ ưu tiên' })
+  async getPriorityScore(@Query() paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      return await this.bookingService.getPriorityScore(paginationDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking được sắp xếp theo độ ưu tiên',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -445,4 +470,98 @@ export class BookingController {
   ): Promise<Booking> {
     return await this.bookingService.getBookingByPaymentOSId(paymentOSId);
   }
+
+  // api for update status booking
+  @Patch(':id/update-status')
+  @ApiOperation({ summary: 'Cập nhật trạng thái booking' })
+  @ApiResponse({ status: 200, description: 'Cập nhật trạng thái booking thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  async updateStatus(@Param('id') id: string, @Body() updateStatusDto: UpdateStatusDto): Promise<Booking> {
+    return await this.bookingService.updateStatus(id, updateStatusDto);
+  }
+
+  @Post(':id/vendor-cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles({ id: 'R005' } as Role)
+  @ApiOperation({ summary: 'Vendor hủy booking' })
+  @ApiBody({ type: VendorCancelBookingDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Vendor hủy booking thành công',
+    type: Booking,
+  })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @ApiResponse({ status: 403, description: 'Không có quyền hủy booking này' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  async vendorCancelBooking(
+    @Param('id') id: string,
+    @Body() vendorCancelBookingDto: VendorCancelBookingDto,
+  ): Promise<Booking> {
+    try {
+      if (!id) {
+        throw new HttpException('Booking ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      if (!vendorCancelBookingDto.vendorId) {
+        throw new HttpException('Vendor ID là bắt buộc', HttpStatus.BAD_REQUEST);
+      }
+      return await this.bookingService.vendorCancelBooking(
+        id,
+        vendorCancelBookingDto.vendorId,
+        vendorCancelBookingDto.reason,
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi vendor hủy booking',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // @Get('valid-next-statuses/:currentStatus')
+  // @Public()
+  // @ApiOperation({ summary: 'Lấy danh sách trạng thái tiếp theo hợp lệ' })
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Danh sách trạng thái tiếp theo hợp lệ',
+  //   schema: {
+  //     example: {
+  //       currentStatus: 'PAID',
+  //       validNextStatuses: ['PENDING', 'CANCELLED_USER', 'CANCELLED_VENDOR'],
+  //       nextInMainFlow: 'PENDING'
+  //     }
+  //   }
+  // })
+  // async getValidNextStatuses(@Param('currentStatus') currentStatus: string): Promise<{
+  //   currentStatus: string;
+  //   validNextStatuses: string[];
+  //   nextInMainFlow: string | null;
+  // }> {
+  //   try {
+  //     if (!currentStatus) {
+  //       throw new HttpException('Current status là bắt buộc', HttpStatus.BAD_REQUEST);
+  //     }
+
+  //     // Validate that the status exists in BookingStatus enum
+  //     const bookingStatuses = Object.values(require('src/constants/booking.enum').BookingStatus);
+  //     if (!bookingStatuses.includes(currentStatus)) {
+  //       throw new HttpException(`Trạng thái ${currentStatus} không hợp lệ`, HttpStatus.BAD_REQUEST);
+  //     }
+
+  //     const validNextStatuses = this.bookingService.getValidNextStatuses(currentStatus as any);
+  //     const nextInMainFlow = this.bookingService.getNextValidStatus(currentStatus as any);
+
+  //     return {
+  //       currentStatus,
+  //       validNextStatuses: validNextStatuses.map(status => status.toString()),
+  //       nextInMainFlow: nextInMainFlow ? nextInMainFlow.toString() : null
+  //     };
+  //   } catch (error) {
+  //     throw new HttpException(
+  //       error.message || 'Có lỗi xảy ra khi lấy danh sách trạng thái tiếp theo',
+  //       error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+  //     );
+  //   }
+  // }
 }

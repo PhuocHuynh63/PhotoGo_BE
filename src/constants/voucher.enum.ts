@@ -18,6 +18,8 @@ export enum VoucherTypeDiscount {
 
 export enum VoucherTypePoint {
     POINT = 'điểm',
+    CAMPAIGN = 'chiến dịch',
+    WHEEL_OF_FORTUNE = 'vòng quay may mắn',
 }
 
 export enum VoucherUserFromEnum {

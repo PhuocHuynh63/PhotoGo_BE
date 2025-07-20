@@ -445,6 +445,21 @@ export class ServicePackageController {
           nullable: true,
           description: 'Danh sách ảnh của concept dịch vụ (tối đa 10 ảnh)'
         },
+        replaceAllImages: {
+          type: 'boolean',
+          example: false,
+          nullable: true,
+          description: 'true = thay thế toàn bộ ảnh cũ, false = thêm ảnh mới vào ảnh hiện tại (default: false)'
+        },
+        imagesToDelete: {
+          type: 'array',
+          items: {
+            type: 'string'
+          },
+          example: ['123e4567-e89b-12d3-a456-426614174001'],
+          nullable: true,
+          description: 'Danh sách ID của những ảnh cần xóa (chỉ có hiệu lực khi replaceAllImages = false)'
+        },
       },
     },
   })

@@ -6,7 +6,7 @@ import { Invoice } from './entities/invoice.entity';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ResponseMessage } from 'src/decorator/custom';
-import { PaginationInvoiceDto } from './dto/filter-invoice.dto';
+import { FilterInvoiceByUserIdDto, PaginationInvoiceDto } from './dto/filter-invoice.dto';
 import { Public } from 'src/decorator/custom';
 import { MailService } from 'src/3rdService/mail/mail.service';
 
@@ -84,7 +84,7 @@ export class InvoiceController {
   @ApiResponse({ status: 400, description: 'Tham số tìm kiếm không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
   @ResponseMessage('Lấy danh sách hóa đơn của user thành công')
-  async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: PaginationInvoiceDto): Promise<{
+  async findAllByUserId(@Param('userId') userId: string, @Query() paginationDto: FilterInvoiceByUserIdDto): Promise<{
     data: Invoice[];
     pagination: {
       current: number;

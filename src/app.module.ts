@@ -54,6 +54,7 @@ import { AlbumModule } from './modules/album/album.module';
 import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
 import { CampaignModule } from './modules/campaign/campaign.module';
 import { GoongModule } from './3rdService/goong';
+import { OverviewModule } from './modules/overview/overview.module';
 
 // Register Handlebars helpers
 Handlebars.registerHelper('formatDate', (date: Date, format: string) => {
@@ -190,6 +191,8 @@ if (!fs.existsSync(templateDir)) {
     GoongModule,
     AlbumModule,
     LuckyWheelModule
+    OverviewModule
+
 
   ],
   controllers: [AppController],

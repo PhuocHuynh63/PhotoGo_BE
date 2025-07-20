@@ -5,7 +5,7 @@ import { Campaign } from './entities/campaign.entity';
 import { CampaignVoucher } from './entities/campaign-voucher.entity';
 import { UserCampaign } from './entities/user-campaign.entity';
 import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
-import { FindAllDto } from './dto/find-all.dto';
+import { FindAllDto, FindAllVendorWithInvitedDto } from './dto/find-all.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreateLoyaltyCampaignDto } from './dto/create-loyalty-campaign.dto';
@@ -15,9 +15,17 @@ import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
-import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum } from 'src/constants/voucher.enum';
+import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum, VoucherTypePoint } from 'src/constants/voucher.enum';
+import { CAMPAIGN_NAMES, VOUCHER_CODES } from 'src/constants/campaign.enum';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { InviteVendorDto } from './dto/invite-vendor.dto';
+import { ConfirmVendorInviteDto } from './dto/confirm-vendor-invite.dto';
+import { MailService } from 'src/3rdService/mail/mail.service';
+import * as jwt from 'jsonwebtoken';
+import { Inject } from '@nestjs/common';
+import { Redis } from 'ioredis';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class CampaignService {
@@ -54,6 +62,8 @@ export class CampaignService {
     private campaignVendorRepository: Repository<CampaignVendor>,
     @InjectRepository(Vendor)
     private vendorRepository: Repository<Vendor>,
+    private readonly mailService: MailService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
   ) {}
 
   // Campaign endpoints
@@ -142,11 +152,11 @@ export class CampaignService {
       const startDate = new Date(campaign.startDate);
       const endDate = new Date(campaign.endDate);
 
-      // Tính status
-      let statusText = '';
-      if (now < startDate) statusText = 'Sắp diễn ra';
-      else if (now > endDate) statusText = 'Đã kết thúc';
-      else statusText = 'Đang chạy';
+      // Tính happenned
+      let happened = '';
+      if (now < startDate) happened = 'Sắp diễn ra';
+      else if (now > endDate) happened = 'Đã kết thúc';
+      else happened = 'Đang diễn ra';
 
       // Tính progress
       let progress = 0;
@@ -163,7 +173,8 @@ export class CampaignService {
         id: campaign.id,
         name: campaign.name,
         description: campaign.description,
-        status: statusText,
+        status: campaign.status,
+        happened,
         progress,
         startDate: campaign.startDate,
         endDate: campaign.endDate,
@@ -192,14 +203,28 @@ export class CampaignService {
       throw new BadRequestException('Ngày bắt đầu phải trước ngày kết thúc');
     }
 
+    // Tạo campaign trước
     const campaign = this.campaignRepository.create({
       ...rest,
       startDate: this.convertDateFormat(startDate),
       endDate: this.convertDateFormat(endDate),
       status: false,
     });
+    const savedCampaign = await this.campaignRepository.save(campaign);
 
-    return this.campaignRepository.save(campaign);
+    // Lấy toàn bộ vendor và tạo campaignVendor
+    const vendors = await this.vendorRepository.find();
+    for (const vendor of vendors) {
+      const campaignVendor = this.campaignVendorRepository.create({
+        campaign: savedCampaign,
+        vendor: vendor,
+        isAvailable: false,
+        invited: false,
+      });
+      await this.campaignVendorRepository.save(campaignVendor);
+    }
+
+    return savedCampaign;
   }
 
   // Campaign Voucher endpoints
@@ -292,10 +317,15 @@ export class CampaignService {
       throw new NotFoundException('Campaign không tồn tại');
     }
 
-    // Check if voucher exists (you might need to inject VoucherRepository)
+    // Check if voucher exists and is of CAMPAIGN type
     const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
     if (!voucher) {
       throw new NotFoundException('Voucher không tồn tại');
+    }
+    
+    // Validate voucher type for campaign
+    if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
+      throw new BadRequestException('Voucher này không phải loại chiến dịch');
     }
 
     // Check if voucher is already assigned to any user
@@ -380,10 +410,16 @@ export class CampaignService {
 
     for (const voucherId of voucherIds) {
       try {
-        // Check if voucher exists
+        // Check if voucher exists and is of CAMPAIGN type
         const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
         if (!voucher) {
           errors.push(`Voucher ${voucherId} không tồn tại`);
+          continue;
+        }
+        
+        // Validate voucher type for campaign
+        if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
+          errors.push(`Voucher ${voucherId} không phải loại chiến dịch`);
           continue;
         }
 
@@ -846,101 +882,109 @@ export class CampaignService {
     userCampaign: UserCampaign;
     voucherUser: VoucherUser;
   }> {
-    // 1. Tìm campaign "Chào Bạn Mới"
-    const campaign = await this.campaignRepository.findOne({
-      where: { name: 'Chào Bạn Mới' }
-    });
+    // Sử dụng transaction để đảm bảo atomicity
+    return await this.campaignRepository.manager.transaction(async (manager) => {
+      // 1. Tìm campaign "Chào Bạn Mới"
+      const campaign = await manager.findOne(Campaign, {
+        where: { name: CAMPAIGN_NAMES.WELCOME }
+      });
 
-    if (!campaign) {
-      throw new NotFoundException('Campaign "Chào Bạn Mới" không tồn tại');
-    }
+      if (!campaign) {
+        throw new NotFoundException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" không tồn tại`);
+      }
 
-    if (!campaign.status) {
-      throw new BadRequestException('Campaign "Chào Bạn Mới" đã bị vô hiệu hóa');
-    }
+      if (!campaign.status) {
+        throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" đã bị vô hiệu hóa`);
+      }
 
-    // 2. Kiểm tra thời gian campaign
-    const now = new Date();
-    const startDate = new Date(campaign.startDate);
-    const endDate = new Date(campaign.endDate);
-    
-    if (now < startDate) {
-      throw new BadRequestException('Campaign "Chào Bạn Mới" chưa bắt đầu');
-    }
-    
-    if (now > endDate) {
-      throw new BadRequestException('Campaign "Chào Bạn Mới" đã kết thúc');
-    }
+      // 2. Kiểm tra thời gian campaign
+      const now = new Date();
+      const startDate = new Date(campaign.startDate);
+      const endDate = new Date(campaign.endDate);
+      
+      if (now < startDate) {
+        throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" chưa bắt đầu`);
+      }
+      
+      if (now > endDate) {
+        throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" đã kết thúc`);
+      }
 
-    // 3. Tìm voucher "CHAOBANMOI" trong campaign
-    const campaignVoucher = await this.campaignVoucherRepository.findOne({
-      where: { 
+      // 3. Tìm voucher "CHAOBANMOI" trong campaign
+      const campaignVoucher = await manager.findOne(CampaignVoucher, {
+        where: { 
+          campaignId: campaign.id,
+          isAvailable: true 
+        },
+        relations: ['voucher']
+      });
+
+      if (!campaignVoucher) {
+        throw new NotFoundException(`Voucher "${VOUCHER_CODES.WELCOME}" không có trong campaign "${CAMPAIGN_NAMES.WELCOME}"`);
+      }
+
+      const voucher = campaignVoucher.voucher;
+      if (!voucher) {
+        throw new NotFoundException(`Voucher "${VOUCHER_CODES.WELCOME}" không tồn tại`);
+      }
+
+      // Validate voucher type for campaign
+      if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
+        throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" không phải loại chiến dịch`);
+      }
+
+      if (voucher.status !== VoucherStatusEnum.ACTIVE) {
+        throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" không còn hiệu lực`);
+      }
+
+      if (voucher.quantity <= 0) {
+        throw new BadRequestException(`Voucher "${VOUCHER_CODES.WELCOME}" đã hết số lượng`);
+      }
+
+      // 4. Kiểm tra user có tồn tại không
+      const user = await manager.findOne(User, {
+        where: { id: userId }
+      });
+
+      if (!user) {
+        throw new NotFoundException('User không tồn tại');
+      }
+
+      // 5. Kiểm tra user đã tham gia campaign chưa
+      const existingUserCampaign = await manager.findOne(UserCampaign, {
+        where: { campaignId: campaign.id, userId }
+      });
+
+      if (existingUserCampaign) {
+        throw new BadRequestException(`User đã tham gia campaign "${CAMPAIGN_NAMES.WELCOME}"`);
+      }
+
+      // 6. Thêm user vào campaign
+      const userCampaign = manager.create(UserCampaign, {
         campaignId: campaign.id,
-        isAvailable: true 
-      },
-      relations: ['voucher']
+        userId,
+        isAvailable: true,
+      });
+
+      // 7. Tạo voucher-user record
+      const voucherUser = manager.create(VoucherUser, {
+        user_id: userId,
+        voucher_id: voucher.id,
+        status: VoucherUserStatusEnum.AVAILABLE,
+        from: VoucherUserFromEnum.CAMPAIGN,
+        assigned_at: new Date(),
+        used_at: null,
+      });
+
+      const savedUserCampaign = await manager.save(UserCampaign, userCampaign);
+      const savedVoucherUser = await manager.save(VoucherUser, voucherUser);
+
+      return {
+        message: `Thêm user vào campaign "${CAMPAIGN_NAMES.WELCOME}" thành công. Voucher "${VOUCHER_CODES.WELCOME}" đã được gán cho user.`,
+        userCampaign: savedUserCampaign,
+        voucherUser: savedVoucherUser
+      };
     });
-
-    if (!campaignVoucher) {
-      throw new NotFoundException('Voucher "CHAOBANMOI" không có trong campaign "Chào Bạn Mới"');
-    }
-
-    const voucher = campaignVoucher.voucher;
-    if (!voucher) {
-      throw new NotFoundException('Voucher "CHAOBANMOI" không tồn tại');
-    }
-
-    if (voucher.status !== VoucherStatusEnum.ACTIVE) {
-      throw new BadRequestException('Voucher "CHAOBANMOI" không còn hiệu lực');
-    }
-
-    if (voucher.quantity <= 0) {
-      throw new BadRequestException('Voucher "CHAOBANMOI" đã hết số lượng');
-    }
-
-    // 4. Kiểm tra user có tồn tại không
-    const user = await this.userRepository.findOne({
-      where: { id: userId }
-    });
-
-    if (!user) {
-      throw new NotFoundException('User không tồn tại');
-    }
-
-    // 5. Kiểm tra user đã tham gia campaign chưa
-    const existingUserCampaign = await this.userCampaignRepository.findOne({
-      where: { campaignId: campaign.id, userId }
-    });
-
-    if (existingUserCampaign) {
-      throw new BadRequestException('User đã tham gia campaign "Chào Bạn Mới"');
-    }
-
-    // 6. Thêm user vào campaign
-    const userCampaign = this.userCampaignRepository.create({
-      campaignId: campaign.id,
-      userId,
-      isAvailable: true,
-    });
-
-    // 7. Tạo voucher-user record
-    const voucherUser = this.voucherUserRepository.create({
-      user_id: userId, // Sử dụng userId trực tiếp thay vì query lại
-      voucher_id: voucher.id,
-      status: VoucherUserStatusEnum.AVAILABLE,
-      from: VoucherUserFromEnum.CAMPAIGN,
-      assigned_at: new Date(),
-      used_at: null,
-    });
-
-    const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
-    const savedVoucherUser = await this.voucherUserRepository.save(voucherUser);
-
-    return {
-      message: 'Thêm user vào campaign "Chào Bạn Mới" thành công. Voucher "CHAOBANMOI" đã được gán cho user.',
-      userCampaign: savedUserCampaign,
-      voucherUser: savedVoucherUser
-    };
   }
   
   // CRUD cho campaign-vendor
@@ -949,10 +993,7 @@ export class CampaignService {
     if (!campaign) throw new NotFoundException('Campaign không tồn tại');
     const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
     if (!vendor) throw new NotFoundException('Vendor không tồn tại');
-    // Check đã có chưa
-    const existed = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId } } });
-    if (existed) throw new BadRequestException('Campaign đã có vendor');
-    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true });
+    const campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: false, invited: false });
     return this.campaignVendorRepository.save(campaignVendor);
   }
 
@@ -994,5 +1035,170 @@ export class CampaignService {
         totalItem: total,
       }
     };
+  }
+
+  async getVendorInvitedByCampaignId(campaignId: string, query: FindAllVendorWithInvitedDto): Promise<{
+    data: CampaignVendor[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { isAvailable, invited, current = 1, pageSize = 10 } = query;
+    const queryBuilder = this.campaignVendorRepository.createQueryBuilder('campaign_vendor')
+      .leftJoinAndSelect('campaign_vendor.vendor', 'vendor')
+      .where('campaign_vendor.campaign_id = :campaignId', { campaignId });
+
+    function parseBool(val: any) {
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'string') {
+        if (val.toLowerCase() === 'true') return true;
+        if (val.toLowerCase() === 'false') return false;
+      }
+      return undefined;
+    }
+
+    const isAvailableBool = parseBool(isAvailable);
+    const invitedBool = parseBool(invited);
+
+    if (isAvailableBool !== undefined) {
+      queryBuilder.andWhere('campaign_vendor.is_available = :isAvailable', { isAvailable: isAvailableBool });
+    }
+    if (invitedBool !== undefined) {
+      queryBuilder.andWhere('campaign_vendor.invited = :invited', { invited: invitedBool });
+    }
+    const total = await queryBuilder.getCount();
+    const skip = (current - 1) * pageSize;
+    const data = await queryBuilder.skip(skip).take(pageSize).getMany();
+    return { data, 
+      pagination: { current, pageSize, totalPage: Math.ceil(total / pageSize), totalItem: total } };
+  }
+
+  async inviteVendorToCampaign(inviteVendorDto: InviteVendorDto) {
+    const { campaignId, vendorId } = inviteVendorDto;
+    const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    const vendor = await this.vendorRepository.findOne({ where: { id: vendorId }, relations: ['user_id'] });
+    if (!vendor) throw new NotFoundException('Vendor không tồn tại');
+    if (!vendor.user_id || !vendor.user_id.email) throw new BadRequestException('Vendor chưa liên kết user hoặc thiếu email');
+
+    // Update hoặc tạo mới campaign-vendor với invited = true, isAvailable = false
+    let campaignVendor = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId }, vendor: { id: vendorId } }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) {
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, invited: true, isAvailable: false });
+    } else {
+      campaignVendor.invited = true;
+      campaignVendor.isAvailable = false;
+    }
+    await this.campaignVendorRepository.save(campaignVendor);
+
+    // Sinh token ngẫu nhiên
+    const token = randomBytes(32).toString('hex');
+    // Lưu vào Redis với TTL 15 phút
+    await this.redisClient.setex(
+      `campaign-invite:${token}`,
+      900, // 15 phút
+      JSON.stringify({ campaignId, vendorId })
+    );
+    // Link xác nhận
+    const confirmLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/campaigns/confirm-invite?token=${token}`;
+    // Gửi mail
+    await this.mailService.sendMail(
+      vendor.user_id.email,
+      'Mời xác nhận tham gia chiến dịch PhotoGo',
+      'invite-vendor-campaign',
+      {
+        vendorName: vendor.name,
+        campaignName: campaign.name,
+        confirmLink,
+      },
+    );
+    return { message: 'Đã gửi mail xác nhận cho vendor', email: vendor.user_id.email, token };
+  }
+
+  async confirmVendorInvite(token: string) {
+    console.log('Xác nhận token:', token);
+    // Lấy thông tin từ Redis
+    const key = `campaign-invite:${token}`;
+    const data = await this.redisClient.get(key);
+    console.log('Dữ liệu lấy từ Redis:', data);
+    if (!data) throw new BadRequestException('Token không hợp lệ hoặc đã hết hạn');
+    const { campaignId, vendorId } = JSON.parse(data);
+    // Xóa token khỏi Redis sau khi xác nhận
+    await this.redisClient.del(key);
+    // Kiểm tra campaign-vendor đã tồn tại chưa
+    let campaignVendor = await this.campaignVendorRepository.findOne({ where: { campaign: { id: campaignId }, vendor: { id: vendorId } }, relations: ['campaign', 'vendor'] });
+    if (!campaignVendor) {
+      // Nếu chưa có thì tạo mới
+      const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
+      const vendor = await this.vendorRepository.findOne({ where: { id: vendorId } });
+      if (!campaign || !vendor) throw new NotFoundException('Campaign hoặc Vendor không tồn tại');
+      campaignVendor = this.campaignVendorRepository.create({ campaign, vendor, isAvailable: true, invited: true });
+      await this.campaignVendorRepository.save(campaignVendor);
+    } else {
+      // Nếu đã có thì cập nhật trạng thái
+      campaignVendor.isAvailable = true;
+      campaignVendor.invited = true;
+      await this.campaignVendorRepository.save(campaignVendor);
+    }
+    return { message: 'Xác nhận tham gia campaign thành công', campaignId, vendorId };
+  }
+
+  async getCampaignById(id: string) {
+    const campaign = await this.campaignRepository.findOne({ where: { id }});
+    if (!campaign) throw new NotFoundException('Campaign không tồn tại');
+    return campaign;
+  }
+
+  async removeVoucherOutOfCampaign(campaignId: string, voucherId: string) {
+    const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { campaignId, voucherId } });
+    if (!campaignVoucher) throw new NotFoundException('Campaign voucher không tồn tại');
+    
+    // Sử dụng delete với điều kiện thay vì object
+    const result = await this.campaignVoucherRepository.delete({ campaignId, voucherId });
+    
+    if (result.affected === 0) {
+      throw new NotFoundException('Campaign voucher không tồn tại');
+    }
+    
+    return { message: 'Xóa voucher khỏi campaign thành công' };
+  }
+
+  /**
+   * Helper method to create a voucher with CAMPAIGN type
+   * @param voucherData Partial voucher data
+   * @returns Promise<Voucher>
+   */
+  async createVoucherWithCampaignType(voucherData: Partial<Voucher>): Promise<Voucher> {
+    const voucher = this.voucherRepository.create({
+      ...voucherData,
+      type: VoucherTypePoint.CAMPAIGN, // Always set type to CAMPAIGN for campaign vouchers
+    });
+    return this.voucherRepository.save(voucher);
+  }
+
+  /**
+   * Helper method to validate voucher is of CAMPAIGN type
+   * @param voucherId string
+   * @returns Promise<boolean>
+   */
+  async validateCampaignVoucher(voucherId: string): Promise<boolean> {
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    return voucher?.type === VoucherTypePoint.CAMPAIGN;
+  }
+
+  /**
+   * Get available vouchers with CAMPAIGN type that can be added to campaigns
+   */
+  async getAvailableCampaignVouchers(): Promise<Voucher[]> {
+    return this.voucherRepository.createQueryBuilder('voucher')
+      .leftJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
+      .where('voucher.type = :voucherType', { voucherType: VoucherTypePoint.CAMPAIGN })
+      .andWhere('voucher.status IN (:...status)', { status: [ VoucherStatusEnum.ACTIVE ] })
+      .andWhere('voucher.quantity > 0')
+      .andWhere('cv.voucherId IS NULL') // Loại bỏ voucher đã có trong campaign
+      .getMany();
   }
 } 

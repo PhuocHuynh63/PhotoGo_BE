@@ -1,23 +1,44 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { FindSubscriptionDto } from './dto/find-subscription.dto';
-import { SubscriptionStatus, SubscriptionHistoryAction } from '../../constants/subscription.enum';
+import { BillingCycle, PlanType, SubscriptionStatus, SubscriptionHistoryAction } from 'src/constants/subscription.enum';
 import { PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
 import { SubscriptionPlanService } from './subscription-plan.service';
+import { BullQueueService } from '../../3rdService/bull/bull-queue.service';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { SubscriptionReminderJobData } from './bull/subscription.processor';
 
 @Injectable()
 export class SubscriptionService {
+  private readonly logger = new Logger(SubscriptionService.name);
+
   constructor(
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
-  ) {}
+    private readonly bullQueueService: BullQueueService,
+    @InjectQueue('subscription-reminders') private readonly reminderQueue: Queue,
+  ) { }
+
+  //#region create 
+
+  private getDurationByBillingCycle(billingCycle: BillingCycle): number {
+    switch (billingCycle) {
+      case BillingCycle.MONTHLY:
+        return 30;
+      case BillingCycle.YEARLY:
+        return 365;
+      default:
+        return 30;
+    }
+  }
 
   async create(createSubscriptionDto: CreateSubscriptionDto): Promise<Subscription> {
     // Validate plan exists and is active
@@ -26,10 +47,16 @@ export class SubscriptionService {
       throw new BadRequestException('Subscription plan không hoạt động');
     }
 
+    // Kiểm tra loại plan phù hợp với loại đăng ký
+    if (createSubscriptionDto.userId && plan.planType !== PlanType.USER) {
+      throw new BadRequestException('Chỉ được đăng ký gói dành cho người dùng');
+    }
+    // Nếu sau này có vendorId thì kiểm tra planType === 'VENDOR'
+
     // Check if user already has an active subscription
     if (createSubscriptionDto.userId) {
       const existingSubscription = await this.subscriptionRepository.findOne({
-        where: { 
+        where: {
           userId: createSubscriptionDto.userId,
           status: SubscriptionStatus.ACTIVE
         }
@@ -44,15 +71,41 @@ export class SubscriptionService {
     if (!endDate) {
       const startDate = new Date(createSubscriptionDto.startDate);
       endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + plan.duration);
+      if (plan.billingCycle === BillingCycle.MONTHLY) {
+        endDate.setMonth(endDate.getMonth() + 1);
+      } else if (plan.billingCycle === BillingCycle.YEARLY) {
+        endDate.setFullYear(endDate.getFullYear() + 1);
+      } else {
+        endDate.setMonth(endDate.getMonth() + 1);
+      }
+    }
+    // Lấy giá theo billingCycle
+    let price = 0;
+    if (plan.billingCycle === BillingCycle.MONTHLY) {
+      price = plan.priceForMonth;
+    } else if (plan.billingCycle === BillingCycle.YEARLY) {
+      price = plan.priceForYear;
+    }
+
+
+    // Parse nextBilledAt from DTO if provided
+    let nextBillingAt: Date | null = null;
+    if (createSubscriptionDto.nextBilledAt) {
+      nextBillingAt = new Date(createSubscriptionDto.nextBilledAt);
     }
 
     const subscription = this.subscriptionRepository.create({
       ...createSubscriptionDto,
       endDate: endDate,
+      nextBillingAt: nextBillingAt,
       status: SubscriptionStatus.ACTIVE
     });
     const savedSubscription = await this.subscriptionRepository.save(subscription);
+
+    // Schedule renewal reminder if nextBillingAt is set and user exists
+    if (nextBillingAt && savedSubscription.userId) {
+      await this.scheduleRenewalReminder(savedSubscription);
+    }
 
     // Tạo history record cho subscription mới
     await this.subscriptionHistoryService.createHistory(
@@ -64,22 +117,25 @@ export class SubscriptionService {
         subscriptionId: savedSubscription.id,
         userId: savedSubscription.userId,
         planId: savedSubscription.planId,
-        
+
         // Thông tin thời gian
         startDate: savedSubscription.startDate.toISOString(),
         endDate: savedSubscription.endDate.toISOString(),
+        nextBillingAt: savedSubscription.nextBillingAt?.toISOString(),
         billingCycle: savedSubscription.billingCycle,
         status: savedSubscription.status,
-        
+
         // Metadata khác
         timestamp: new Date().toISOString(),
         action: 'create',
+        reminderScheduled: !!(nextBillingAt && savedSubscription.userId),
       },
       PayerType.CUSTOMER
     );
 
     return savedSubscription;
   }
+  //#endregion create
 
   async findAll(findSubscriptionDto: FindSubscriptionDto): Promise<{
     data: Subscription[];
@@ -141,14 +197,42 @@ export class SubscriptionService {
 
   async update(id: string, updateSubscriptionDto: UpdateSubscriptionDto): Promise<Subscription> {
     const subscription = await this.findOne(id);
+    const oldNextBillingAt = subscription.nextBillingAt;
+
+    // Parse nextBilledAt from DTO if provided
+    if (updateSubscriptionDto.nextBilledAt) {
+      updateSubscriptionDto.nextBilledAt = new Date(updateSubscriptionDto.nextBilledAt).toISOString();
+    }
+
     Object.assign(subscription, updateSubscriptionDto);
-    return await this.subscriptionRepository.save(subscription);
+    const updatedSubscription = await this.subscriptionRepository.save(subscription);
+
+    // Handle renewal reminder scheduling if nextBillingAt changed
+    const newNextBillingAt = updatedSubscription.nextBillingAt;
+
+    if (updatedSubscription.userId) {
+      // Cancel old reminder if nextBillingAt changed
+      if (oldNextBillingAt &&
+        (!newNextBillingAt || oldNextBillingAt.getTime() !== newNextBillingAt.getTime())) {
+        await this.cancelRenewalReminder(updatedSubscription.id);
+      }
+
+      // Schedule new reminder if nextBillingAt is set
+      if (newNextBillingAt && updatedSubscription.status === SubscriptionStatus.ACTIVE) {
+        await this.scheduleRenewalReminder(updatedSubscription);
+      }
+    }
+
+    return updatedSubscription;
   }
 
   async cancel(id: string): Promise<Subscription> {
     const subscription = await this.findOne(id);
     const oldStatus = subscription.status;
-    
+
+    // Huỷ lịch hẹn thời gian nhắc gia hạn subscription
+    await this.cancelRenewalReminder(id);
+
     subscription.status = SubscriptionStatus.CANCELED;
     subscription.nextBillingAt = null;
     const updatedSubscription = await this.subscriptionRepository.save(subscription);
@@ -163,17 +247,18 @@ export class SubscriptionService {
         subscriptionId: subscription.id,
         userId: subscription.userId,
         planId: subscription.planId,
-        
+
         // Thông tin thay đổi
         oldStatus: oldStatus,
         newStatus: subscription.status,
         cancelDate: new Date().toISOString(),
         endDate: subscription.endDate.toISOString(),
-        
+
         // Metadata khác
         timestamp: new Date().toISOString(),
         action: 'cancel',
         reason: 'User requested cancellation',
+        reminderCancelled: true,
       },
       PayerType.CUSTOMER
     );
@@ -182,7 +267,115 @@ export class SubscriptionService {
   }
 
   async remove(id: string): Promise<void> {
+    // Huỷ lịch hẹn thời gian nhắc gia hạn subscription trước khi xóa
+    await this.cancelRenewalReminder(id);
+
     const subscription = await this.findOne(id);
     await this.subscriptionRepository.remove(subscription);
   }
+
+  //#region scheduleRenewalReminder
+  /**
+   * Lịch hẹn thời gian nhắc gia hạn subscription 24 giờ trước nextBillingAt
+   */
+  async scheduleRenewalReminder(subscription: Subscription): Promise<void> {
+    if (!subscription.nextBillingAt || !subscription.userId) {
+      this.logger.warn(`Không thể schedule reminder: nextBillingAt hoặc userId không tồn tại cho subscription ${subscription.id}`);
+      return;
+    }
+
+    try {
+      const reminderTime = new Date(subscription.nextBillingAt);
+      reminderTime.setHours(reminderTime.getHours() - 24); // 24 hours before
+
+      const now = new Date();
+
+      // Don't schedule if reminder time is in the past
+      if (reminderTime <= now) {
+        this.logger.warn(`Reminder time đã qua cho subscription ${subscription.id}, bỏ qua scheduling`);
+        return;
+      }
+
+      const delay = reminderTime.getTime() - now.getTime();
+
+      const jobData: SubscriptionReminderJobData = {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+        nextBillingAt: subscription.nextBillingAt,
+      };
+
+      const jobAdded = await this.bullQueueService.addJob(
+        this.reminderQueue,
+        'send-renewal-reminder',
+        jobData,
+        {
+          delay: delay,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+        }
+      );
+
+      if (jobAdded) {
+        this.logger.log(`Đã schedule reminder cho subscription ${subscription.id} vào ${reminderTime.toISOString()}`);
+      } else {
+        this.logger.warn(`Không thể schedule reminder cho subscription ${subscription.id} do lỗi Redis`);
+      }
+
+    } catch (error) {
+      this.logger.error(`Lỗi khi schedule renewal reminder cho subscription ${subscription.id}: ${error.message}`, error.stack);
+    }
+  }
+  //#endregion scheduleRenewalReminder
+
+  //#region cancelRenewalReminder
+  /**
+   * Huỷ lịch hẹn thời gian nhắc gia hạn subscription
+   */
+  private async cancelRenewalReminder(subscriptionId: string): Promise<void> {
+    try {
+      // Find jobs by pattern and remove them
+      const jobs = await this.reminderQueue.getJobs(['delayed', 'waiting'], 0, -1);
+
+      for (const job of jobs) {
+        if (job.data && job.data.subscriptionId === subscriptionId) {
+          await job.remove();
+          this.logger.log(`Đã cancel reminder job cho subscription ${subscriptionId}`);
+          break;
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Lỗi khi cancel renewal reminder cho subscription ${subscriptionId}: ${error.message}`, error.stack);
+    }
+  }
+  //#endregion cancelRenewalReminder
+
+  //#region scheduleCleanupJob
+  /**
+   * Lịch hẹn thời gian làm sạch subscription hết hạn
+   */
+  async schedulePeriodicCleanup(): Promise<void> {
+    try {
+      // Schedule cleanup to run immediately (can be called periodically by cron or admin)
+      const jobAdded = await this.bullQueueService.addJob(
+        this.reminderQueue,
+        'cleanup-expired-subscriptions',
+        {},
+        {
+          attempts: 3,
+          backoff: { type: 'fixed', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
+
+      if (jobAdded) {
+        this.logger.log('Đã schedule cleanup job cho expired subscriptions');
+      }
+    } catch (error) {
+      this.logger.error(`Lỗi khi schedule cleanup: ${error.message}`, error.stack);
+    }
+  }
+  //#endregion scheduleCleanupJob
 } 

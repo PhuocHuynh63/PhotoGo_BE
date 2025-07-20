@@ -46,25 +46,25 @@ export class UpdateServicePackageDto {
  * DTO cho việc cập nhật metadata của gói dịch vụ
  * Kế thừa từ CreateServicePackageMetadataDto với tất cả các trường là tùy chọn
  */
-export class UpdateServicePackageMetadataDto extends PartialType(CreateServicePackageMetadataDto) {}
+export class UpdateServicePackageMetadataDto extends PartialType(CreateServicePackageMetadataDto) { }
 
 /**
  * DTO cho việc cập nhật liên kết giữa khái niệm dịch vụ và loại dịch vụ
  * Kế thừa từ CreateServiceConceptServiceTypeDto với tất cả các trường là tùy chọn
  */
-export class UpdateServiceConceptServiceTypeDto extends PartialType(CreateServiceConceptServiceTypeDto) {}
+export class UpdateServiceConceptServiceTypeDto extends PartialType(CreateServiceConceptServiceTypeDto) { }
 
 /**
  * DTO cho việc cập nhật loại dịch vụ
  * Kế thừa từ CreateServiceTypeDto với tất cả các trường là tùy chọn
  */
-export class UpdateServiceTypeDto extends PartialType(CreateServiceTypeDto) {}
+export class UpdateServiceTypeDto extends PartialType(CreateServiceTypeDto) { }
 
 /**
  * DTO cho việc cập nhật khái niệm dịch vụ
  * Kế thừa từ CreateServiceConceptDto với tất cả các trường là tùy chọn
  */
-export class UpdateServiceConceptDto{
+export class UpdateServiceConceptDto {
   @ApiProperty({
     description: 'Tên của khái niệm dịch vụ',
     example: 'Chụp ảnh cưới ngoại cảnh',
@@ -142,7 +142,7 @@ export class UpdateServiceConceptDto{
     required: false,
     default: ServiceConceptStatus.ACTIVE,
   })
-  @IsEnum(ServiceConceptStatus) 
+  @IsEnum(ServiceConceptStatus)
   @IsOptional()
   @Transform(({ value }) => value === '' ? undefined : value)
   status?: ServiceConceptStatus;
@@ -192,4 +192,37 @@ export class UpdateServiceConceptDto{
   @IsArray()
   @IsString({ each: true })
   images?: string[];
+
+  @ApiProperty({
+    description: 'Có thay thế toàn bộ ảnh hay không. true = xóa tất cả ảnh cũ và thay bằng ảnh mới, false = thêm ảnh mới vào ảnh hiện tại',
+    example: false,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return false;
+    return value === 'true' || value === true;
+  })
+  replaceAllImages?: boolean;
+
+  @ApiProperty({
+    description: 'Danh sách ID của những ảnh cần xóa (chỉ có hiệu lực khi replaceAllImages = false)',
+    example: ['123e4567-e89b-12d3-a456-426614174001', '123e4567-e89b-12d3-a456-426614174002'],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    if (typeof value === 'string') {
+      const ids = value.split(',').map(id => id.trim()).filter(id => id !== '');
+      return ids.length > 0 ? ids : undefined;
+    }
+    return value;
+  })
+  @IsArray({ message: 'Danh sách ID ảnh cần xóa phải là một mảng' })
+  @IsUUID('4', { each: true, message: 'ID ảnh không hợp lệ' })
+  @IsOptional()
+  imagesToDelete?: string[];
 }

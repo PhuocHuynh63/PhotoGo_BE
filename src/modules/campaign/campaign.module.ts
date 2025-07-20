@@ -9,10 +9,12 @@ import { LoyaltyCampaign } from './entities/loyalty-campaign.entity';
 import { User } from '../users/entities/user.entity';
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
-import { UserModule } from '../users/user.module';
+import { forwardRef } from '@nestjs/common';
 import { VoucherModule } from '../vouchers/voucher.module';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { MailModule } from 'src/3rdService/mail/mail.module';
+import { RedisModule } from 'src/3rdService/redis/redis.module';
 
 @Module({
   imports: [
@@ -28,7 +30,9 @@ import { Vendor } from '../vendors/entities/vendor.entity';
       Vendor,
     ]),
     VoucherModule,
-    UserModule,
+    forwardRef(() => import('../users/user.module').then(m => m.UserModule)),
+    MailModule,
+    RedisModule,
   ],
   controllers: [CampaignController],
   providers: [CampaignService],

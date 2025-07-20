@@ -24,6 +24,8 @@ import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { MailModule } from '../../3rdService/mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { Album } from '../album/entities/album.entity';
+import { VendorAlbum } from '../album/entities/vendor-album.entity';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { SubscriptionModule } from '../subscription/subscription.module';
       Invoice,
       CampaignVoucher,
       VoucherUser,
+      Album,
+      VendorAlbum,
     ]),
     ServicePackageModule,
     VoucherModule,

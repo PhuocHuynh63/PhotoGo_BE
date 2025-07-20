@@ -18,6 +18,7 @@ import { SubscriptionStatus } from '../../constants/subscription.enum';
 import { PaymentType, PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
 import { UserService } from '../users/user.service';
+import { BillingCycle } from '../../constants/subscription.enum';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -31,7 +32,7 @@ export class SubscriptionController {
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     // private readonly userService: UserService,
-  ) {}
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Tạo gói đăng ký mới' })
@@ -58,7 +59,7 @@ export class SubscriptionController {
   // @ApiOperation({ summary: 'Tạo link thanh toán PayOS cho subscription (legacy)' })
   // async createPayOSLink(@Body() body: { userId: string; subscriptionId: string }) {
   //   const { userId, subscriptionId } = body;
-    
+
   //   // Lấy subscription
   //   const subscription = await this.subscriptionService.findOne(subscriptionId);
   //   if (!subscription) throw new NotFoundException('Không tìm thấy subscription');
@@ -132,8 +133,8 @@ export class SubscriptionController {
   @ApiResponse({ status: 200, description: 'Thành công' })
   async getInvoicePayments(@Param('invoiceId') invoiceId: string) {
     const payments = await this.subscriptionPaymentService.getInvoicePayments(invoiceId);
-    return { 
-      invoiceId, 
+    return {
+      invoiceId,
       payments: payments,
       totalPayments: payments.length
     };
@@ -152,10 +153,10 @@ export class SubscriptionController {
     }
 
     // Kiểm tra xem có invoice pending nào không
-    const pendingInvoice = await this.subscriptionInvoiceRepository.findOne({ 
-      where: { subscriptionId: id, status: SubscriptionInvoiceStatus.PENDING } 
+    const pendingInvoice = await this.subscriptionInvoiceRepository.findOne({
+      where: { subscriptionId: id, status: SubscriptionInvoiceStatus.PENDING }
     });
-    
+
     if (pendingInvoice) {
       throw new BadRequestException('Đã có hóa đơn chờ thanh toán, vui lòng thanh toán trước khi gia hạn');
     }
@@ -163,26 +164,121 @@ export class SubscriptionController {
     // Lấy plan để lấy giá
     const plan = await this.subscriptionPlanService.findOne(subscription.planId);
     if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
-
+    if (!plan.isActive) {
+      throw new BadRequestException('Subscription plan không hoạt động, không thể gia hạn');
+    }
+    // Lấy giá theo billingCycle
+    let price = 0;
+    if (plan.billingCycle === BillingCycle.MONTHLY) {
+      price = plan.priceForMonth;
+    } else if (plan.billingCycle === BillingCycle.YEARLY) {
+      price = plan.priceForYear;
+    }
     // Tạo invoice mới cho gia hạn
     const invoice = this.subscriptionInvoiceRepository.create({
       subscriptionId: id,
-      payablePrice: plan.price,
+      payablePrice: price,
       status: SubscriptionInvoiceStatus.PENDING,
     });
     const savedInvoice = await this.subscriptionInvoiceRepository.save(invoice);
-
     // Tạo link thanh toán cho gia hạn
     const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
-      savedInvoice.id, 
+      savedInvoice.id,
       PaymentType.RENEWAL
     );
-
     return {
       ...result,
       message: 'Tạo link thanh toán gia hạn thành công',
       currentEndDate: subscription.endDate,
-      renewalAmount: plan.price
+      renewalAmount: price
+    };
+  }
+
+  // === TEST ENDPOINTS FOR BULL QUEUE SYSTEM ===
+
+  @Post('admin/test-renewal-reminder/:subscriptionId')
+  @ApiOperation({ summary: 'Test gửi thông báo nhắc gia hạn subscription (Admin only)' })
+  async testRenewalReminder(@Param('subscriptionId') subscriptionId: string) {
+    const subscription = await this.subscriptionService.findOne(subscriptionId);
+    if (!subscription) {
+      throw new NotFoundException('Không tìm thấy subscription');
+    }
+
+    if (!subscription.userId) {
+      throw new BadRequestException('Subscription không có userId để gửi thông báo');
+    }
+
+    // Manually schedule reminder (for testing)
+    await this.subscriptionService.scheduleRenewalReminder(subscription);
+
+    return {
+      statusCode: 200,
+      message: 'Đã test schedule renewal reminder',
+      data: {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+        nextBillingAt: subscription.nextBillingAt,
+        status: subscription.status,
+        planName: subscription.plan?.name
+      }
+    };
+  }
+
+  @Post('admin/test-create-with-reminder')
+  @ApiOperation({ summary: 'Test tạo subscription với auto reminder scheduling (Admin only)' })
+  async testCreateSubscriptionWithReminder(@Body() createDto: {
+    userId: string;
+    planId: string;
+    hoursFromNow: number; // Số giờ từ bây giờ để set nextBillingAt
+  }) {
+    const { userId, planId, hoursFromNow } = createDto;
+
+    // Tính toán thời gian nextBillingAt
+    const nextBillingAt = new Date();
+    nextBillingAt.setHours(nextBillingAt.getHours() + hoursFromNow);
+
+    const plan = await this.subscriptionPlanService.findOne(planId);
+    const subscription = await this.subscriptionService.create({
+      userId,
+      planId,
+      planType: plan.planType,
+      startDate: new Date().toISOString(),
+      billingCycle: BillingCycle.MONTHLY,
+      nextBilledAt: nextBillingAt.toISOString(),
+    });
+
+    return {
+      statusCode: 200,
+      message: 'Đã tạo subscription với auto reminder scheduling',
+      data: {
+        subscription,
+        reminderWillTriggerAt: new Date(nextBillingAt.getTime() - (24 * 60 * 60 * 1000)),
+        hoursUntilReminder: hoursFromNow - 24
+      }
+    };
+  }
+
+  @Post('admin/cleanup-expired')
+  @ApiOperation({ summary: 'Chạy cleanup job cho expired subscriptions (Admin only)' })
+  async triggerCleanupJob() {
+    await this.subscriptionService.schedulePeriodicCleanup();
+
+    return {
+      statusCode: 200,
+      message: 'Đã trigger cleanup job cho expired subscriptions',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  @Post('admin/setup-periodic-cleanup')
+  @ApiOperation({ summary: 'Setup periodic cleanup job (Admin only)' })
+  async setupPeriodicCleanup() {
+    await this.subscriptionService.schedulePeriodicCleanup();
+
+    return {
+      statusCode: 200,
+      message: 'Đã setup periodic cleanup job',
+      note: 'Job sẽ chạy hàng ngày lúc 2:00 AM để cleanup expired subscriptions'
     };
   }
 
@@ -247,7 +343,7 @@ export class SubscriptionController {
 
     // Lấy lịch sử
     const history = await this.subscriptionHistoryService.findBySubscriptionId(id);
-    
+
     return {
       subscriptionId: id,
       history: history,

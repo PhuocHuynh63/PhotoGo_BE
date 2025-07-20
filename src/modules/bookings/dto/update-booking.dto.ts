@@ -1,5 +1,6 @@
 import { IsEnum, IsNumber, IsOptional, IsString, IsEmail, Matches } from 'class-validator';
 import { BookingDepositType, BookingStatus, BookingSourceType } from '../../../constants/booking.enum';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateBookingDto {
   @IsEnum(BookingStatus)
@@ -47,6 +48,13 @@ export class UpdateBookingDto {
 }
 
 export class UpdateBookingHistoryStatusDto {
+  @IsEnum(BookingStatus)
+  @IsOptional()
+  status?: BookingStatus;
+}
+
+export class UpdateStatusDto {
+  @ApiProperty({ description: 'Trạng thái booking', enum: BookingStatus, example: BookingStatus.PENDING })
   @IsEnum(BookingStatus)
   @IsOptional()
   status?: BookingStatus;

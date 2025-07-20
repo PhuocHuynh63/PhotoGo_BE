@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { UserModule } from 'src/modules/users/user.module';
+import { UserModule } from '../users/user.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
@@ -14,10 +14,11 @@ import { CloudinaryModule } from 'src/3rdService/upload/cloudinary/cloudinary.mo
 import { CartModule } from 'src/modules/carts/cart.module';
 import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
 import { CampaignModule } from 'src/modules/campaign/campaign.module';
+import { NotificationModule } from 'src/modules/notifications/notification.module';
 
 @Module({
   imports: [
-    UserModule,
+    forwardRef(() => UserModule),
     CloudinaryModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -40,7 +41,8 @@ import { CampaignModule } from 'src/modules/campaign/campaign.module';
     MailModule,
     CartModule,
     WishlistModule,
-    CampaignModule,
+    forwardRef(() => CampaignModule),
+    forwardRef(() => NotificationModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard],

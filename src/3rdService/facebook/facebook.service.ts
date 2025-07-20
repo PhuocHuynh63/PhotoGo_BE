@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from 'src/modules/users/user.service';
 
 @Injectable()
 export class FacebookAuthService {
+    private readonly logger = new Logger(FacebookAuthService.name);
+
     constructor(
         private readonly userService: UserService,
         private readonly jwtService: JwtService,
@@ -24,6 +26,9 @@ export class FacebookAuthService {
                 passwordHash: '', // Default value for passwordHash
             });
         }
+
+        // TODO: Add notification after fixing dependency injection
+        this.logger.log(`Facebook login successful for user ${user.id}`);
 
         return user;
     }

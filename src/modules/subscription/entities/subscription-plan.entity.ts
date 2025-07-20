@@ -1,6 +1,7 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { SubscriptionVendor } from './subscription-vendor.entity';
 import { Subscription } from './subscription.entity';
+import { BillingCycle, PlanType } from 'src/constants/subscription.enum';
 
 @Entity('subscription_plan')
 export class SubscriptionPlan {
@@ -14,14 +15,20 @@ export class SubscriptionPlan {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  price: number;
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'price_for_month' })
+  priceForMonth: number;
 
-  @Column({ type: 'integer' })
-  duration: number; // Duration in days
+  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'price_for_year' })
+  priceForYear: number;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: 'boolean', default: true, name: 'is_active' })
   isActive: boolean;
+
+  @Column({ type: 'enum', enum: PlanType, name: 'plan_type' })
+  planType: PlanType;
+
+  @Column({ type: 'enum', enum: BillingCycle, name: 'billing_cycle' })
+  billingCycle: BillingCycle;
 
   @OneToMany(() => SubscriptionVendor, subscriptionVendor => subscriptionVendor.plan)
   subscriptionVendors: SubscriptionVendor[];
