@@ -1196,7 +1196,7 @@ export class CampaignService {
     return this.voucherRepository.createQueryBuilder('voucher')
       .leftJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
       .where('voucher.type = :voucherType', { voucherType: VoucherTypePoint.CAMPAIGN })
-      .andWhere('voucher.status IN (:...status)', { status: [VoucherStatusEnum.ACTIVE, VoucherStatusEnum.INACTIVE] })
+      .andWhere('voucher.status IN (:...status)', { status: [ VoucherStatusEnum.ACTIVE ] })
       .andWhere('voucher.quantity > 0')
       .andWhere('cv.voucherId IS NULL') // Loại bỏ voucher đã có trong campaign
       .getMany();
