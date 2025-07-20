@@ -1,5 +1,6 @@
-import { IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { OverviewType } from 'src/constants/overview.enum';
 
 export class OverviewDto {
   @ApiProperty({
@@ -21,28 +22,29 @@ export class OverviewDto {
   endDate?: string;
 
   @ApiProperty({
+    enum: OverviewType,
     description: 'Type',
-    example: 'finance', 
+    example: OverviewType.FINANCE, 
   })
   @IsOptional()
-  @IsString()
-  type?: string;
+  @IsEnum(OverviewType)
+  type?: OverviewType;
 
-  @ApiProperty({
-    description: 'Category',
-    example: 'finance',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  category?: string;
+  // @ApiProperty({
+  //   description: 'Category',
+  //   example: 'finance',
+  //   required: false,
+  // })
+  // @IsOptional()
+  // @IsString()
+  // category?: string;
 
-  @ApiProperty({
-    description: 'Status',
-    example: 'finance',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  status?: string;
+  // @ApiProperty({
+  //   description: 'Status',
+  //   example: 'finance',
+  //   required: false,
+  // })
+  // @IsOptional()
+  // @IsString()
+  // status?: string;
 } 

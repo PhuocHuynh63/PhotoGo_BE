@@ -7,6 +7,7 @@ import { BookingService } from '../bookings/booking.service';
 import { CommissionService } from '../commission/commission.service';
 import { BookingStatus } from '../../constants/booking.enum';
 import * as ExcelJS from 'exceljs';
+import { OverviewType } from 'src/constants/overview.enum';
 
 @Injectable()
 export class OverviewService {
@@ -60,11 +61,11 @@ export class OverviewService {
   }
 
   async getStatistics(query: OverviewDto) {
-    if (query.type === 'finance') {
+    if (query.type === OverviewType.FINANCE) {
       return this.getFinanceStatistics(query);
     }
     
-    if (query.type === 'booking') {
+    if (query.type === OverviewType.BOOKING) {
       return this.getBookingStatistics(query);
     }
     
@@ -75,11 +76,11 @@ export class OverviewService {
   }
 
   async exportToExcel(query: OverviewDto, res: Response) {
-    if (query.type === 'finance') {
+    if (query.type === OverviewType.FINANCE) {
       return this.exportFinanceToExcel(query, res);
     }
     
-    if (query.type === 'booking') {
+    if (query.type === OverviewType.BOOKING) {
       return this.exportBookingToExcel(query, res);
     }
     
