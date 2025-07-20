@@ -282,6 +282,120 @@ export class VendorController {
   }
 
   @Public()
+  @Get('highest-subscription')
+  @ApiOperation({ summary: 'Lấy danh sách nhà cung cấp đăng ký gói subscription plan cao nhất (Public)' })
+  @ApiQuery({ name: 'current', required: false, description: 'Trang hiện tại', example: 1 })
+  @ApiQuery({ name: 'pageSize', required: false, description: 'Số lượng item trên mỗi trang', example: 10 })
+  @ApiQuery({ name: 'sortDirection', required: false, description: 'Hướng sắp xếp', enum: ['asc', 'desc'], example: 'desc' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách nhà cung cấp đăng ký gói subscription plan cao nhất',
+    schema: {
+      properties: {
+        message: { type: 'string' },
+        data: { 
+          type: 'array', 
+          items: { 
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              description: { type: 'string' },
+              logo: { type: 'string', nullable: true },
+              banner: { type: 'string', nullable: true },
+              status: { type: 'string' },
+              slug: { type: 'string' },
+              hasSubscription: { type: 'boolean' },
+              hasHighestPlan: { type: 'boolean' },
+              averageRating: { type: 'number' },
+              reviewCount: { type: 'number' },
+              packageCount: { type: 'number' },
+              branchCount: { type: 'number' },
+              orderCount: { type: 'number' },
+              category: { 
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' }
+                }
+              },
+              contact: {
+                type: 'object',
+                properties: {
+                  phone: { type: 'string' },
+                  email: { type: 'string' }
+                }
+              },
+              subscription: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  planName: { type: 'string' },
+                  planDescription: { type: 'string' },
+                  priceForMonth: { type: 'number' },
+                  priceForYear: { type: 'number' },
+                  planType: { type: 'string' },
+                  billingCycle: { type: 'string' },
+                  joinedDate: { type: 'string' },
+                  endedDate: { type: 'string', nullable: true },
+                  isActive: { type: 'boolean' }
+                }
+              }
+            }
+          } 
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            current: { type: 'number' },
+            pageSize: { type: 'number' },
+            totalPage: { type: 'number' },
+            totalItem: { type: 'number' }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Tham số không hợp lệ' })
+  async getVendorsWithHighestSubscriptionPlan(
+    @Query('current') current?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('sortDirection') sortDirection?: 'asc' | 'desc',
+  ) {
+    try {
+      // Validate parameters
+      if (current && (isNaN(Number(current)) || Number(current) < 1)) {
+        throw new HttpException('Trang hiện tại phải là số dương', HttpStatus.BAD_REQUEST);
+      }
+
+      if (pageSize && (isNaN(Number(pageSize)) || Number(pageSize) < 1)) {
+        throw new HttpException('Số lượng item trên mỗi trang phải là số dương', HttpStatus.BAD_REQUEST);
+      }
+
+      if (sortDirection && !['asc', 'desc'].includes(sortDirection)) {
+        throw new HttpException('Hướng sắp xếp phải là asc hoặc desc', HttpStatus.BAD_REQUEST);
+      }
+
+      const result = await this.vendorService.getVendorsWithHighestSubscriptionPlan({
+        current,
+        pageSize,
+        sortDirection,
+      });
+
+      return {
+        message: 'Danh sách nhà cung cấp đăng ký gói subscription plan cao nhất đã được lấy thành công',
+        ...result,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting vendors with highest subscription plan: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException('Lỗi khi lấy danh sách nhà cung cấp đăng ký gói subscription plan cao nhất', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Public()
   @Get('search/locations')
   @ApiOperation({ summary: 'Tìm kiếm nhà cung cấp theo vị trí với thành phố (Public)' })
   @ApiQuery({ name: 'term', required: true, description: 'Từ tìm kiếm vị trí', example: 'Hồ Chí Minh' })

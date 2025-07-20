@@ -23,7 +23,7 @@ export class SubscriptionPlanController {
   @Public()
   @ApiOperation({ summary: 'Lấy danh sách gói đăng ký' })
   @ApiResponse({ status: 200, description: 'Danh sách gói đăng ký đã được lấy thành công', type: [SubscriptionPlan] })
-  async findAll(@Query() findSubscriptionPlanDto: FindSubscriptionPlanDto): Promise<SubscriptionPlan[]> {
+  async findAll(@Query() findSubscriptionPlanDto: FindSubscriptionPlanDto): Promise<{ data: SubscriptionPlan[], pagination: { current: number; pageSize: number; totalPage: number; totalItem: number; } }> {
     return this.subscriptionPlanService.findAll(findSubscriptionPlanDto);
   }
 

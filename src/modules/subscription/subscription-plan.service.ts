@@ -22,22 +22,62 @@ export class SubscriptionPlanService {
     return await this.subscriptionPlanRepository.save(subscriptionPlan);
   }
 
-  async findAll(findSubscriptionPlanDto: FindSubscriptionPlanDto): Promise<SubscriptionPlan[]> {
+  async findAll(findSubscriptionPlanDto: FindSubscriptionPlanDto): Promise<{
+    data: SubscriptionPlan[],
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    }
+  }> {
     const queryBuilder = this.subscriptionPlanRepository.createQueryBuilder('subscriptionPlan');
 
     if (findSubscriptionPlanDto.name) {
       queryBuilder.andWhere('subscriptionPlan.name ILIKE :name', { name: `%${findSubscriptionPlanDto.name}%` });
     }
-
-    if (findSubscriptionPlanDto.isActive !== undefined) {
-      queryBuilder.andWhere('subscriptionPlan.isActive = :isActive', { isActive: findSubscriptionPlanDto.isActive });
+    console.log('DEBUG findSubscriptionPlanDto:', findSubscriptionPlanDto);
+    const isActive = this.parseIsActive(findSubscriptionPlanDto.isActive);
+    console.log('DEBUG isActive:', isActive, typeof isActive);
+    if (isActive !== undefined) {
+      queryBuilder.andWhere('subscriptionPlan.isActive = :isActive', { isActive });
     }
 
     if (findSubscriptionPlanDto.planType) {
       queryBuilder.andWhere('subscriptionPlan.planType = :planType', { planType: findSubscriptionPlanDto.planType });
     }
 
-    return await queryBuilder.getMany();
+    // Pagination
+    const current = findSubscriptionPlanDto.current || 1;
+    const pageSize = findSubscriptionPlanDto.pageSize || 10;
+    queryBuilder.skip((current - 1) * pageSize).take(pageSize);
+
+    // Sorting
+    const sortBy = findSubscriptionPlanDto.sortBy || 'createdAt';
+    const sortDirection = (findSubscriptionPlanDto.sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    queryBuilder.orderBy(`subscriptionPlan.${sortBy}`, sortDirection);
+
+    // Log the SQL query for data
+    console.log('DEBUG SQL (data):', queryBuilder.getSql());
+
+    // Get total count before pagination
+    const countQueryBuilder = queryBuilder.clone();
+    console.log('DEBUG SQL (count):', countQueryBuilder.getSql());
+    const totalItem = await countQueryBuilder.getCount();
+
+    // Get paginated data
+    const data = await queryBuilder.getMany();
+    const totalPage = Math.ceil(totalItem / pageSize);
+
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
+    };
   }
 
   async findOne(id: string): Promise<SubscriptionPlan> {
@@ -61,5 +101,15 @@ export class SubscriptionPlanService {
   async remove(id: string): Promise<void> {
     const subscriptionPlan = await this.findOne(id);
     await this.subscriptionPlanRepository.remove(subscriptionPlan);
+  }
+
+  // Helper: parse isActive from string/boolean to boolean or undefined
+  private parseIsActive(value: string | boolean | undefined): boolean | undefined {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      if (value.toLowerCase() === 'true') return true;
+      if (value.toLowerCase() === 'false') return false;
+    }
+    return undefined;
   }
 } 

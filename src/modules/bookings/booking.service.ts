@@ -1745,15 +1745,16 @@ export class BookingService {
 
       // Get all active subscription plans
       const allPlans = await this.subscriptionPlanService.findAll({ isActive: true });
+      const planList = allPlans.data;
 
-      if (allPlans.length === 0) {
+      if (planList.length === 0) {
         return 0;
       }
       // check which cycle of plan
-      const planCycle = allPlans[0].billingCycle;
+      const planCycle = planList[0].billingCycle;
       if (planCycle === BillingCycle.MONTHLY) {
         // Tính tổng giá theo priceForMonth
-        const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.priceForMonth), 0);
+        const totalPlanPrice = planList.reduce((sum, plan) => sum + Number(plan.priceForMonth), 0);
         if (totalPlanPrice === 0) {
           return 0;
         }
@@ -1763,7 +1764,7 @@ export class BookingService {
         return subscriptionScore;
       } else if (planCycle === BillingCycle.YEARLY) {
         // Tính tổng giá theo priceForYear
-        const totalPlanPrice = allPlans.reduce((sum, plan) => sum + Number(plan.priceForYear), 0);
+        const totalPlanPrice = planList.reduce((sum, plan) => sum + Number(plan.priceForYear), 0);
         if (totalPlanPrice === 0) {
           return 0;
         }

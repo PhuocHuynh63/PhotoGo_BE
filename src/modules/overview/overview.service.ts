@@ -820,6 +820,7 @@ export class OverviewService {
 
       // Get subscription plans
       const plans = await this.subscriptionPlanService.findAll({});
+      const planList = plans.data;
 
       // Calculate basic statistics
       const totalSubscriptions = filteredSubscriptions.length;
@@ -850,7 +851,7 @@ export class OverviewService {
       const churnRate = totalSubscriptions > 0 ? Math.round(((canceledSubscriptions + expiredSubscriptions) / totalSubscriptions) * 100) : 0;
 
       // Statistics by plan
-      const planStats = plans.map(plan => {
+      const planStats = planList.map(plan => {
         const planSubscriptions = filteredSubscriptions.filter(s => s.planId === plan.id);
         const planRevenue = filteredPayments
           .filter(payment => {
@@ -952,6 +953,7 @@ export class OverviewService {
       });
 
       const plans = await this.subscriptionPlanService.findAll({});
+      const planList = plans.data;
 
       const subscriptionPayments = await this.subscriptionPaymentService['subscriptionPaymentRepository'].find({
         relations: ['subscriptionInvoice'],
@@ -1066,7 +1068,7 @@ export class OverviewService {
       // Add subscription details data
       let detailsRowNumber = 1;
       filteredSubscriptions.forEach((subscription, index) => {
-        const plan = plans.find(p => p.id === subscription.planId);
+        const plan = planList.find(p => p.id === subscription.planId);
         detailsRowNumber++;
         detailsSheet.addRow({
           stt: index + 1,
@@ -1171,7 +1173,7 @@ export class OverviewService {
       planHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
       // Calculate plan statistics
-      const planStats = plans.map(plan => {
+      const planStats = planList.map(plan => {
         const planSubscriptions = filteredSubscriptions.filter(s => s.planId === plan.id);
         const planRevenue = filteredPayments
           .filter(payment => {

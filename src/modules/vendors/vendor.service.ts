@@ -1920,6 +1920,124 @@ export class VendorService {
   }
   //#endregion filterVendorsAdmin
 
+  //#region Get Vendors with Highest Subscription Plan
+  async getVendorsWithHighestSubscriptionPlan(params: {
+    current?: string;
+    pageSize?: string;
+    sortDirection?: 'asc' | 'desc';
+  }): Promise<{
+    data: any[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const currentPage = params.current ? Number(params.current) : 1;
+    const pageSize = params.pageSize ? Number(params.pageSize) : 10;
+    const sortDirection = params.sortDirection || 'desc';
+    const skip = (currentPage - 1) * pageSize;
+
+    // Simple query joining only 3 tables: vendor -> subscription_vendor -> subscription_plan
+    const baseQuery = `
+      SELECT 
+        v.id,
+        v.name,
+        v.description,
+        v.logo,
+        v.banner,
+        v.status,
+        v.slug,
+        v.created_at,
+        v.updated_at,
+        sv.joined_date,
+        sv.ended_date,
+        sv.is_active as subscription_active,
+        sp.name as plan_name,
+        sp.description as plan_description,
+        sp.price_for_month,
+        sp.price_for_year,
+        sp.plan_type,
+        sp.billing_cycle
+      FROM vendors v
+      INNER JOIN subscription_vendor sv ON sv.vendor_id = v.id AND sv.is_active = true
+      INNER JOIN subscription_plan sp ON sp.id = sv.plan_id AND sp.is_active = true
+      WHERE v.status = 'hoạt động'
+      AND (sp.price_for_month = (SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true)
+           OR sp.price_for_year = (SELECT MAX(price_for_year) FROM subscription_plan WHERE is_active = true))
+      ORDER BY sp.price_for_month ${sortDirection.toUpperCase()}, sp.price_for_year ${sortDirection.toUpperCase()}
+      LIMIT $1 OFFSET $2
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*)
+      FROM vendors v
+      INNER JOIN subscription_vendor sv ON sv.vendor_id = v.id AND sv.is_active = true
+      INNER JOIN subscription_plan sp ON sp.id = sv.plan_id AND sp.is_active = true
+      WHERE v.status = 'hoạt động'
+      AND (sp.price_for_month = (SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true)
+           OR sp.price_for_year = (SELECT MAX(price_for_year) FROM subscription_plan WHERE is_active = true))
+    `;
+
+    // Execute queries
+    const [vendorData, totalItem] = await Promise.all([
+      this.dataSource.query(baseQuery, [pageSize, skip]),
+      this.dataSource.query(countQuery, []),
+    ]);
+
+    if (vendorData.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage: 0,
+          totalItem: 0,
+        },
+      };
+    }
+
+    // Map vendors for response
+    const vendors = vendorData.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      logo: row.logo || null,
+      banner: row.banner || null,
+      status: row.status,
+      slug: row.slug,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      hasSubscription: true,
+      hasHighestPlan: true,
+      subscription: {
+        planName: row.plan_name,
+        planDescription: row.plan_description,
+        priceForMonth: parseFloat(row.price_for_month) || 0,
+        priceForYear: parseFloat(row.price_for_year) || 0,
+        planType: row.plan_type,
+        billingCycle: row.billing_cycle,
+        joinedDate: row.joined_date,
+        endedDate: row.ended_date,
+        isActive: row.subscription_active
+      }
+    }));
+
+    const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
+
+    return {
+      data: vendors,
+      pagination: {
+        current: currentPage,
+        pageSize,
+        totalPage,
+        totalItem: Number(totalItem[0].count),
+      },
+    };
+  }
+  //#endregion Get Vendors with Highest Subscription Plan
+
   // Helper function to convert degrees to radians
   private deg2rad(deg: number): number {
     return deg * (Math.PI / 180);

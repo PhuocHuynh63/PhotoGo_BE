@@ -1,6 +1,29 @@
 import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { BillingCycle, PlanType } from '../../../constants/subscription.enum';
+import { Transform } from 'class-transformer';
+
+export class PaginationSubscriptionPlanDto {
+  @IsNumber()
+  @IsOptional()
+  @ApiProperty({ description: 'Trang hiện tại', required: false, default: 1 })
+  current?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @ApiProperty({ description: 'Số lượng item trên mỗi trang', required: false, default: 10 })
+  pageSize?: number;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({ description: 'Sắp xếp theo trường', required: false, default: 'createdAt', enum: ['createdAt', 'updatedAt', 'name', 'priceForMonth', 'priceForYear', 'planType', 'billingCycle'] })
+  sortBy?: string;
+
+  @IsString()
+  @IsOptional()
+  @ApiProperty({ description: 'Hướng sắp xếp', required: false, default: 'DESC', enum: ['ASC', 'DESC'] })
+  sortDirection?: string;
+}
 
 export class CreateSubscriptionPlanDto {
   @IsString()
@@ -19,7 +42,6 @@ export class CreateSubscriptionPlanDto {
   @ApiProperty({ description: 'Giá gói đăng ký theo năm' })
   priceForYear: number;
 
-  @IsBoolean()
   @IsOptional()
   @ApiProperty({ description: 'Trạng thái hoạt động', default: true })
   isActive?: boolean = true;
@@ -54,7 +76,6 @@ export class UpdateSubscriptionPlanDto {
   @ApiProperty({ description: 'Giá gói đăng ký theo năm', required: false })
   priceForYear?: number;
 
-  @IsBoolean()
   @IsOptional()
   @ApiProperty({ description: 'Trạng thái hoạt động', required: false })
   isActive?: boolean;
@@ -70,7 +91,7 @@ export class UpdateSubscriptionPlanDto {
   billingCycle?: BillingCycle;
 }
 
-export class FindSubscriptionPlanDto {
+export class FindSubscriptionPlanDto extends PaginationSubscriptionPlanDto {
   @IsString()
   @IsOptional()
   @ApiProperty({ description: 'Tìm kiếm theo tên', required: false })
@@ -78,11 +99,21 @@ export class FindSubscriptionPlanDto {
 
   @IsBoolean()
   @IsOptional()
-  @ApiProperty({ description: 'Lọc theo trạng thái hoạt động', required: false })
-  isActive?: boolean;
+  @ApiProperty({ description: 'Lọc theo trạng thái hoạt động', required: false, default: false })
+  // @Transform(({ value }) => {
+  //   if(typeof value === 'boolean') return value;
+  //   if(typeof value === 'string') {
+  //     if(value.toLowerCase() === 'true' || value.toLowerCase() === '1') return true;
+  //     if(value.toLowerCase() === 'false' || value.toLowerCase() === '0') return false;
+  //   }
+  //   console.log('DEBUG DTO isActive raw:', value, typeof value);
+  //   return undefined;
+  // })
+  isActive?: boolean = false;
 
   @IsEnum(PlanType)
   @IsOptional()
   @ApiProperty({ description: 'Loại gói đăng ký', enum: PlanType, required: false })
   planType?: PlanType;
-} 
+}
+
