@@ -48,11 +48,12 @@ import { BullQueueModule } from './3rdService/bull/bull-queue.module';
 import { GeminiModule } from './3rdService/gemini/gemini.module';
 import { CheckoutSessionModule } from './modules/checkout-session/checkout-session.module';
 import { AttendanceModule } from './modules/attendances/attendance/attendance.module';
-import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
-import { CampaignModule } from './modules/campaign/campaign.module';
-import { GoongModule } from './3rdService/goong/goong.module';
+import { LuckyWheelModule } from './modules/lucky-wheel/lucky-wheel.module';
 import { AttendanceLogModule } from './modules/attendances/attendance-log/attendance-log.module';
 import { AlbumModule } from './modules/album/album.module';
+import { LocationAvailabilityModule } from './modules/locations/location-availability.module';
+import { CampaignModule } from './modules/campaign/campaign.module';
+import { GoongModule } from './3rdService/goong';
 import { OverviewModule } from './modules/overview/overview.module';
 
 // Register Handlebars helpers
@@ -189,7 +190,9 @@ if (!fs.existsSync(templateDir)) {
     NotificationModule,
     GoongModule,
     AlbumModule,
+    LuckyWheelModule
     OverviewModule
+
 
   ],
   controllers: [AppController],
