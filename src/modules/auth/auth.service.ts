@@ -139,10 +139,7 @@ export class AuthService {
       // Không throw error để không ảnh hưởng đến quá trình kích hoạt tài khoản
     }
     // create point for user
-    await this.pointService.create({
-      user_id: user.id,
-      balance: 0,
-    });
+    await this.pointService.findMyPoints(user.id);
 
     return await this.userService.activeAccount(emailLower)
   }
