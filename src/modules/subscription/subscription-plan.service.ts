@@ -5,7 +5,6 @@ import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { CreateSubscriptionPlanDto } from './dto/subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/subscription-plan.dto';
 import { FindSubscriptionPlanDto } from './dto/subscription-plan.dto';
-import { PlanType, BillingCycle } from 'src/constants/subscription.enum';
 
 @Injectable()
 export class SubscriptionPlanService {
@@ -36,9 +35,7 @@ export class SubscriptionPlanService {
     if (findSubscriptionPlanDto.name) {
       queryBuilder.andWhere('subscriptionPlan.name ILIKE :name', { name: `%${findSubscriptionPlanDto.name}%` });
     }
-
     if (findSubscriptionPlanDto.isActive !== undefined) {
-      console.log('DEBUG isActive:', findSubscriptionPlanDto.isActive, typeof findSubscriptionPlanDto.isActive);
       queryBuilder.andWhere('subscriptionPlan.isActive = :isActive', { isActive: findSubscriptionPlanDto.isActive });
     }
 
@@ -54,14 +51,10 @@ export class SubscriptionPlanService {
     // Sorting
     const sortBy = findSubscriptionPlanDto.sortBy || 'createdAt';
     const sortDirection = (findSubscriptionPlanDto.sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    queryBuilder.orderBy(`subscriptionPlan.${sortBy}`, sortDirection);
-
-    // Log the SQL query for data
-    // console.log('DEBUG SQL (data):', queryBuilder.getSql());
+    queryBuilder.orderBy(`subscriptionPlan.${sortBy}`, sortDirection)
 
     // Get total count before pagination
     const countQueryBuilder = queryBuilder.clone();
-    // console.log('DEBUG SQL (count):', countQueryBuilder.getSql());
     const totalItem = await countQueryBuilder.getCount();
 
     // Get paginated data

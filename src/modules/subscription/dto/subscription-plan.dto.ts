@@ -1,7 +1,7 @@
 import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { BillingCycle, PlanType } from '../../../constants/subscription.enum';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class PaginationSubscriptionPlanDto {
   @IsNumber()
@@ -97,19 +97,14 @@ export class FindSubscriptionPlanDto extends PaginationSubscriptionPlanDto {
   @ApiProperty({ description: 'Tìm kiếm theo tên', required: false })
   name?: string;
 
-  @IsBoolean()
   @IsOptional()
   @ApiProperty({ description: 'Lọc theo trạng thái hoạt động', required: false, default: false })
-  // @Transform(({ value }) => {
-  //   if(typeof value === 'boolean') return value;
-  //   if(typeof value === 'string') {
-  //     if(value.toLowerCase() === 'true' || value.toLowerCase() === '1') return true;
-  //     if(value.toLowerCase() === 'false' || value.toLowerCase() === '0') return false;
-  //   }
-  //   console.log('DEBUG DTO isActive raw:', value, typeof value);
-  //   return undefined;
-  // })
-  isActive?: boolean;
+  @Transform(({ value }) => {
+    if(value === 'true') return true;
+    if(value === 'false') return false;
+    return value;
+  })
+  isActive?: string;
 
   @IsEnum(PlanType)
   @IsOptional()

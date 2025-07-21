@@ -14,11 +14,6 @@ export class SubscriptionPaymentCallbackDto {
   @IsOptional()
   userId?: string;
 
-  @ApiProperty({ description: 'ID vendor', required: false })
-  @IsUUID()
-  @IsOptional()
-  vendorId?: string;
-
   @ApiProperty({ description: 'Loại người thanh toán', required: false, enum: PayerType })
   @IsEnum(PayerType)
   @IsOptional()

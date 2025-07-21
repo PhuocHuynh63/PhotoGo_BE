@@ -17,6 +17,7 @@ import { VendorService } from '../vendors/vendor.service';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { Role } from '../roles/entities/role.entity';
 import { SubscriptionService } from './subscription.service';
+import { SubscriptionVendorService } from './subscription-vendor.service';
 
 @Injectable()
 export class SubscriptionPaymentService {
@@ -37,6 +38,7 @@ export class SubscriptionPaymentService {
     private readonly mailService: MailService,
     private readonly userService: UserService,
     private readonly vendorService: VendorService,
+    private readonly subscriptionVendorService: SubscriptionVendorService, // Inject service
     @Inject(forwardRef(() => SubscriptionService))
     private readonly subscriptionService: SubscriptionService,
   ) { }
@@ -49,7 +51,7 @@ export class SubscriptionPaymentService {
   ) {
     const plan = await this.subscriptionPlanRepository.findOne({
       where: { id: planId },
-      relations: ['subscription']
+      relations: ['subscriptions']
     });
     if (!plan) throw new NotFoundException('Không tìm thấy subscription plan');
     if (plan.isActive !== true) throw new BadRequestException('Plan không hợp lệ');
@@ -58,6 +60,7 @@ export class SubscriptionPaymentService {
     let payerType: PayerType;
     if (userId) {
       const user = await this.userService.findOne(userId);
+      console.log('DEBUG user role name:', user.role.name);
       if (user.role.name === 'vendor-owner') payerType = PayerType.VENDOR;
       else payerType = PayerType.CUSTOMER;
     }
@@ -145,7 +148,7 @@ export class SubscriptionPaymentService {
 
   async handlePayOSCallback(callbackData: SubscriptionPaymentCallbackDto) {
 
-    const { orderCode, status, subscriptionPaymentId, cancel, userId, vendorId, payerType } = callbackData;
+    const { orderCode, status, subscriptionPaymentId, cancel, userId, payerType } = callbackData;
 
     // Tìm payment theo subscriptionPaymentId hoặc orderCode
     let payment;
@@ -355,6 +358,28 @@ export class SubscriptionPaymentService {
 
       await this.subscriptionRepository.save(subscription);
 
+      // --- BỔ SUNG: Nếu là vendor-owner (R008), tự động tạo assignment vào subscription-vendor ---
+      if (payerType === PayerType.VENDOR && userId) {
+        // Lấy vendor theo userId
+        const vendor = await this.vendorService.getVendorByUserID(userId);
+        if (vendor) {
+          // Kiểm tra đã có assignment chưa
+          const existingAssignments = await this.subscriptionVendorService.findByVendorId(vendor.id);
+          const hasAssignment = existingAssignments.some(
+            (sv) => sv.planId === subscription.planId && sv.isActive
+          );
+          if (!hasAssignment) {
+            await this.subscriptionVendorService.create({
+              planId: subscription.planId,
+              vendorId: vendor.id,
+              joinedDate: new Date(),
+              isActive: true,
+            });
+          }
+        }
+      }
+      // --- END BỔ SUNG ---
+
       // Schedule renewal reminder if nextBillingAt is set and user exists
       if (subscription.nextBillingAt && subscription.userId && subscription.status === SubscriptionStatus.ACTIVE) {
         try {
@@ -391,9 +416,9 @@ export class SubscriptionPaymentService {
         }
       }
       // Gửi email thông báo thành công cho vendor
-      if (payerType === PayerType.VENDOR && vendorId) {
+      if (payerType === PayerType.VENDOR && subscription.vendorId) {
         try {
-          const vendor = await this.vendorService.findOne(vendorId);
+          const vendor = await this.vendorService.findOne(subscription.vendorId);
           const vendorUser = vendor.user_id;
           const vendorEmail = vendorUser?.email || 'vendor@example.com';
           const vendorName = vendorUser?.fullName || vendor.name || 'Nhà cung cấp';
@@ -429,7 +454,7 @@ export class SubscriptionPaymentService {
       payosStatus: status,
       payerType: payment.payerType,
       userIdAssigned: payerType === PayerType.CUSTOMER ? (userId || null) : null,
-      vendorIdAssigned: payerType === PayerType.VENDOR ? (vendorId || null) : null,
+      vendorIdAssigned: payerType === PayerType.VENDOR ? (invoice.subscription.vendorId || null) : null,
     };
   }
 

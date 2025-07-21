@@ -141,16 +141,37 @@ export class OverviewService {
     const invoices = invoicesResponse.data;
 
     // Filter payments by date range
-    const filteredPayments = payments.filter(payment => {
+    let filteredPayments = payments.filter(payment => {
       const paymentDate = new Date(payment.createdAt);
       return paymentDate >= startDate && paymentDate <= endDate;
     });
 
     // Filter invoices by date range
-    const filteredInvoices = invoices.filter(invoice => {
+    let filteredInvoices = invoices.filter(invoice => {
       const invoiceDate = new Date(invoice.issuedAt);
       return invoiceDate >= startDate && invoiceDate <= endDate;
     });
+
+    // Filter by vendorId/locationId if provided
+    if (query.vendorId) {
+      filteredPayments = filteredPayments.filter(payment => {
+        // payment.invoice?.booking?.location?.vendor?.id hoặc payment.invoice?.booking?.serviceConcept?.servicePackage?.vendorId
+        return (
+          payment.invoice?.booking?.location?.vendor?.id === query.vendorId ||
+          payment.invoice?.booking?.serviceConcept?.servicePackage?.vendorId === query.vendorId
+        );
+      });
+      filteredInvoices = filteredInvoices.filter(invoice => {
+        return (
+          invoice.booking?.location?.vendor?.id === query.vendorId ||
+          invoice.booking?.serviceConcept?.servicePackage?.vendorId === query.vendorId
+        );
+      });
+    }
+    if (query.locationId) {
+      filteredPayments = filteredPayments.filter(payment => payment.invoice?.booking?.locationId === query.locationId);
+      filteredInvoices = filteredInvoices.filter(invoice => invoice.booking?.locationId === query.locationId);
+    }
 
     // Calculate total revenue (sum of all paid payments, excluding refunds)
     const totalRevenue = filteredPayments
@@ -366,19 +387,39 @@ export class OverviewService {
       // Get commission data
       const commissions = await this.commissionService.getCommissionStatistics(startDate, endDate);
 
-      const payments = paymentsResponse.data;
-      const invoices = invoicesResponse.data;
+      let filteredPayments = paymentsResponse.data;
+      let filteredInvoices = invoicesResponse.data;
 
       // Filter by date range
-      const filteredPayments = payments.filter(payment => {
+      filteredPayments = filteredPayments.filter(payment => {
         const paymentDate = new Date(payment.createdAt);
         return paymentDate >= startDate && paymentDate <= endDate;
       });
 
-      const filteredInvoices = invoices.filter(invoice => {
+      filteredInvoices = filteredInvoices.filter(invoice => {
         const invoiceDate = new Date(invoice.issuedAt);
         return invoiceDate >= startDate && invoiceDate <= endDate;
       });
+
+      // Filter by vendorId/locationId if provided
+      if (query.vendorId) {
+        filteredPayments = filteredPayments.filter(payment => {
+          return (
+            payment.invoice?.booking?.location?.vendor?.id === query.vendorId ||
+            payment.invoice?.booking?.serviceConcept?.servicePackage?.vendorId === query.vendorId
+          );
+        });
+        filteredInvoices = filteredInvoices.filter(invoice => {
+          return (
+            invoice.booking?.location?.vendor?.id === query.vendorId ||
+            invoice.booking?.serviceConcept?.servicePackage?.vendorId === query.vendorId
+          );
+        });
+      }
+      if (query.locationId) {
+        filteredPayments = filteredPayments.filter(payment => payment.invoice?.booking?.locationId === query.locationId);
+        filteredInvoices = filteredInvoices.filter(invoice => invoice.booking?.locationId === query.locationId);
+      }
 
       // Create workbook with multiple sheets
       const workbook = new ExcelJS.Workbook();
@@ -644,7 +685,7 @@ export class OverviewService {
     const bookings = bookingsResponse.data;
 
     // Filter bookings by date range
-    const filteredBookings = bookings.filter(booking => {
+    let filteredBookings = bookings.filter(booking => {
       // Kiểm tra nếu booking.date là null hoặc invalid
       if (!booking.date) {
         return false; // Bỏ qua booking không có date
@@ -679,6 +720,19 @@ export class OverviewService {
       
       return bookingDateOnly >= startDateOnly && bookingDateOnly <= endDateOnly;
     });
+
+    // Filter by vendorId/locationId if provided
+    if (query.vendorId) {
+      filteredBookings = filteredBookings.filter(booking => {
+        return (
+          booking.location?.vendor?.id === query.vendorId ||
+          booking.serviceConcept?.servicePackage?.vendorId === query.vendorId
+        );
+      });
+    }
+    if (query.locationId) {
+      filteredBookings = filteredBookings.filter(booking => booking.locationId === query.locationId);
+    }
 
     // Calculate total appointments
     const totalAppointments = filteredBookings.length;
@@ -800,27 +854,31 @@ export class OverviewService {
       // Convert UI date format (DD/MM/YYYY) to system format (YYYY-MM-DD) for processing
       const startDateString = query.startDate ? this.convertDDMMYYYYToYYYYMMDD(query.startDate) : '';
       const endDateString = query.endDate ? this.convertDDMMYYYYToYYYYMMDD(query.endDate) : '';
-      
       const startDate = startDateString ? new Date(startDateString) : new Date(new Date().getFullYear(), 0, 1);
       const endDate = endDateString ? new Date(endDateString) : new Date();
+
+      // Get subscription plans (kéo lên trước)
+      const plans = await this.subscriptionPlanService.findAll({});
+      const planList = plans.data;
 
       // Get all subscriptions
       const subscriptionsResponse = await this.subscriptionService.findAll({
         current: 1,
         pageSize: 1000,
       });
-
-      const subscriptions = subscriptionsResponse.data;
-
+      let filteredSubscriptions = subscriptionsResponse.data;
       // Filter subscriptions by date range (created date)
-      const filteredSubscriptions = subscriptions.filter(subscription => {
+      filteredSubscriptions = filteredSubscriptions.filter(subscription => {
         const subscriptionDate = new Date(subscription.createdAt);
         return subscriptionDate >= startDate && subscriptionDate <= endDate;
       });
-
-      // Get subscription plans
-      const plans = await this.subscriptionPlanService.findAll({});
-      const planList = plans.data;
+      // Filter by vendorId if provided (join qua plan.subscriptionVendors)
+      if (query.vendorId) {
+        const plansOfVendor = planList.filter(plan =>
+          plan.subscriptionVendors && plan.subscriptionVendors.some(v => v.vendorId === query.vendorId)
+        ).map(plan => plan.id);
+        filteredSubscriptions = filteredSubscriptions.filter(sub => plansOfVendor.includes(sub.planId));
+      }
 
       // Calculate basic statistics
       const totalSubscriptions = filteredSubscriptions.length;
@@ -830,13 +888,21 @@ export class OverviewService {
 
       // Calculate revenue from subscription payments - using repository directly
       const subscriptionPayments = await this.subscriptionPaymentService['subscriptionPaymentRepository'].find({
-        relations: ['subscriptionInvoice'],
+        relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
-
-      const filteredPayments = subscriptionPayments.filter(payment => {
+      let filteredPayments = subscriptionPayments.filter(payment => {
         const paymentDate = new Date(payment.createdAt);
         return paymentDate >= startDate && paymentDate <= endDate && payment.status === 'đã hoàn thành';
       });
+      // Filter by vendorId/locationId if provided
+      if (query.vendorId) {
+        const plansOfVendor = planList.filter(plan =>
+          plan.subscriptionVendors && plan.subscriptionVendors.some(v => v.vendorId === query.vendorId)
+        ).map(plan => plan.id);
+        const subscriptionIdsOfVendor = filteredSubscriptions.filter(sub => plansOfVendor.includes(sub.planId)).map(sub => sub.id);
+        filteredPayments = filteredPayments.filter(payment => payment.subscriptionInvoice?.subscription && subscriptionIdsOfVendor.includes(payment.subscriptionInvoice.subscription.id));
+      }
+      // Không filter locationId vì subscription không có location
 
       const totalRevenue = filteredPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
 
@@ -890,7 +956,7 @@ export class OverviewService {
           activeSubscriptions,
           canceledSubscriptions,
           expiredSubscriptions,
-          totalRevenue,
+          totalRevenue: totalRevenue,
           retentionRate,
           churnRate,
           monthlySubscriptions,
@@ -942,46 +1008,51 @@ export class OverviewService {
       // Convert UI date format (DD/MM/YYYY) to system format (YYYY-MM-DD) for processing
       const startDateString = query.startDate ? this.convertDDMMYYYYToYYYYMMDD(query.startDate) : '';
       const endDateString = query.endDate ? this.convertDDMMYYYYToYYYYMMDD(query.endDate) : '';
-      
       const startDate = startDateString ? new Date(startDateString) : new Date(new Date().getFullYear(), 0, 1);
       const endDate = endDateString ? new Date(endDateString) : new Date();
+
+      // Get subscription plans (kéo lên trước)
+      const plans = await this.subscriptionPlanService.findAll({});
+      const planList = plans.data;
 
       // Get all data
       const subscriptionsResponse = await this.subscriptionService.findAll({
         current: 1,
         pageSize: 1000,
       });
-
-      const plans = await this.subscriptionPlanService.findAll({});
-      const planList = plans.data;
-
       const subscriptionPayments = await this.subscriptionPaymentService['subscriptionPaymentRepository'].find({
-        relations: ['subscriptionInvoice'],
+        relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
-
       const subscriptionHistory = await this.subscriptionHistoryService['subscriptionHistoryRepository'].find({
         relations: ['subscription'],
       });
-
-      const subscriptions = subscriptionsResponse.data;
-      const payments = subscriptionPayments;
-      const history = subscriptionHistory;
-
-      // Filter by date range
-      const filteredSubscriptions = subscriptions.filter(subscription => {
+      let filteredSubscriptions = subscriptionsResponse.data;
+      filteredSubscriptions = filteredSubscriptions.filter(subscription => {
         const subscriptionDate = new Date(subscription.createdAt);
         return subscriptionDate >= startDate && subscriptionDate <= endDate;
       });
-
-      const filteredPayments = payments.filter(payment => {
+      if (query.vendorId) {
+        const plansOfVendor = planList.filter(plan =>
+          plan.subscriptionVendors && plan.subscriptionVendors.some(v => v.vendorId === query.vendorId)
+        ).map(plan => plan.id);
+        filteredSubscriptions = filteredSubscriptions.filter(sub => plansOfVendor.includes(sub.planId));
+      }
+      let filteredPayments = subscriptionPayments.filter(payment => {
         const paymentDate = new Date(payment.createdAt);
         return paymentDate >= startDate && paymentDate <= endDate;
       });
+      if (query.vendorId) {
+        const plansOfVendor = planList.filter(plan =>
+          plan.subscriptionVendors && plan.subscriptionVendors.some(v => v.vendorId === query.vendorId)
+        ).map(plan => plan.id);
+        const subscriptionIdsOfVendor = filteredSubscriptions.filter(sub => plansOfVendor.includes(sub.planId)).map(sub => sub.id);
+        filteredPayments = filteredPayments.filter(payment => payment.subscriptionInvoice?.subscription && subscriptionIdsOfVendor.includes(payment.subscriptionInvoice.subscription.id));
+      }
+      // Không filter locationId vì subscription không có location
 
-      const filteredHistory = history.filter(hist => {
-        const historyDate = new Date(hist.createdAt);
-        return historyDate >= startDate && historyDate <= endDate;
-      });
+      const subscriptions = filteredSubscriptions;
+      const payments = filteredPayments;
+      const history = subscriptionHistory;
 
       // Create workbook with multiple sheets
       const workbook = new ExcelJS.Workbook();
@@ -1239,7 +1310,7 @@ export class OverviewService {
 
       // Add history data
       let historyRowNumber = 1;
-      filteredHistory.forEach((hist, index) => {
+      history.forEach((hist, index) => {
         historyRowNumber++;
         historySheet.addRow({
           stt: index + 1,
@@ -1283,10 +1354,10 @@ export class OverviewService {
         pageSize: 1000,
       });
 
-      const bookings = bookingsResponse.data;
+      let filteredBookings = bookingsResponse.data;
 
       // Filter bookings by date range
-      const filteredBookings = bookings.filter(booking => {
+      filteredBookings = filteredBookings.filter(booking => {
         // Xử lý format date DD/MM/YYYY
         let bookingDate;
         if (typeof booking.date === 'string' && (booking.date as string).includes('/')) {
@@ -1305,6 +1376,19 @@ export class OverviewService {
         
         return bookingDate >= startDate && bookingDate <= endDate;
       });
+
+      // Filter by vendorId/locationId if provided
+      if (query.vendorId) {
+        filteredBookings = filteredBookings.filter(booking => {
+          return (
+            booking.location?.vendor?.id === query.vendorId ||
+            booking.serviceConcept?.servicePackage?.vendorId === query.vendorId
+          );
+        });
+      }
+      if (query.locationId) {
+        filteredBookings = filteredBookings.filter(booking => booking.locationId === query.locationId);
+      }
 
       // Create workbook with multiple sheets
       const workbook = new ExcelJS.Workbook();

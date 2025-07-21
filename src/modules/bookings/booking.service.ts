@@ -1742,9 +1742,8 @@ export class BookingService {
       if (!subscriptions.data || subscriptions.data.length === 0) {
         return 0;
       }
-
       // Get all active subscription plans
-      const allPlans = await this.subscriptionPlanService.findAll({ isActive: true });
+      const allPlans = await this.subscriptionPlanService.findAll({ isActive: 'true' });
       const planList = allPlans.data;
 
       if (planList.length === 0) {

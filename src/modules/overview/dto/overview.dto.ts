@@ -3,6 +3,16 @@ import { ApiProperty } from '@nestjs/swagger';
 import { OverviewType } from 'src/constants/overview.enum';
 
 export class OverviewDto {
+  
+  @ApiProperty({
+    description: 'Location ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  locationId?: string;
+
   @ApiProperty({
     description: 'Start date',
     example: '01/01/2025',
@@ -29,6 +39,15 @@ export class OverviewDto {
   @IsOptional()
   @IsEnum(OverviewType)
   type?: OverviewType;
+
+  @ApiProperty({
+    description: 'Vendor ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  vendorId?: string;
 
   // @ApiProperty({
   //   description: 'Category',
