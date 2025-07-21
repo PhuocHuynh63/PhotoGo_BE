@@ -185,7 +185,7 @@ export class SubscriptionPaymentService {
     } else if (orderCode) {
       // Tìm payment theo paymentOSId (orderCode từ PayOS)
       payment = await this.subscriptionPaymentRepository.findOne({
-        where: { paymentOSId: orderCode.toString() },
+        where: { id: orderCode.toString() },
         relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
     }
