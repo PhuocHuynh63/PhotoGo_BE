@@ -74,7 +74,7 @@ export class InvoiceService {
     
     // For invoice display: originalPrice = originPrice + commission (hidden from customer)
     const price = Math.round(originPrice + commissionAmount);
-    const totalAmount = finalPrice; // This is what customer sees
+    // const totalAmount = finalPrice; // This is what customer sees
 
     // --- TÍNH PHÍ PHÁT SINH (RUSH FEE) ---
     // Lấy ngày booking từ booking.date (kiểu Date hoặc string)
@@ -82,10 +82,8 @@ export class InvoiceService {
     if (booking.date) {
       bookingDate = new Date(booking.date);
     }
-    // Gọi bookingService.calculateRushFee
-    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, finalPrice);
-    // --- END RUSH FEE ---
 
+    // --- TÍNH DISCOUNT (VOUCHER) TRÊN FINALPRICE ---
     let discountAmount = 0;
     let voucher = null;
     if (voucherId) {
@@ -110,14 +108,14 @@ export class InvoiceService {
         throw new BadRequestException(`Voucher với ID ${voucherId} không còn hiệu lực`);
       }
 
-      // Apply voucher discount to the total amount (final price that customer sees)
-      if (totalAmount < voucher.minPrice) {
+      // Apply voucher discount to the final price (what customer sees)
+      if (finalPrice < voucher.minPrice) {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
       }
 
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
         const discountValue = Number(voucher.discount_value);
-        discountAmount = Math.round((totalAmount * discountValue) / 100);
+        discountAmount = Math.round((finalPrice * discountValue) / 100);
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
@@ -129,29 +127,30 @@ export class InvoiceService {
       }
     }
 
-    // Calculate final amounts after discount
-    const discountedPrice = Math.round(price - discountAmount + rushFee); // Apply discount to price (origin + commission) + rushFee
-    const discountedTotal = Math.round(totalAmount - discountAmount + rushFee); // Apply discount to total amount + rushFee
-    
-    const feeAmount = rushFee; // Lưu rushFee vào feeAmount
-    const payablePrice = Math.round(discountedTotal); // Final amount customer needs to pay
+    // 1. Tính discountedFinalPrice (giá cuối cùng sau voucher)
+    let discountedFinalPrice = finalPrice - discountAmount;
+    if (discountedFinalPrice < 0) discountedFinalPrice = 0;
 
+    // 2. Tính depositAmount trên discountedFinalPrice
     let depositAmount = 0;
     let remainingAmount = 0;
     if (booking.depositType === BookingDepositType.PERCENTAGE) {
       if (booking.depositAmount < 30) {
         throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
       }
-      depositAmount = Math.round(payablePrice * (booking.depositAmount / 100));
-      remainingAmount = payablePrice - depositAmount;
+      depositAmount = Math.round(discountedFinalPrice * (booking.depositAmount / 100));
+      remainingAmount = discountedFinalPrice - depositAmount;
     } else {
       depositAmount = Math.round(booking.depositAmount || 0);
-      remainingAmount = payablePrice - depositAmount;
+      remainingAmount = discountedFinalPrice - depositAmount;
     }
 
-    if (depositAmount < 0 || remainingAmount < 0) {
-      throw new BadRequestException('Số tiền đặt cọc và số tiền còn lại phải lớn hơn 0');
-    }
+    // 3. Tính rushFee (feeAmount) luôn trên số tiền đặt cọc gốc (finalPrice * depositPercentage / 100)
+    const rushFeeBase = finalPrice * (booking.depositAmount / 100);
+    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, rushFeeBase);
+
+    // 4. payablePrice = depositAmount + rushFee
+    const payablePrice = depositAmount + rushFee;
 
     // Ensure all amounts are integers for database storage
     depositAmount = Math.round(depositAmount);
@@ -161,11 +160,11 @@ export class InvoiceService {
       ...createInvoiceDto,
       bookingId: booking.id,
       voucherId: voucher?.id || null,
-      originalPrice: price, // This is now origin + commission (hidden from customer)
+      originalPrice: finalPrice, // finalPrice đã bao gồm commission/tax
       discountAmount,
-      discountedPrice,
+      discountedPrice: discountedFinalPrice,
       taxAmount,
-      feeAmount,
+      feeAmount: rushFee,
       payablePrice,
       depositAmount,
       remainingAmount,

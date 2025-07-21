@@ -255,7 +255,7 @@ export class PaymentService {
   
     let amount = 0;
     if (paymentType === PaymentType.DEPOSIT) {
-      amount = invoice.depositAmount;
+      amount = invoice.payablePrice; // Đã bao gồm depositAmount + rushFee
     } else {
       amount = invoice.remainingAmount;
     }
