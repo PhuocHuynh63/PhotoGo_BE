@@ -156,10 +156,10 @@ export class SubscriptionPaymentService {
         orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)),
         amount: Number(invoice.payablePrice), // đảm bảo là số
         description: payerDescription.slice(0, 25), // cắt về 25 ký tự
-        // cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-        // returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-        cancelUrl: `http://localhost:3000/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-        returnUrl: `http://localhost:3000/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+        cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+        returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+        //cancelUrl: `http://localhost:3000/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+        //returnUrl: `http://localhost:3000/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
       });
     } catch (error) {
       this.logger.error('PayOS error:', error);
