@@ -12,6 +12,7 @@ import { VoucherUser } from '../vouchers/entities/voucher-user.entity';
 import { Commission } from '../commission/entities/commission.entity';
 import { MailModule } from 'src/3rdService/mail/mail.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { ReviewModule } from '../reviews/reviews.module';
   
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     AuthModule,
     MailModule,
     SubscriptionModule,
+    ReviewModule,
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService],

@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { SubscriptionInvoice } from './entities/subscription-invoice.entity';
 import { SubscriptionPayment } from './entities/subscription-payment.entity';
 import { PaymentMethod, PaymentStatus, PaymentType, PayerType } from '../../constants/payment.enum';
-import { PayOSService } from '../../3rdService/payos/payos.service';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionStatus, BillingCycle, SubscriptionInvoiceStatus } from '../../constants/subscription.enum';
 import { SubscriptionPaymentCallbackDto } from './dto/subscription-payment-callback.dto';
@@ -18,6 +17,7 @@ import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { Role } from '../roles/entities/role.entity';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionVendorService } from './subscription-vendor.service';
+import PayOS from '@payos/node';
 
 @Injectable()
 export class SubscriptionPaymentService {
@@ -32,7 +32,8 @@ export class SubscriptionPaymentService {
     private readonly subscriptionRepository: Repository<Subscription>,
     @InjectRepository(SubscriptionPlan)
     private readonly subscriptionPlanRepository: Repository<SubscriptionPlan>,
-    private readonly payOSService: PayOSService,
+    // Bỏ payOSService, inject trực tiếp SDK
+    @Inject('PAYOS_CLIENT') private readonly payos: PayOS,
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly mailService: MailService,
@@ -137,13 +138,13 @@ export class SubscriptionPaymentService {
       ? `Thanh toán subscription invoice ${invoice.id} - Khách hàng`
       : `Thanh toán subscription invoice ${invoice.id} - Nhà cung cấp`;
 
-    // Gọi PayOS để tạo link thanh toán
+    // Gọi PayOS SDK để tạo link thanh toán
     let payosResult;
     try {
-      payosResult = await this.payOSService.createPaymentLink({
-        orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)), // Convert UUID to number
-        amount: invoice.payablePrice,
-        description: payerDescription,
+      payosResult = await this.payos.createPaymentLink({
+        orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)),
+        amount: Number(invoice.payablePrice), // đảm bảo là số
+        description: payerDescription.slice(0, 25), // cắt về 25 ký tự
         cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
         returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
       });
@@ -151,10 +152,9 @@ export class SubscriptionPaymentService {
       this.logger.error('PayOS error:', error);
       throw new BadRequestException('Lỗi khi tạo liên kết thanh toán: ' + (error?.message || 'PayOS error'));
     }
-    console.log('DEBUG payosResult:', payosResult);
     // Kiểm tra kết quả trả về từ PayOS
-    const checkoutUrl = payosResult?.data?.checkoutUrl || payosResult?.checkoutUrl;
-    const paymentOSId = payosResult?.data?.paymentId || payosResult?.paymentId;
+    const checkoutUrl = payosResult?.checkoutUrl;
+    const paymentOSId = payosResult?.paymentLinkId;
     if (!checkoutUrl || !paymentOSId) {
       throw new BadRequestException('Không tạo được link thanh toán: ' + (payosResult?.desc || 'Lỗi không xác định từ PayOS'));
     }

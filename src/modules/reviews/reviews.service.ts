@@ -579,4 +579,14 @@ export class ReviewService {
     const averageRating = avgResult?.avg ? Number(avgResult.avg) : 0;
     return averageRating;
   }
+
+  /**
+   * Check if a review exists for a given bookingId
+   * Returns true if exists, false otherwise
+   */
+  async hasReviewForBooking(bookingId: string): Promise<boolean> {
+    if (!bookingId) return false;
+    const count = await this.reviewRepository.count({ where: { bookingId } });
+    return count > 0;
+  }
 }

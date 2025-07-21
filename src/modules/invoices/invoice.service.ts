@@ -19,6 +19,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { BookingService } from '../bookings/booking.service';
 import { SubscriptionStatus } from '../../constants/subscription.enum';
 import { Inject, forwardRef } from '@nestjs/common';
+import { ReviewService } from '../reviews/reviews.service';
 
 @Injectable()
 export class InvoiceService {
@@ -36,6 +37,7 @@ export class InvoiceService {
     private readonly subscriptionService: SubscriptionService,
     @Inject(forwardRef(() => BookingService))
     private readonly bookingService: BookingService, // Inject BookingService
+    private readonly reviewService: ReviewService, // Inject ReviewService
   ) { }
 
   async create(bookingId: string, voucherId: string | undefined, createInvoiceDto: CreateInvoiceDto): Promise<Invoice> {
@@ -217,7 +219,7 @@ export class InvoiceService {
   }
 
   async findAllByUserId(userId: string, paginationDto: FilterInvoiceByUserIdDto): Promise<{
-    data: Invoice[];
+    data: Invoice[] & { isReview: boolean }[];
     pagination: {
       current: number;
       pageSize: number;
@@ -263,14 +265,16 @@ export class InvoiceService {
     const totalPages = Math.ceil(total / pageSizeNum);
 
     // Apply pricing logic to each invoice
-    const processedInvoices = invoices.map((invoice) => {
-      // Nếu đã có các trường giá trị, chỉ trả về luôn
-      // Nếu cần backward compatibility, có thể kiểm tra và chỉ applyPricingLogic nếu thiếu trường
-      return {
-        ...invoice,
-        vendorId: invoice.booking?.serviceConcept?.servicePackage?.vendor?.id,
-      };
-    });
+    const processedInvoices = await Promise.all(
+      invoices.map(async (invoice) => {
+        const hasReview = await this.reviewService.hasReviewForBooking(invoice.bookingId);
+        return {
+          ...invoice,
+          vendorId: invoice.booking?.serviceConcept?.servicePackage?.vendor?.id,
+          isReview: !hasReview, // isReview = false if has review, true otherwise
+        };
+      })
+    );
 
     return {
       data: processedInvoices,
