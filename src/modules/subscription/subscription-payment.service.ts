@@ -81,9 +81,22 @@ export class SubscriptionPaymentService {
     } else if (plan.billingCycle === BillingCycle.YEARLY) {
       price = plan.priceForYear;
     }
-    // Tạo subscription invoice
+    // Tạo subscription mới với status PENDING
+    const now = new Date();
+    const tempEndDate = plan.billingCycle === BillingCycle.MONTHLY ? new Date(now.getTime() + 30*24*60*60*1000) : new Date(now.getTime() + 365*24*60*60*1000);
+    const subscription = this.subscriptionRepository.create({
+      planId: plan.id,
+      billingCycle: plan.billingCycle,
+      status: SubscriptionStatus.PENDING,
+      startDate: now,
+      endDate: tempEndDate,
+      userId: payerType === PayerType.CUSTOMER ? userId : undefined,
+      // vendorId: nếu cần
+    });
+    await this.subscriptionRepository.save(subscription);
+    // Tạo subscription invoice, gán subscriptionId
     const invoice = this.subscriptionInvoiceRepository.create({
-      subscriptionId: plan.subscriptions[0].id,
+      subscriptionId: subscription.id,
       payablePrice: price,
       status: SubscriptionInvoiceStatus.PENDING,
       payerType,
@@ -125,20 +138,32 @@ export class SubscriptionPaymentService {
       : `Thanh toán subscription invoice ${invoice.id} - Nhà cung cấp`;
 
     // Gọi PayOS để tạo link thanh toán
-    const payosResult = await this.payOSService.createPaymentLink({
-      orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)), // Convert UUID to number
-      amount: invoice.payablePrice,
-      description: payerDescription,
-      cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-      returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-    });
-
+    let payosResult;
+    try {
+      payosResult = await this.payOSService.createPaymentLink({
+        orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)), // Convert UUID to number
+        amount: invoice.payablePrice,
+        description: payerDescription,
+        cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+        returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
+      });
+    } catch (error) {
+      this.logger.error('PayOS error:', error);
+      throw new BadRequestException('Lỗi khi tạo liên kết thanh toán: ' + (error?.message || 'PayOS error'));
+    }
+    console.log('DEBUG payosResult:', payosResult);
+    // Kiểm tra kết quả trả về từ PayOS
+    const checkoutUrl = payosResult?.data?.checkoutUrl || payosResult?.checkoutUrl;
+    const paymentOSId = payosResult?.data?.paymentId || payosResult?.paymentId;
+    if (!checkoutUrl || !paymentOSId) {
+      throw new BadRequestException('Không tạo được link thanh toán: ' + (payosResult?.desc || 'Lỗi không xác định từ PayOS'));
+    }
     // Lưu paymentOSId vào payment
-    savedPayment.paymentOSId = payosResult.data?.paymentId || payosResult.paymentId;
+    savedPayment.paymentOSId = paymentOSId;
     await this.subscriptionPaymentRepository.save(savedPayment);
-
     return {
-      paymentLink: payosResult.data?.checkoutUrl || payosResult.checkoutUrl,
+      paymentLink: checkoutUrl,
+      paymentOSId,
       paymentId: savedPayment.id,
       payerType: savedPayment.payerType,
       invoiceId: invoice.id,
@@ -148,7 +173,7 @@ export class SubscriptionPaymentService {
 
   async handlePayOSCallback(callbackData: SubscriptionPaymentCallbackDto) {
 
-    const { orderCode, status, subscriptionPaymentId, cancel, userId, payerType } = callbackData;
+    const { orderCode, status, subscriptionPaymentId, cancel, userId } = callbackData;
 
     // Tìm payment theo subscriptionPaymentId hoặc orderCode
     let payment;
@@ -169,6 +194,17 @@ export class SubscriptionPaymentService {
       throw new NotFoundException('Payment not found');
     }
 
+    // Xác định payerType dựa trên userId (nếu có)
+    let payerType = payment.payerType;
+    if (userId) {
+      const user = await this.userService.findOne(userId);
+      if (user.role && user.role.name === 'vendor-owner') {
+        payerType = PayerType.VENDOR;
+      } else {
+        payerType = PayerType.CUSTOMER;
+      }
+    }
+    console.log('DEBUG payerType:', payerType);
     // Xác định trạng thái thanh toán
     let paymentStatus: PaymentStatus;
     let historyAction: SubscriptionHistoryAction;
@@ -229,9 +265,27 @@ export class SubscriptionPaymentService {
       payment.payerType
     );
 
-    // Nếu thanh toán thành công, cập nhật subscription
+    // Nếu thanh toán thành công, tạo subscription mới nếu chưa có
     if (status === SubscriptionInvoiceStatus.PAID) {
-      const subscription = invoice.subscription;
+      let subscription = invoice.subscription;
+      if (!subscription) {
+        // Tạo subscription mới
+        const plan = await this.subscriptionPlanService.findOne(invoice.planId);
+        subscription = this.subscriptionRepository.create({
+          planId: plan.id,
+          billingCycle: plan.billingCycle,
+          status: SubscriptionStatus.ACTIVE,
+          startDate: new Date(),
+          endDate: plan.billingCycle === BillingCycle.MONTHLY ? new Date(Date.now() + 30*24*60*60*1000) : new Date(Date.now() + 365*24*60*60*1000),
+          userId: payerType === PayerType.CUSTOMER ? userId : undefined,
+          // vendorId: nếu cần
+        });
+        await this.subscriptionRepository.save(subscription);
+        // Cập nhật lại invoice với subscriptionId
+        invoice.subscriptionId = subscription.id;
+        await this.subscriptionInvoiceRepository.save(invoice);
+      }
+
       const oldEndDate = new Date(subscription.endDate);
 
       subscription.status = SubscriptionStatus.ACTIVE;

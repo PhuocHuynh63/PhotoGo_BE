@@ -1506,7 +1506,7 @@ export class BookingService {
 
     if (!activeMemberships.data || activeMemberships.data.length === 0) return false;
 
-    return activeMemberships.data.some(sub => sub.plan?.name?.toLowerCase() === 'membership');
+    return activeMemberships.data.some(sub => sub.plan?.name?.toLowerCase() === 'ultimated');
   }
 
   /**

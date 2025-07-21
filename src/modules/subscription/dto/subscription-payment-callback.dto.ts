@@ -14,10 +14,10 @@ export class SubscriptionPaymentCallbackDto {
   @IsOptional()
   userId?: string;
 
-  @ApiProperty({ description: 'Loại người thanh toán', required: false, enum: PayerType })
-  @IsEnum(PayerType)
-  @IsOptional()
-  payerType?: PayerType;
+  // @ApiProperty({ description: 'Loại người thanh toán', required: false, enum: PayerType })
+  // @IsEnum(PayerType)
+  // @IsOptional()
+  // payerType?: PayerType;
 
   @ApiProperty({ description: 'Trạng thái thanh toán', required: false, enum: SubscriptionInvoiceStatus })
   @IsString()

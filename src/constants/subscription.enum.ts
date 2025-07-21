@@ -1,7 +1,8 @@
 export enum SubscriptionStatus {
   ACTIVE = 'hoạt động',
   CANCELED = 'đã hủy',
-  EXPIRED = 'hết hạn'
+  EXPIRED = 'hết hạn',
+  PENDING = 'chờ thanh toán'
 }
 
 export enum BillingCycle {

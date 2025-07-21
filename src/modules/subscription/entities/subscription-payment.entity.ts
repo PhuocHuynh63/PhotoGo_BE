@@ -14,7 +14,7 @@ export class SubscriptionPayment {
   @Column({ type: 'uuid', name: 'subscription_invoice_id' })
   subscriptionInvoiceId: string;
 
-  @Column({ type: 'integer' })
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
 
   @Column({ type: 'varchar', length: 100, nullable: true, name: 'paymentos_id' })
