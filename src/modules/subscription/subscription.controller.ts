@@ -91,12 +91,12 @@ export class SubscriptionController {
   @Public()
   @ApiOperation({ summary: 'Callback từ PayOS sau khi thanh toán (legacy)' })
   async handlePayOSCallback(
-    @Query() query: { subscriptionPaymentId: string },
+    @Query() query: { subscriptionPaymentId?: string },
     @Body() callbackData: SubscriptionPaymentCallbackDto
   ) {
     return await this.subscriptionPaymentService.handlePayOSCallback({
       ...callbackData,
-      subscriptionPaymentId: query.subscriptionPaymentId
+      subscriptionPaymentId: query.subscriptionPaymentId || callbackData.subscriptionPaymentId
     });
   }
 

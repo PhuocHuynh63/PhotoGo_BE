@@ -19,6 +19,17 @@ import { SubscriptionService } from './subscription.service';
 import { SubscriptionVendorService } from './subscription-vendor.service';
 import PayOS from '@payos/node';
 
+// Helper: Chuyển đổi an toàn sang ISO string
+function toISOStringSafe(date: any) {
+  if (!date) return null;
+  if (date instanceof Date) return date.toISOString();
+  try {
+    return new Date(date).toISOString();
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class SubscriptionPaymentService {
   private readonly logger = new Logger(SubscriptionPaymentService.name);
@@ -174,7 +185,7 @@ export class SubscriptionPaymentService {
   async handlePayOSCallback(callbackData: SubscriptionPaymentCallbackDto) {
 
     const { orderCode, status, subscriptionPaymentId, cancel, userId } = callbackData;
-
+    console.log('DEBUG callbackData:', callbackData);
     // Tìm payment theo subscriptionPaymentId hoặc orderCode
     let payment;
     if (subscriptionPaymentId) {
@@ -182,12 +193,12 @@ export class SubscriptionPaymentService {
         where: { id: subscriptionPaymentId },
         relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
-    } else if (orderCode) {
-      // Tìm payment theo paymentOSId (orderCode từ PayOS)
-      payment = await this.subscriptionPaymentRepository.findOne({
-        where: { id: orderCode.toString() },
-        relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
-      });
+    // } else if (orderCode) {
+    //   // Tìm payment theo paymentOSId (orderCode từ PayOS)
+    //   payment = await this.subscriptionPaymentRepository.findOne({
+    //     where: { paymentOSId: orderCode.toString() },
+    //     relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
+    //   });
     }
 
     if (!payment) {
@@ -366,8 +377,8 @@ export class SubscriptionPaymentService {
 
               planDuration: extensionDays,
               planPrice: planPrice,
-              startDate: subscription.startDate.toISOString(),
-              endDate: newEndDate.toISOString(),
+              startDate: toISOStringSafe(subscription.startDate),
+              endDate: toISOStringSafe(newEndDate),
               billingCycle: subscription.billingCycle,
               status: subscription.status,
               paymentId: payment.id,
@@ -394,12 +405,12 @@ export class SubscriptionPaymentService {
               planDescription: plan.description,
               planDuration: extensionDays,
               planPrice: planPrice,
-              oldEndDate: oldEndDate.toISOString(),
-              newEndDate: newEndDate.toISOString(),
+              oldEndDate: toISOStringSafe(oldEndDate),
+              newEndDate: toISOStringSafe(newEndDate),
               extensionDays: extensionDays,
               billingCycle: subscription.billingCycle,
-              lastBilledAt: subscription.lastBilledAt.toISOString(),
-              nextBillingAt: subscription.nextBillingAt.toISOString(),
+              lastBilledAt: toISOStringSafe(subscription.lastBilledAt),
+              nextBillingAt: toISOStringSafe(subscription.nextBillingAt),
 
 
               // Thông tin thanh toán
