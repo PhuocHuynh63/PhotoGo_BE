@@ -1554,22 +1554,20 @@ export class BookingService {
       throw new BadRequestException('Tỷ lệ đặt cọc phải từ 30% đến 100%');
     }
 
-    // --- TÍNH PHÍ PHÁT SINH (RUSH FEE) ---
     // Lấy ngày booking từ DTO
     const bookingDateStr = getDiscountAmountDto.date;
     let bookingDate: Date = null;
     if (bookingDateStr) {
       bookingDate = new Date(this.convertDateFormat(bookingDateStr));
     }
-    // Gọi hàm calculateRushFee
-    const rushFee = await this.calculateRushFee(userId, bookingDate, finalPrice);
-    // --- END RUSH FEE ---
 
-    // If no voucher, return calculation based on final price
+    // Nếu không có voucher
     if (!getDiscountAmountDto.voucherId) {
       const depositAmount = (finalPrice * depositPercentage / 100);
+      // Rush fee tính trên depositAmount
+      const rushFee = await this.calculateRushFee(userId, bookingDate, depositAmount);
       const remainingAmount = finalPrice - depositAmount;
-      const totalPayable = finalPrice + rushFee;
+      const totalPayable = depositAmount + rushFee;
       return {
         discount: 0,
         depositAmount: Math.round(depositAmount),
@@ -1664,14 +1662,17 @@ export class BookingService {
       discountedFinalPrice = 0;
     }
 
-    // 9. Calculate deposit amount based on final price
+    // 9. Calculate deposit amount based on discounted final price
     const depositAmount = (discountedFinalPrice * depositPercentage / 100);
+
+    // Rush fee tính trên depositAmount
+    const rushFee = await this.calculateRushFee(userId, bookingDate, depositAmount);
 
     // 10. Calculate remaining amount
     const remainingAmount = discountedFinalPrice - depositAmount;
 
-    // 11. Tổng tiền phải trả (cộng rushFee)
-    const totalPayable = discountedFinalPrice + rushFee;
+    // 11. Tổng tiền phải trả (cộng rushFee vào depositAmount)
+    const totalPayable = depositAmount + rushFee;
 
     return {
       discount: Math.round(discountAmount),
