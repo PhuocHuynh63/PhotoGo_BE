@@ -373,7 +373,7 @@ export class UserService {
   async findOne(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['role'],
+      relations: ['role', 'subscription', 'subscription.plan'],
     });
     if (!user) {
       throw new NotFoundException(`Người dùng với ID ${id} không tồn tại`);
