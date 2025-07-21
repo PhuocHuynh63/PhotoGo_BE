@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { OverviewType } from 'src/constants/overview.enum';
+import { OverviewType, AdminStatisticsType } from 'src/constants/overview.enum';
 
 export class OverviewDto {
   
@@ -66,4 +66,20 @@ export class OverviewDto {
   // @IsOptional()
   // @IsString()
   // status?: string;
+} 
+
+// Placeholder for admin overview statistics DTO
+// export { AdminStatisticsType };
+export class AdminOverviewDto {
+  @ApiProperty({
+    enum: AdminStatisticsType,
+    description: 'Loại thống kê',
+    example: AdminStatisticsType.ALL,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(AdminStatisticsType)
+  type?: AdminStatisticsType;
+  // Add properties for admin-level statistics here
+  // Example: global date range, filters, etc.
 } 

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { OverviewService } from './overview.service';
-import { OverviewDto } from './dto/overview.dto';
+import { OverviewDto, AdminOverviewDto } from './dto/overview.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/decorator/custom';
 
@@ -25,5 +25,11 @@ export class OverviewController {
   @Get('dashboard')
   async getDashboardData() {
     return this.overviewService.getDashboardData();
+  }
+
+  @Get('admin-statistics')
+  @Public()
+  async getAdminStatistics(@Query() query: AdminOverviewDto) {
+    return this.overviewService.getAdminStatistics(query);
   }
 } 

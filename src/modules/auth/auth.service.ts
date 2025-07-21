@@ -11,7 +11,7 @@ import { CartService } from 'src/modules/carts/cart.service';
 import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 import { CampaignService } from 'src/modules/campaign/campaign.service';
 import { NotificationService } from 'src/modules/notifications/notification.service';
-
+import { PointService } from 'src/modules/points/point.service';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -24,6 +24,7 @@ export class AuthService {
     private readonly wishlistService: WishlistService,
     private readonly campaignService: CampaignService,
     private readonly notificationService: NotificationService,
+    private readonly pointService: PointService,
   ) { }
 
   //#region Validate User
@@ -137,6 +138,11 @@ export class AuthService {
       this.logger.warn(`Không thể thêm user ${user.id} vào welcome campaign: ${error.message}`);
       // Không throw error để không ảnh hưởng đến quá trình kích hoạt tài khoản
     }
+    // create point for user
+    await this.pointService.create({
+      user_id: user.id,
+      balance: 0,
+    });
 
     return await this.userService.activeAccount(emailLower)
   }

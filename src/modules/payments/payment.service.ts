@@ -571,7 +571,15 @@ export class PaymentService {
     }
 
     // handle point
-    const points = booking?.user?.points;
+    let points = booking?.user?.points;
+    const userId = booking?.user?.id;
+    const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
+    // Nếu chưa có point record cho user thì tạo mới
+    if ((!points || points.length === 0) && userId) {
+      const newPoint = this.pointRepository.create({ user: booking.user, balance: 0 });
+      await this.pointRepository.save(newPoint);
+      points = [newPoint];
+    }
     if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
       // Tính phần trăm đặt cọc
       const depositPercent = booking.depositAmount;
@@ -584,6 +592,8 @@ export class PaymentService {
         ) {
           earnedPoint -= 5;
         }
+        // Áp dụng multiplier nếu có
+        earnedPoint = earnedPoint * userMultiplier;
         // Nếu >= 70% hoặc không phải dạng phần trăm thì nhận full điểm
         point.balance += Math.round(earnedPoint);
         await this.pointRepository.save(point);

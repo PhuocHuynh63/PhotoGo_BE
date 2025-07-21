@@ -15,6 +15,7 @@ import { CartModule } from 'src/modules/carts/cart.module';
 import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
 import { CampaignModule } from 'src/modules/campaign/campaign.module';
 import { NotificationModule } from 'src/modules/notifications/notification.module';
+import { PointModule } from 'src/modules/points/point.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { NotificationModule } from 'src/modules/notifications/notification.modul
     WishlistModule,
     forwardRef(() => CampaignModule),
     forwardRef(() => NotificationModule),
+    forwardRef(() => PointModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy, JwtAuthGuard, RolesGuard],

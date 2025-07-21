@@ -286,6 +286,19 @@ export class SubscriptionPaymentService {
         await this.subscriptionInvoiceRepository.save(invoice);
       }
 
+      // --- BỔ SUNG: Nếu là CUSTOMER và có userId, cập nhật multiplier ---
+      if (payerType === PayerType.CUSTOMER && userId) {
+        try {
+          const user = await this.userService.findOne(userId);
+          if (user) {
+            user.multiplier = 1.5;
+            await this.userService.update(user.id, { multiplier: 1.5 });
+          }
+        } catch (err) {
+          this.logger.error(`Không thể cập nhật multiplier cho user: ${userId} - ${err.message}`);
+        }
+      }
+
       const oldEndDate = new Date(subscription.endDate);
 
       subscription.status = SubscriptionStatus.ACTIVE;

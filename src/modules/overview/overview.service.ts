@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import { OverviewDto } from './dto/overview.dto';
+import { AdminOverviewDto } from './dto/overview.dto';
 import { PaymentService } from '../payments/payment.service';
 import { InvoiceService } from '../invoices/invoice.service';
 import { BookingService } from '../bookings/booking.service';
@@ -9,10 +10,12 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
 import { SubscriptionPaymentService } from '../subscription/subscription-payment.service';
 import { SubscriptionHistoryService } from '../subscription/subscription-history.service';
+import { SubscriptionVendorService } from '../subscription/subscription-vendor.service';
 import { BookingStatus } from '../../constants/booking.enum';
 import * as ExcelJS from 'exceljs';
-import { OverviewType } from 'src/constants/overview.enum';
+import { OverviewType, AdminStatisticsType } from 'src/constants/overview.enum';
 import { SubscriptionStatus, BillingCycle, PlanType } from '../../constants/subscription.enum';
+import { In, Between } from 'typeorm';
 
 @Injectable()
 export class OverviewService {
@@ -25,6 +28,7 @@ export class OverviewService {
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionPaymentService: SubscriptionPaymentService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
+    private readonly subscriptionVendorService: SubscriptionVendorService,
   ) {}
 
   /**
@@ -107,7 +111,143 @@ export class OverviewService {
       };
     }
 
+  async getAdminStatistics(query: AdminOverviewDto) {
+    if (!query.type || query.type === AdminStatisticsType.ALL || query.type === AdminStatisticsType.COMMISSION) {
+      return this.getAdminCommissionStatistics(query);
+    }
+    if (query.type === AdminStatisticsType.STUDIO_PACKAGE) {
+      return this.getAdminStudioSubscriptionStatistics(query);
+    }
+    if (query.type === AdminStatisticsType.USER_PACKAGE) {
+      return this.getAdminUserSubscriptionStatistics(query);
+    }
+    // TODO: Xử lý các loại khác (Gói Studio, Gói User, Thanh toán, Hoàn tiền)
+    return {
+      message: 'Admin statistics endpoint - implementation pending',
+      query,
+    };
+  }
 
+  private async getAdminCommissionStatistics(query: AdminOverviewDto) {
+    // Lấy ngày đầu năm và cuối năm hiện tại
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), 0, 1);
+    const endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+
+    // Lọc booking theo các trạng thái đã thanh toán, đã xác nhận, đang thực hiện, đã hoàn thành trong năm
+    const validStatuses = [
+      BookingStatus.PAID,
+      BookingStatus.CONFIRMED,
+      BookingStatus.PROGRESSING,
+      BookingStatus.COMPLETED,
+    ];
+    const allBookings = await this.bookingService['bookingRepository'].find({
+      where: {
+        status: In(validStatuses),
+        date: Between(startDate, endDate),
+      },
+      relations: ['serviceConcept'],
+    });
+
+    // Lấy tất cả commission, map theo serviceConceptId
+    const commissions = await this.commissionService.findAll();
+    const commissionMap = new Map();
+    commissions.forEach(c => commissionMap.set(c.serviceConceptId, c));
+
+    // Tính tổng hoa hồng và tổng booking chỉ với booking COMPLETED
+    const completedBookings = allBookings.filter(b => b.status === BookingStatus.COMPLETED);
+    let totalCommission = 0;
+    for (const booking of completedBookings) {
+      const commission = commissionMap.get(booking.serviceConceptId);
+      if (!commission) continue;
+      const commissionAmount = commission.commissionAmount || 0;
+      totalCommission += commissionAmount;
+    }
+    const totalBookings = completedBookings.length;
+
+    // Format số booking
+    const totalBookingsFormatted = totalBookings.toLocaleString('en-US');
+    // Format hoa hồng rút gọn
+    const totalCommissionShort = totalCommission >= 1_000_000 ? `${Math.round(totalCommission / 1_000_000)} Tr đ` : `${totalCommission.toLocaleString('en-US')} đ`;
+
+    // Thống kê hoa hồng từng tháng
+    const monthlyCommission = Array(12).fill(0);
+
+    // Khởi tạo breakdown cho từng status
+    const statusBreakdown = {
+      [BookingStatus.PAID]: { totalBookings: 0, totalCommission: 0 },
+      [BookingStatus.CONFIRMED]: { totalBookings: 0, totalCommission: 0 },
+      [BookingStatus.PROGRESSING]: { totalBookings: 0, totalCommission: 0 },
+      [BookingStatus.COMPLETED]: { totalBookings: 0, totalCommission: 0 },
+    };
+
+    for (const booking of allBookings) {
+      const commission = commissionMap.get(booking.serviceConceptId);
+      if (!commission) continue;
+      const commissionAmount = commission.commissionAmount || 0;
+      // Tính theo tháng
+      const bookingDate = new Date(booking.date);
+      const monthIdx = bookingDate.getMonth(); // 0-11
+      monthlyCommission[monthIdx] += commissionAmount;
+      // Breakdown theo status
+      if (statusBreakdown[booking.status]) {
+        statusBreakdown[booking.status].totalBookings++;
+        statusBreakdown[booking.status].totalCommission += commissionAmount;
+      }
+    }
+
+    // Làm tròn breakdown
+    Object.values(statusBreakdown).forEach(bd => {
+      bd.totalCommission = Math.round(bd.totalCommission);
+    });
+
+    // Tính tổng doanh thu từng tháng để tính rate
+    const monthlyRevenue = Array(12).fill(0);
+    for (const booking of allBookings) {
+      const bookingDate = new Date(booking.date);
+      const monthIdx = bookingDate.getMonth();
+      const originPrice = parseFloat(booking.serviceConcept?.price as any) || 0;
+      monthlyRevenue[monthIdx] += originPrice;
+    }
+    const totalRevenue = monthlyRevenue.reduce((a, b) => a + b, 0);
+    const commissionRate = totalRevenue > 0 ? Math.round((totalCommission / totalRevenue) * 100) : 0;
+
+    // Chuẩn hóa monthlyCommission response
+    let prevCommission = 0;
+    const monthlyCommissionArr = monthlyCommission.map((commission, idx) => {
+      const revenue = monthlyRevenue[idx];
+      const rate = revenue > 0 ? Math.round((commission / revenue) * 100) : 0;
+      const growthRate = prevCommission > 0 ? Math.round(((commission - prevCommission) / prevCommission) * 100) : 0;
+      const result = { month: idx + 1, commission: Math.round(commission), rate, growthRate };
+      prevCommission = commission;
+      return result;
+    });
+
+    // Chuẩn hóa statusBreakdown response
+    const statusArr = Object.entries(statusBreakdown).map(([status, bd]) => {
+      // Tính tổng revenue cho status này
+      const revenue = allBookings.filter(b => b.status === status).reduce((sum, b) => sum + (parseFloat(b.serviceConcept?.price as any) || 0), 0);
+      const rate = revenue > 0 ? Math.round((bd.totalCommission / revenue) * 100) : 0;
+      return {
+        status,
+        totalBookings: bd.totalBookings,
+        totalCommission: bd.totalCommission,
+        rate,
+      };
+    });
+
+    return {
+      summary: {
+        totalBookings,
+        totalBookingsFormatted,
+        totalCommission: Math.round(totalCommission),
+        totalCommissionShort,
+        commissionRate,
+      },
+      monthlyCommission: monthlyCommissionArr,
+      statusBreakdown: statusArr,
+    };
+  }
 
   async getDashboardData() {
     return {
@@ -1558,5 +1698,111 @@ export class OverviewService {
         error: error.message,
       });
     }
+  }
+
+  private async getAdminStudioSubscriptionStatistics(query: AdminOverviewDto) {
+    // 1. Lấy tất cả plan có planType === 'nhà cung cấp'
+    const planRes = await this.subscriptionPlanService.findAll({ planType: PlanType.VENDOR, pageSize: 1000 });
+    const studioPlans = planRes.data;
+    const studioPlanIds = studioPlans.map(p => p.id);
+
+    // 2. Lấy tất cả subscription vendor có planId thuộc các plan này
+    // (Giả sử có thể lấy hết, nếu nhiều thì cần phân trang)
+    const allVendors = await this.subscriptionVendorService.findAll();
+    const studioVendors = allVendors.filter(v => studioPlanIds.includes(v.planId));
+
+    // 3. Tính toán
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const monthlyCount = Array(12).fill(0);
+    const statusBreakdown: Record<string, { totalVendors: number }> = {};
+    let totalRevenue = 0;
+    let totalVendors = studioVendors.length;
+
+    for (const vendor of studioVendors) {
+      // Tính theo tháng
+      const joinedDate = new Date(vendor.joinedDate);
+      if (joinedDate.getFullYear() === currentYear) {
+        monthlyCount[joinedDate.getMonth()]++;
+      }
+      // Tính breakdown theo trạng thái
+      const status = vendor.isActive ? 'active' : 'inactive';
+      if (!statusBreakdown[status]) statusBreakdown[status] = { totalVendors: 0 };
+      statusBreakdown[status].totalVendors++;
+      // Tính doanh thu (giả sử lấy giá tháng đầu tiên của plan)
+      const plan = studioPlans.find(p => p.id === vendor.planId);
+      if (plan) {
+        totalRevenue += Number(plan.priceForMonth || 0);
+      }
+    }
+
+    // Format
+    const totalVendorsFormatted = totalVendors.toLocaleString('en-US');
+    const totalRevenueShort = totalRevenue >= 1_000_000 ? `${Math.round(totalRevenue / 1_000_000)} Tr đ` : `${totalRevenue.toLocaleString('en-US')} đ`;
+
+    // Chuẩn hóa monthly
+    const monthlyArr = monthlyCount.map((count, idx) => ({ month: idx + 1, newVendors: count }));
+    // Chuẩn hóa statusBreakdown
+    const statusArr = Object.entries(statusBreakdown).map(([status, bd]) => ({ status, totalVendors: bd.totalVendors }));
+
+    // 4. Breakdown doanh thu theo tháng và trạng thái
+    const monthlyRevenue = Array(12).fill(0);
+    const monthlyGrowth = Array(12).fill(0);
+    const statusRevenue: Record<string, number> = {};
+    const statusRate: Record<string, number> = {};
+    let prevRevenue = 0;
+    for (const vendor of studioVendors) {
+      const plan = studioPlans.find(p => p.id === vendor.planId);
+      const revenue = plan ? Number(plan.priceForMonth || 0) : 0;
+      // Theo tháng
+      const joinedDate = new Date(vendor.joinedDate);
+      if (joinedDate.getFullYear() === currentYear) {
+        monthlyRevenue[joinedDate.getMonth()] += revenue;
+      }
+      // Theo trạng thái
+      const status = vendor.isActive ? 'active' : 'inactive';
+      if (!statusRevenue[status]) statusRevenue[status] = 0;
+      statusRevenue[status] += revenue;
+    }
+    // Tính growth rate theo tháng
+    for (let i = 0; i < 12; i++) {
+      if (i === 0) {
+        monthlyGrowth[i] = 0;
+      } else {
+        monthlyGrowth[i] = monthlyRevenue[i - 1] > 0 ? Math.round(((monthlyRevenue[i] - monthlyRevenue[i - 1]) / monthlyRevenue[i - 1]) * 100) : 0;
+      }
+    }
+    // Tính rate theo trạng thái
+    const totalRevenueAll = monthlyRevenue.reduce((a, b) => a + b, 0);
+    Object.keys(statusRevenue).forEach(status => {
+      statusRate[status] = totalRevenueAll > 0 ? Math.round((statusRevenue[status] / totalRevenueAll) * 100) : 0;
+    });
+    // // Chuẩn hóa monthly
+    // const monthlyArr = monthlyRevenue.map((revenue, idx) => ({ month: idx + 1, revenue: Math.round(revenue), growthRate: monthlyGrowth[idx] }));
+    // // Chuẩn hóa statusBreakdown
+    // const statusArr = Object.entries(statusBreakdown).map(([status, bd]) => ({ status, totalVendors: bd.totalVendors, revenue: Math.round(statusRevenue[status] || 0), rate: statusRate[status] || 0 }));
+    return {
+      summary: {
+        totalVendors,
+        totalVendorsFormatted,
+        totalRevenue: Math.round(totalRevenue),
+        totalRevenueShort,
+      },
+      monthly: monthlyArr,
+      statusBreakdown: statusArr,
+    };
+  }
+
+  private async getAdminUserSubscriptionStatistics(query: AdminOverviewDto) {
+    // TODO: Thống kê user đăng ký gói User
+    return {
+      summary: {
+        totalUsers: 0,
+        totalRevenue: 0,
+        subscriptionRate: 0,
+      },
+      monthly: [],
+      statusBreakdown: [],
+    };
   }
 } 

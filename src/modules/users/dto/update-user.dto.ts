@@ -56,4 +56,13 @@ export class UpdateUserDto {
     })
     phoneNumber?: string;
 
+    @IsOptional()
+    @ApiProperty({
+        example: 1.5,
+        description: 'Hệ số nhân cho điểm thưởng',
+        required: false,
+        type: Number,
+    })
+    multiplier?: number;
+
 }

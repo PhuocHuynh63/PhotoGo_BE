@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Subscription } from '../entities/subscription.entity';
 import { User } from '../../users/entities/user.entity';
 import { SubscriptionStatus } from '../../../constants/subscription.enum';
+import { UserService } from '../../users/user.service';
 
 export interface SubscriptionReminderJobData {
     subscriptionId: string;
@@ -27,6 +28,7 @@ export class SubscriptionProcessor {
         private readonly subscriptionRepository: Repository<Subscription>,
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
+        private readonly userService: UserService, // Inject UserService
     ) { }
 
     /*
@@ -125,8 +127,13 @@ export class SubscriptionProcessor {
 
                     await this.subscriptionRepository.save(subscription);
 
-                    // Send expiry notification
+                    // Reset user multiplier if user exists
                     if (subscription.user) {
+                        try {
+                            await this.userService.update(subscription.user.id, { multiplier: 1.0 });
+                        } catch (err) {
+                            this.logger.error(`Không thể reset multiplier cho user: ${subscription.user.id} - ${err.message}`);
+                        }
                         await this.notificationService.notifySubscriptionExpired(
                             subscription.user,
                             subscription
