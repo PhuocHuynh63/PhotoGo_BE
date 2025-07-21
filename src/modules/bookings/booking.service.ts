@@ -1564,8 +1564,9 @@ export class BookingService {
     // Nếu không có voucher
     if (!getDiscountAmountDto.voucherId) {
       const depositAmount = (finalPrice * depositPercentage / 100);
-      // Rush fee tính trên depositAmount
-      const rushFee = await this.calculateRushFee(userId, bookingDate, depositAmount);
+      // Rush fee luôn tính trên số tiền đặt cọc gốc
+      const rushFeeBase = finalPrice * depositPercentage / 100;
+      const rushFee = await this.calculateRushFee(userId, bookingDate, rushFeeBase);
       const remainingAmount = finalPrice - depositAmount;
       const totalPayable = depositAmount + rushFee;
       return {
@@ -1665,8 +1666,9 @@ export class BookingService {
     // 9. Calculate deposit amount based on discounted final price
     const depositAmount = (discountedFinalPrice * depositPercentage / 100);
 
-    // Rush fee tính trên depositAmount
-    const rushFee = await this.calculateRushFee(userId, bookingDate, depositAmount);
+    // Rush fee luôn tính trên số tiền đặt cọc gốc (finalPrice * depositPercentage / 100)
+    const rushFeeBase = finalPrice * depositPercentage / 100;
+    const rushFee = await this.calculateRushFee(userId, bookingDate, rushFeeBase);
 
     // 10. Calculate remaining amount
     const remainingAmount = discountedFinalPrice - depositAmount;
