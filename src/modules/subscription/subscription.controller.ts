@@ -46,16 +46,11 @@ export class SubscriptionController {
   @ApiOperation({ summary: 'Tạo link thanh toán cho subscription invoice' })
   @ApiResponse({ status: 201, description: 'Tạo thành công' })
   async createPaymentLink(@Body() createPaymentLinkDto: CreatePaymentLinkDto) {
-    const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
+    return await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
       createPaymentLinkDto.planId,
       createPaymentLinkDto.type,
       createPaymentLinkDto.userId,
     );
-    return {
-      statusCode: 201,
-      message: '',
-      data: result, // Đảm bảo trả về đầy đủ các trường, bao gồm paymentLink
-    };
   }
 
   // @Post('pay')
