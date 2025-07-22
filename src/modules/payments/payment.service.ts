@@ -233,13 +233,7 @@ export class PaymentService {
       throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${invoiceId}`);
     }
 
-    // --- KIỂM TRA QUAN TRỌNG ---
-    // 1. Không cho tạo link thanh toán nếu hóa đơn đã hoàn tất hoặc đã bị hủy.
-    if (invoice.status === InvoiceStatus.PAID || invoice.status === InvoiceStatus.CANCELLED) {
-      throw new ConflictException(`Hóa đơn này đã được thanh toán đầy đủ hoặc đã bị hủy.`);
-    }
-
-    // 2. Kiểm tra xem khoản thanh toán cụ thể này đã được trả chưa.
+    // Check if payment already exists
     const existingPayment = await this.paymentRepository.findOne({
       where: {
         invoiceId,
@@ -248,69 +242,60 @@ export class PaymentService {
       }
     });
     if (existingPayment) {
-      throw new ConflictException(`Khoản thanh toán (${paymentType}) cho hóa đơn này đã được hoàn tất.`);
+      throw new ConflictException(`Đã tồn tại thanh toán ${paymentType} cho hóa đơn này`);
     }
 
-    // 3. (LOGIC HIỆN TẠI - RẤT TỐT) Kiểm tra slot trước khi cho thanh toán cọc.
+    // NEW: Pre-payment validation - check slot availability before creating payment link
     if (paymentType === PaymentType.DEPOSIT) {
-      // Giả sử isSlotStillAvailable là một phương thức private hoặc protected, truy cập qua this
       const isSlotAvailable = await this.bookingService['isSlotStillAvailable'](invoice.booking.id);
       if (!isSlotAvailable) {
-        // Cập nhật trạng thái booking và invoice thành CANCELLED để người dùng không thử lại
-        await this.bookingRepository.update(invoice.booking.id, { status: BookingStatus.CANCELLED });
-        await this.invoiceRepo.update(invoice.id, { status: InvoiceStatus.CANCELLED });
-        throw new BadRequestException('Slot thời gian không còn khả dụng và đơn hàng của bạn đã bị hủy. Vui lòng đặt lại.');
+        throw new BadRequestException('Slot thời gian không còn khả dụng. Vui lòng chọn slot khác.');
       }
     }
 
-    // --- XÁC ĐỊNH SỐ TIỀN VÀ MÔ TẢ THANH TOÁN ---
     let amount = 0;
-    let description = '';
-
     if (paymentType === PaymentType.DEPOSIT) {
-      // Lần thanh toán đầu tiên bao gồm tiền cọc (depositAmount) và phí phát sinh (feeAmount/rushFee).
-      amount = invoice.payablePrice;
-      description = `Thanh toan coc cho don hang #${invoice.booking.id}`;
-    } else { // Giả sử là thanh toán phần còn lại (REMAINING)
-      // Lần thanh toán thứ hai là số tiền dịch vụ còn lại.
+      amount = invoice.payablePrice; // Đã bao gồm depositAmount + rushFee
+    } else {
       amount = invoice.remainingAmount;
-      description = `Thanh toan phan con lai cho don hang #${invoice.booking.id}`;
     }
 
     if (amount <= 0) {
-      // Trường hợp này có thể xảy ra nếu voucher 100% và không có phí gấp.
-      // Cần xử lý nghiệp vụ ở đây, ví dụ: tự động cập nhật trạng thái PAID.
-      // Tạm thời ném lỗi để tránh tạo link 0 đồng.
-      throw new BadRequestException('Số tiền thanh toán phải lớn hơn 0. Không thể tạo liên kết thanh toán.');
+      throw new BadRequestException('Số tiền thanh toán không hợp lệ');
     }
 
-    // --- CHUẨN BỊ DỮ LIỆU CHO PAYOS ---
-    const orderCode = parseInt(`${Date.now()}`); // PayOS yêu cầu orderCode là number. Dùng timestamp là đủ unique.
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
-    const expiredAt = Math.floor(Date.now() / 1000) + 15 * 60; // Hết hạn sau 15 phút
+    const serviceConcept = invoice.booking?.serviceConcept;
+    const timestamp = Date.now();
+    const orderCode = parseInt(`${timestamp}${paymentType === PaymentType.DEPOSIT ? '1' : '2'}`);
+    const description = `PG#${orderCode}`;
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
 
     const paymentLinkData = {
       orderCode,
       amount,
       description,
+      returnUrl: `https://photogo.id.vn/payment/successful?paymentId=${orderCode}&status=success`,
+      cancelUrl: `https://photogo.id.vn/payment/error?paymentId=${orderCode}&status=error`,
+      webhookUrl: this.configService.get<string>('PAYOS_WEBHOOK_URL'),
       buyerName,
-      items: [{
-        name: invoice.booking?.serviceConcept?.name || 'Dịch vụ PhotoGo',
-        quantity: 1,
-        price: amount,
-      }],
-      cancelUrl: `https://photogo.id.vn/payment/cancel?invoiceId=${invoice.id}`,
-      returnUrl: `https://photogo.id.vn/payment/success?invoiceId=${invoice.id}`,
-      expiredAt,
+      items: [
+        {
+          name: serviceConcept?.name || 'Dịch vụ không xác định',
+          quantity: 1,
+          price: amount,
+        },
+      ],
+      expiredAt, // Unix timestamp (giây)
     };
 
     try {
       const paymentLinkRes = await this.payos.createPaymentLink(paymentLinkData);
 
-      // Tạo hoặc cập nhật bản ghi thanh toán trong DB
-      // Tốt hơn là tìm một bản ghi PENDING cũ (nếu có) và cập nhật nó
-      // để tránh tạo ra nhiều bản ghi PENDING cho cùng một lần thanh toán.
-      await this.paymentRepository.upsert({
+      // Create payment record
+      const payment = await this.create({
         invoiceId: invoice.id,
         amount,
         paymentMethod: PaymentMethod.PAYOS,
@@ -319,16 +304,15 @@ export class PaymentService {
         type: paymentType,
         description,
         paymentOSId: paymentLinkRes.paymentLinkId,
-      }, ['invoiceId', 'type']); // `upsert` dựa trên invoiceId và type
+      });
 
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,
         paymentLinkId: paymentLinkRes.paymentLinkId,
       };
     } catch (error) {
-      console.error('PayOS error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Đã có lỗi xảy ra khi tạo liên kết thanh toán.';
-      throw new BadRequestException(errorMessage);
+      console.error('PayOS error:', error.response.message);
+      throw new BadRequestException(error.response.message);
     }
   }
 
