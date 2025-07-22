@@ -96,7 +96,7 @@ export class PaymentService {
     }
 
     // Check if payment amount is valid
-    if (createPaymentDto.type === PaymentType.DEPOSIT && createPaymentDto.amount > invoice.depositAmount) {
+    if (createPaymentDto.type === PaymentType.DEPOSIT && createPaymentDto.amount > invoice.payablePrice) { // payable price = depositAmount + rushFee
       throw new BadRequestException('Số tiền đặt cọc không được vượt quá số tiền cần đặt cọc');
     }
     if (createPaymentDto.type === PaymentType.REMAINING && createPaymentDto.amount > invoice.remainingAmount) {

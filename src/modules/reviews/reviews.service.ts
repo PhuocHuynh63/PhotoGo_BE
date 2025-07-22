@@ -11,6 +11,7 @@ import { UploadService } from '../../3rdService/upload/upload.service';
 import { PaginationDto } from './dto/pagination.dto';
 import { Booking } from '../bookings/entities/booking.entity';
 import { BookingStatus } from 'src/constants/booking.enum';
+import { User } from '../users/entities/user.entity';
 
 // Define the return type for findAll
 interface ReviewSummary {
@@ -60,6 +61,8 @@ export class ReviewService {
     private readonly bookingRepository: Repository<Booking>,
     @InjectRepository(ReviewImage)
     private readonly reviewImageRepository: Repository<ReviewImage>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly uploadService: UploadService,
     private readonly dataSource: DataSource,
   ) { }
@@ -97,6 +100,15 @@ export class ReviewService {
     // Validate rating
     if (!createReviewDto.rating || createReviewDto.rating < 1 || createReviewDto.rating > 5) {
       throw new BadRequestException('Điểm đánh giá phải từ 1 đến 5');
+    }
+
+    // Check user role before creating review
+    const user = await this.userRepository.findOne({ where: { id: createReviewDto.userId }, relations: ['role'] });
+    if (!user) {
+      throw new BadRequestException('Không tìm thấy người dùng');
+    }
+    if (user.role?.name === 'vendor_owner' || user.role?.name === 'admin') {
+      throw new BadRequestException('Vendor owner và admin không được phép đánh giá');
     }
 
     try {

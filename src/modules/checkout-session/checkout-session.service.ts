@@ -6,6 +6,9 @@ import {
   UpdateCheckoutSessionDto,
 } from './dto/checkout-sesion';
 import { ConceptRangeType } from 'src/constants/servicePackage.enum';
+import { User } from '../users/entities/user.entity';
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class CheckoutSessionService {
@@ -14,6 +17,8 @@ export class CheckoutSessionService {
   constructor(
     @Inject('REDIS_CLIENT')
     private readonly redisClient: Redis,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) { }
 
   private getSessionKey(userId: string | undefined, id: string | undefined): string {
@@ -29,6 +34,15 @@ export class CheckoutSessionService {
     userId: string,
     sessionData: CreateCheckoutSessionDto,
   ): Promise<CheckoutSessionDto> {
+    // Check user role before creating session
+    const user = await this.userRepository.findOne({ where: { id: userId }, relations: ['role'] });
+    if (!user) {
+      throw new BadRequestException('Không tìm thấy người dùng');
+    }
+    if (user.role?.name === 'vendor_owner' || user.role?.name === 'admin') {
+      throw new BadRequestException('Vendor owner và admin không được phép đặt lịch');
+    }
+
     const sessionKey = this.getSessionKey(userId, id);
 
     let newSession: CheckoutSessionDto;

@@ -6,10 +6,11 @@ import { ReviewService } from './reviews.service';
 import { ReviewController } from './reviews.controller';
 import { UploadModule } from '../../3rdService/upload/upload.module';
 import { Booking } from '../bookings/entities/booking.entity';
+import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Review, ReviewImage, Booking]),
+    TypeOrmModule.forFeature([Review, ReviewImage, Booking, User]),
     UploadModule
   ],
   providers: [ReviewService],
