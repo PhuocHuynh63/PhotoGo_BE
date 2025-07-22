@@ -1554,7 +1554,7 @@ export class BookingService {
     }
 
     const originPrice = Number(serviceConcept.price);
-    const basePrice = this.calculateFinalPrice(originPrice);
+    const estimatedPrice = this.calculateFinalPrice(originPrice);
     const { depositAmount: depositPercentage, voucherId, date: bookingDateStr } = getDiscountAmountDto;
 
     if (!depositPercentage || depositPercentage < 30 || depositPercentage > 100) {
@@ -1566,7 +1566,7 @@ export class BookingService {
     if (bookingDateStr) {
       bookingDate = new Date(this.convertDateFormat(bookingDateStr));
     }
-    const rushFee = await this.calculateRushFee(userId, bookingDate, basePrice);
+    const rushFee = await this.calculateRushFee(userId, bookingDate, estimatedPrice);
 
     let discountAmount = 0;
 
@@ -1591,13 +1591,13 @@ export class BookingService {
       }
       // ---
 
-      if (basePrice < voucher.minPrice) {
+      if (estimatedPrice < voucher.minPrice) {
         throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ`);
       }
 
       // Tính toán chiết khấu
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
-        discountAmount = basePrice * (Number(voucher.discount_value) / 100);
+        discountAmount = estimatedPrice * (Number(voucher.discount_value) / 100);
       } else { // FIXED
         discountAmount = Number(voucher.discount_value);
       }
@@ -1609,22 +1609,22 @@ export class BookingService {
     }
 
     // 4. Tính toán các giá trị thanh toán cuối cùng
-    const finalPriceAfterDiscount = basePrice + rushFee;
+    const finalPrice = estimatedPrice + rushFee;
+
+    // Giá sau khi giảm giá
+    const priceAfterDiscount = finalPrice - discountAmount;
 
     // Đảm bảo giá không bị âm, nếu có thì chiết khấu bằng giá gốc
-    if (finalPriceAfterDiscount < 0) {
-      discountAmount = basePrice;
+    if (priceAfterDiscount < 0) {
+      discountAmount = estimatedPrice;
     }
-    const finalPrice = Math.max(0, finalPriceAfterDiscount);
 
     // Tiền cọc tính trên giá SAU KHI giảm
-    const depositAmount = finalPrice * (depositPercentage / 100);
+    const depositAmount = priceAfterDiscount * (depositPercentage / 100);
 
     // Tiền còn lại của DỊCH VỤ
-    const remainingAmount = finalPrice - depositAmount;
+    const remainingAmount = priceAfterDiscount - depositAmount;
 
-    // Tổng tiền phải trả NGAY LẬP TỨC = Tiền cọc + Toàn bộ Rush Fee
-    const totalPayable = depositAmount + rushFee;
 
     // 5. Trả về kết quả
     return {
@@ -1633,7 +1633,7 @@ export class BookingService {
       depositAmount: Math.round(depositAmount),
       remainingAmount: Math.round(remainingAmount),
       rushFee: Math.round(rushFee),
-      totalPayable: Math.round(totalPayable)
+      totalPayable: Math.round(depositAmount)
     };
   }
 
