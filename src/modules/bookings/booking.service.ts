@@ -1012,6 +1012,10 @@ export class BookingService {
         await this.paymentService.deleteAllByInvoiceId(invoice.id);
         await this.invoiceRepository.delete(invoice.id);
       }
+      // delete history
+      if (savedBooking && savedBooking.id) {
+        await this.bookingHistoryRepository.delete({ bookingId: savedBooking.id });
+      }
       if (savedBooking && savedBooking.id) {
         await this.bookingRepository.delete(savedBooking.id);
       }
@@ -1507,6 +1511,9 @@ export class BookingService {
 
   async remove(id: string): Promise<void> {
     const booking = await this.findOne(id);
+
+    // Xóa booking_history trước để tránh lỗi foreign key
+    await this.bookingHistoryRepository.delete({ bookingId: id });
 
     // NEW: Reopen scheduled dates if this is a multi-day booking
     if (booking.schedules && booking.schedules.length > 0) {

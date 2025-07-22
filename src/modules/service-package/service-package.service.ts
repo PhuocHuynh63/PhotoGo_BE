@@ -1427,7 +1427,6 @@ export class ServicePackageService {
   }): Promise<PaginatedFilteredServicePackageResponseDto> {
     const currentPage = params.current || 1;
     const pageSize = params.pageSize || 10;
-    const actualPageSize = pageSize * pageSize; // Process double the requested size
     const skip = (currentPage - 1) * pageSize;
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
 
@@ -1575,7 +1574,7 @@ export class ServicePackageService {
 
     // Add pagination
     baseQuery += ` LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`;
-    baseParams.push(actualPageSize, skip);
+    baseParams.push(pageSize, skip);
 
     // Get total count query
     const countFilterConditions: string[] = [];
@@ -1754,8 +1753,7 @@ export class ServicePackageService {
           ...concept,
           price: this.getFinalPrice(concept.price)
         }))
-      }))
-      .slice(0, pageSize); // Only show requested page size
+      })); // Bỏ .slice(0, pageSize)
 
     const totalPage = Math.ceil(Number(totalItem[0].count) / pageSize);
 
