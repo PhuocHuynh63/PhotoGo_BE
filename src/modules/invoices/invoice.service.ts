@@ -49,6 +49,7 @@ export class InvoiceService {
       where: { id: bookingId },
       relations: ['user', 'location', 'serviceConcept', 'serviceConcept.servicePackage'],
     });
+
     if (!booking) {
       throw new NotFoundException(`Đơn hàng với ID ${bookingId} không tồn tại`);
     }
@@ -56,34 +57,24 @@ export class InvoiceService {
     const existingInvoice = await this.invoiceRepository.findOne({
       where: { bookingId },
     });
+
     if (existingInvoice) {
       throw new ConflictException('Đơn hàng này đã có hóa đơn');
     }
 
-    // Get the origin price from service concept (stored in DB)
-    const originPrice = Number(booking.serviceConcept.price); // This is origin price from DB
-    
-    // Convert origin price to final price (what customer sees) - same logic as ServicePackageService
+    // ======================== LOGIC TÍNH TOÁN ĐỒNG BỘ ========================
+
+    // --- BƯỚC 1: TÍNH GIÁ GỐC VÀ GIÁ CUỐI CÙNG CHO KHÁCH HÀNG (chưa gồm phí, chưa giảm giá) ---
+    const originPrice = Number(booking.serviceConcept.price); // Giá gốc từ DB
     const COMMISSION_RATE = 0.30; // 30%
     const TAX_RATE = 0.05; // 5%
     const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
-    
-    const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
-    const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
-    const taxAmount = Math.round(originPrice * TAX_RATE);
-    
-    // For invoice display: originalPrice = originPrice + commission (hidden from customer)
-    const price = Math.round(originPrice + commissionAmount);
-    // const totalAmount = finalPrice; // This is what customer sees
 
-    // --- TÍNH PHÍ PHÁT SINH (RUSH FEE) ---
-    // Lấy ngày booking từ booking.date (kiểu Date hoặc string)
-    let bookingDate: Date = null;
-    if (booking.date) {
-      bookingDate = new Date(booking.date);
-    }
+    // finalPrice là giá dịch vụ cuối cùng mà khách hàng thấy (đã gồm hoa hồng, thuế)
+    const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER);
+    const taxAmount = Math.round(originPrice * TAX_RATE); // Giữ lại để lưu vào DB
 
-    // --- TÍNH DISCOUNT (VOUCHER) TRÊN FINALPRICE ---
+    // --- BƯỚC 2: TÍNH DISCOUNT (VOUCHER) TRÊN finalPrice ---
     let discountAmount = 0;
     let voucher = null;
     if (voucherId) {
@@ -92,12 +83,11 @@ export class InvoiceService {
         throw new NotFoundException(`Voucher với ID ${voucherId} không tồn tại`);
       }
 
-      // Check if user has been assigned the voucher (voucher-user) with status "có sẵn"
+      // (Toàn bộ logic kiểm tra voucher của bạn ở đây là chính xác)
       const voucherUser = await this.voucherUserRepository.findOne({
-        where: { user_id: booking.userId, voucher_id: voucherId },
+        where: { user_id: booking.userId, voucher_id: voucherId, status: VoucherUserStatusEnum.AVAILABLE },
       });
-      
-      if (!voucherUser || voucherUser.status !== VoucherUserStatusEnum.AVAILABLE) {
+      if (!voucherUser) {
         throw new BadRequestException('Bạn không có quyền sử dụng voucher này hoặc voucher đã được sử dụng');
       }
 
@@ -108,11 +98,11 @@ export class InvoiceService {
         throw new BadRequestException(`Voucher với ID ${voucherId} không còn hiệu lực`);
       }
 
-      // Apply voucher discount to the final price (what customer sees)
       if (finalPrice < voucher.minPrice) {
-        throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice} để sử dụng voucher này`);
+        throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ để sử dụng voucher này`);
       }
 
+      // Tính toán chiết khấu trên finalPrice
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
         const discountValue = Number(voucher.discount_value);
         discountAmount = Math.round((finalPrice * discountValue) / 100);
@@ -121,53 +111,53 @@ export class InvoiceService {
         }
       } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
         discountAmount = Math.round(Number(voucher.discount_value));
-        if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
-          discountAmount = voucher.maxPrice;
-        }
+      }
+
+      // Đảm bảo chiết khấu không lớn hơn giá trị đơn hàng
+      if (discountAmount > finalPrice) {
+        discountAmount = finalPrice;
       }
     }
 
-    // 1. Tính discountedFinalPrice (giá cuối cùng sau voucher)
-    let discountedFinalPrice = finalPrice - discountAmount;
-    if (discountedFinalPrice < 0) discountedFinalPrice = 0;
+    // --- BƯỚC 3: TÍNH GIÁ SAU KHI GIẢM GIÁ ---
+    const priceAfterDiscount = finalPrice - discountAmount;
 
-    // 2. Tính depositAmount trên discountedFinalPrice
+    // --- BƯỚC 4: TÍNH PHÍ PHÁT SINH (RUSH FEE) DỰA TRÊN GIÁ TRỊ DỊCH VỤ GỐC (finalPrice) ---
+    // Đây là thay đổi quan trọng: base để tính rushFee là `finalPrice`, không phải một phần của nó.
+    const bookingDate = booking.date ? new Date(booking.date) : null;
+    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, finalPrice);
+
+    // --- BƯỚC 5: TÍNH TIỀN CỌC VÀ TIỀN PHẢI TRẢ ---
+    // Tiền cọc (deposit) được tính trên giá trị dịch vụ SAU KHI đã giảm giá.
     let depositAmount = 0;
-    let remainingAmount = 0;
     if (booking.depositType === BookingDepositType.PERCENTAGE) {
       if (booking.depositAmount < 30) {
         throw new BadRequestException('Tỷ lệ đặt cọc phải tối thiểu 30%');
       }
-      depositAmount = Math.round(discountedFinalPrice * (booking.depositAmount / 100));
-      remainingAmount = discountedFinalPrice - depositAmount;
-    } else {
+      depositAmount = Math.round(priceAfterDiscount * (booking.depositAmount / 100));
+    } else { // FIXED
       depositAmount = Math.round(booking.depositAmount || 0);
-      remainingAmount = discountedFinalPrice - depositAmount;
     }
 
-    // 3. Tính rushFee (feeAmount) luôn trên số tiền đặt cọc gốc (finalPrice * depositPercentage / 100)
-    const rushFeeBase = finalPrice * (booking.depositAmount / 100);
-    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, rushFeeBase);
+    // Tiền còn lại (remaining) là phần còn lại của giá dịch vụ sau khi trừ tiền cọc.
+    const remainingAmount = priceAfterDiscount - depositAmount;
 
-    // 4. payablePrice = depositAmount + rushFee
+    // Số tiền phải thanh toán ngay (payable) = Tiền cọc + Toàn bộ phí phát sinh (rushFee)
     const payablePrice = depositAmount + rushFee;
 
-    // Ensure all amounts are integers for database storage
-    depositAmount = Math.round(depositAmount);
-    remainingAmount = Math.round(remainingAmount);
-
+    // --- BƯỚC 6: TẠO HÓA ĐƠN VỚI CÁC GIÁ TRỊ ĐÃ ĐỒNG BỘ ---
     const invoice = this.invoiceRepository.create({
       ...createInvoiceDto,
       bookingId: booking.id,
       voucherId: voucher?.id || null,
-      originalPrice: finalPrice, // finalPrice đã bao gồm commission/tax
-      discountAmount,
-      discountedPrice: discountedFinalPrice,
-      taxAmount,
-      feeAmount: rushFee,
-      payablePrice,
-      depositAmount,
-      remainingAmount,
+      originalPrice: finalPrice,          // Giá dịch vụ cuối cùng (chưa giảm giá, chưa có phí)
+      discountAmount: discountAmount,       // Số tiền được giảm
+      discountedPrice: priceAfterDiscount,  // Giá dịch vụ sau khi giảm giá
+      taxAmount: taxAmount,               // Tiền thuế
+      feeAmount: rushFee,                 // Phí phát sinh (rush fee)
+      payablePrice: payablePrice,           // Tổng tiền phải trả ngay (cọc + phí)
+      depositAmount: depositAmount,         // Tiền cọc cho dịch vụ
+      remainingAmount: remainingAmount,     // Tiền dịch vụ còn lại phải trả sau
       paidAmount: 0,
       status: InvoiceStatus.PENDING,
     });
@@ -361,21 +351,21 @@ export class InvoiceService {
       // Get the origin price from service concept (stored in DB)
       const serviceConcept = await this.servicePackageService.findServiceConcept(invoice.booking.serviceConceptId);
       const originPrice = Number(serviceConcept.price); // This is origin price from DB
-      
+
       // Convert origin price to final price (what customer sees) - same logic as ServicePackageService
       const COMMISSION_RATE = 0.30; // 30%
       const TAX_RATE = 0.05; // 5%
       const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
-      
+
       const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
       const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
       const taxAmount = Math.round(originPrice * TAX_RATE);
-      
+
       // For invoice display: originalPrice = originPrice + commission (hidden from customer)
       const recalculatedPrice = Math.round(originPrice + commissionAmount);
       const recalculatedTaxAmount = taxAmount;
       const recalculatedTotalAmount = finalPrice; // This is what customer sees
-      
+
       // Apply voucher discount if exists
       let recalculatedDiscountAmount = 0;
       if (invoice.voucherId) {
@@ -450,7 +440,7 @@ export class InvoiceService {
       for (const invoice of invoices) {
         try {
           const updatedInvoice = await this.applyPricingLogic(invoice);
-          
+
           // Update the invoice in database
           await this.invoiceRepository.update(invoice.id, {
             originalPrice: updatedInvoice.originalPrice,
@@ -461,7 +451,7 @@ export class InvoiceService {
             depositAmount: updatedInvoice.depositAmount,
             remainingAmount: updatedInvoice.remainingAmount,
           });
-          
+
           updatedCount++;
         } catch (error) {
           console.error(`Error updating invoice ${invoice.id}:`, error);
