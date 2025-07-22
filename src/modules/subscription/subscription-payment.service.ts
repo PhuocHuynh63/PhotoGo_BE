@@ -95,7 +95,7 @@ export class SubscriptionPaymentService {
     }
     // Tạo subscription mới với status PENDING
     const now = new Date();
-    const tempEndDate = plan.billingCycle === BillingCycle.MONTHLY ? new Date(now.getTime() + 30*24*60*60*1000) : new Date(now.getTime() + 365*24*60*60*1000);
+    const tempEndDate = plan.billingCycle === BillingCycle.MONTHLY ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) : new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
     const subscription = this.subscriptionRepository.create({
       planId: plan.id,
       billingCycle: plan.billingCycle,
@@ -146,23 +146,29 @@ export class SubscriptionPaymentService {
 
     // Tạo description dựa trên payerType
     const payerDescription = payerType === PayerType.CUSTOMER
-      ? `Thanh toán subscription invoice ${invoice.id} - Khách hàng`
-      : `Thanh toán subscription invoice ${invoice.id} - Nhà cung cấp`;
+      ? `subscription - Khách hàng`
+      : `subscription - Nhà cung cấp`;
+
+    const orderCode = parseInt(savedPayment.id.replace(/-/g, '').substring(0, 16));
+    const amount = Number(invoice.payablePrice);
+    const description = payerDescription.slice(0, 50); // PayOS cho phép tới 50 ký tự
+    const cancelUrl = `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
+    const returnUrl = `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
+
+    const payosPayload = {
+      orderCode,
+      amount,
+      description,
+      cancelUrl,
+      returnUrl
+    };
 
     // Gọi PayOS SDK để tạo link thanh toán
     let payosResult;
     try {
-      payosResult = await this.payos.createPaymentLink({
-        orderCode: parseInt(savedPayment.id.replace(/-/g, '').substring(0, 10)),
-        amount: Number(invoice.payablePrice), // đảm bảo là số
-        description: payerDescription.slice(0, 25), // cắt về 25 ký tự
-        cancelUrl: `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-        returnUrl: `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-        //cancelUrl: `http://localhost:3000/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-        //returnUrl: `http://localhost:3000/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`,
-      });
+      payosResult = await this.payos.createPaymentLink(payosPayload);
     } catch (error) {
-      this.logger.error('PayOS error:', error);
+      console.log('PayOS error:', error);
       throw new BadRequestException('Lỗi khi tạo liên kết thanh toán: ' + (error?.message || 'PayOS error'));
     }
     // Kiểm tra kết quả trả về từ PayOS
@@ -195,12 +201,12 @@ export class SubscriptionPaymentService {
         where: { id: subscriptionPaymentId },
         relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
       });
-    // } else if (orderCode) {
-    //   // Tìm payment theo paymentOSId (orderCode từ PayOS)
-    //   payment = await this.subscriptionPaymentRepository.findOne({
-    //     where: { paymentOSId: orderCode.toString() },
-    //     relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
-    //   });
+      // } else if (orderCode) {
+      //   // Tìm payment theo paymentOSId (orderCode từ PayOS)
+      //   payment = await this.subscriptionPaymentRepository.findOne({
+      //     where: { paymentOSId: orderCode.toString() },
+      //     relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
+      //   });
     }
 
     if (!payment) {
@@ -289,7 +295,7 @@ export class SubscriptionPaymentService {
           billingCycle: plan.billingCycle,
           status: SubscriptionStatus.ACTIVE,
           startDate: new Date(),
-          endDate: plan.billingCycle === BillingCycle.MONTHLY ? new Date(Date.now() + 30*24*60*60*1000) : new Date(Date.now() + 365*24*60*60*1000),
+          endDate: plan.billingCycle === BillingCycle.MONTHLY ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
           userId: payerType === PayerType.CUSTOMER ? userId : undefined,
           // vendorId: nếu cần
         });
