@@ -294,6 +294,11 @@ export class VoucherService {
     const pageSize = query.pageSize ? Number(query.pageSize) : 10;
     const skip = (currentPage - 1) * pageSize;
 
+    // LOG: Thông tin đầu vào
+    console.log('findAllVoucherUser - userId:', userId);
+    console.log('findAllVoucherUser - query.status:', query.status);
+    console.log('findAllVoucherUser - query.from:', query.from);
+
     const queryBuilder = this.voucherUserRepository.createQueryBuilder('voucherUser')
       .leftJoinAndSelect('voucherUser.user', 'user')
       .leftJoinAndSelect('voucherUser.voucher', 'voucher')
@@ -325,17 +330,15 @@ export class VoucherService {
     }
 
     // Thêm filter theo trạng thái voucher user
-    const currentDate = new Date();
+    // BỎ filter ngày, chỉ giữ filter status
     if (query.status) {
       if (query.status === VoucherUserStatusEnum.AVAILABLE) {
         queryBuilder.andWhere('voucherUser.status = :status', { status: VoucherUserStatusEnum.AVAILABLE })
-          .andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE })
-          .andWhere('voucher.start_date <= :currentDate', { currentDate })
-          .andWhere('voucher.end_date >= :currentDate', { currentDate });
+          .andWhere('voucher.status = :voucherStatus', { voucherStatus: VoucherStatusEnum.ACTIVE });
       } else if (query.status === VoucherUserStatusEnum.USED) {
         queryBuilder.andWhere('voucherUser.status = :status', { status: VoucherUserStatusEnum.USED });
       } else if (query.status === VoucherUserStatusEnum.EXPIRED) {
-        queryBuilder.andWhere('(voucher.status != :voucherStatus OR voucher.end_date < :currentDate)', { voucherStatus: VoucherStatusEnum.ACTIVE, currentDate });
+        queryBuilder.andWhere('(voucher.status != :voucherStatus)', { voucherStatus: VoucherStatusEnum.ACTIVE });
       }
     }
 
@@ -354,11 +357,17 @@ export class VoucherService {
     // Phân trang
     queryBuilder.skip(skip).take(pageSize);
 
+    // LOG: SQL query thực tế
+    const [sql, params] = queryBuilder.getQueryAndParameters();
+    console.log('findAllVoucherUser - SQL:', sql);
+    console.log('findAllVoucherUser - Params:', params);
+
     // Thực hiện query
     const [voucherUsers, totalItem] = await queryBuilder.getManyAndCount();
     const totalPage = Math.ceil(totalItem / pageSize);
 
     // Thêm trạng thái is_valid cho từng voucher
+    const currentDate = new Date();
     const data = voucherUsers.map(vu => ({
       ...vu,
       is_valid:
