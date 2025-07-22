@@ -454,7 +454,7 @@ export class CampaignService {
         // Auto-assign voucher to all existing users in campaign
         for (const userCampaign of existingUserCampaigns) {
           // Check if voucher is still available and not expired
-          if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+          if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.INACTIVE) {
             // Check if user already has this voucher
             const existingVoucherUser = await this.voucherUserRepository.findOne({
               where: { user_id: userCampaign.userId, voucher_id: voucherId }
@@ -474,6 +474,8 @@ export class CampaignService {
               await this.voucherUserRepository.save(voucherUser);
               
               // Update voucher quantity
+              // update voucher status to active
+              voucher.status = VoucherStatusEnum.ACTIVE;
               voucher.quantity -= 1;
               await this.voucherRepository.save(voucher);
             }
@@ -1196,7 +1198,7 @@ export class CampaignService {
     return this.voucherRepository.createQueryBuilder('voucher')
       .leftJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
       .where('voucher.type = :voucherType', { voucherType: VoucherTypePoint.CAMPAIGN })
-      .andWhere('voucher.status IN (:...status)', { status: [ VoucherStatusEnum.ACTIVE ] })
+      .andWhere('voucher.status IN (:...status)', { status: [ VoucherStatusEnum.INACTIVE ] })
       .andWhere('voucher.quantity > 0')
       .andWhere('cv.voucherId IS NULL') // Loại bỏ voucher đã có trong campaign
       .getMany();
