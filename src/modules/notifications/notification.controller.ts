@@ -88,7 +88,7 @@ export class NotificationController {
   /**
    * Utility: Đánh dấu tất cả notifications là đã đọc (với security check)
    */
-  @Patch('mark-all-read/:userId')
+  @Patch('mark-all-read/me')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Đánh dấu tất cả thông báo đã đọc' })
   @ResponseMessage('Đã đánh dấu tất cả thông báo đã đọc')
@@ -96,7 +96,7 @@ export class NotificationController {
     return await this.notificationService.markAllAsRead(userId);
   }
 
-  @Patch('mark-as-read/:userId/:notificationId')
+  @Patch('mark-as-read/me/:notificationId')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Đánh dấu thông báo đã đọc' })
   @ResponseMessage('Đã đánh dấu thông báo đã đọc')
@@ -107,7 +107,7 @@ export class NotificationController {
   /**
    * Utility: Lấy số lượng notifications chưa đọc (với security check)
    */
-  @Get('unread-count/:userId')
+  @Get('unread-count/me')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Lấy số thông báo chưa đọc' })
   @ResponseMessage('Không có thông báo chưa đọc')
