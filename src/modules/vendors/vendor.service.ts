@@ -1727,7 +1727,6 @@ export class VendorService {
         u.email as contact_email
       FROM filtered_vendors fv
       JOIN vendors v ON v.id = fv.id
-      LEFT JOIN locations l ON l.vendor_id = v.id
       LEFT JOIN vendor_stats vs ON vs.id = v.id
       LEFT JOIN vendor_packages vp ON vp.id = v.id
       LEFT JOIN vendor_branches vb ON vb.id = v.id
@@ -1736,6 +1735,7 @@ export class VendorService {
       LEFT JOIN vendor_campaigns_admin vca ON vca.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
       LEFT JOIN users u ON u.id = v.user_id
+      GROUP BY v.id, v.name, v.description, v.logo, v.banner, v.status, v.slug, v.created_at, v.updated_at, vsa.priority, vca.is_remarkable, vs.avg_rating, vs.review_count, vp.package_count, vb.branch_count, vo.order_count, c.id, c.name, u.id, u.phone_number, u.email
     `;
 
     // Add parameters in the correct order
