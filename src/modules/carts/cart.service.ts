@@ -315,6 +315,17 @@ export class CartService {
   }
 
   async findCartByUserId(userId: string): Promise<Cart | null> {
-    return await this.cartRepository.findOne({ where: { userId } });
+    // Lấy cart kèm items và serviceConcept
+    const cart = await this.cartRepository.findOne({
+      where: { userId },
+      relations: ['items', 'items.serviceConcept'],
+    });
+    if (!cart) return null;
+    // Thêm trường finalPrice cho từng item
+    cart.items = cart.items.map(item => ({
+      ...item,
+      finalPrice: item.serviceConcept ? Math.round(item.serviceConcept.price * 1.35) : null
+    }));
+    return cart;
   }
 }

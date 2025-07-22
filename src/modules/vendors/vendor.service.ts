@@ -336,10 +336,33 @@ export class VendorService {
     response.averageRating = averageRating;
 
     // Get priority status
-    const subscriptionData = await this.dataSource.query(`
-      SELECT 
-        CASE 
-          WHEN EXISTS (
+    // --- Priority Calculation ---
+    // 1. Số booking, số booking bị hủy, tổng tiền giao dịch
+    // 2. Số lượng review, average rating
+    // 3. Subscription bonus
+    // 4. Bonus hợp tác lâu
+    // 5. Bonus vol giao dịch
+    // 6. Tỷ lệ hủy
+    const priorityData = await this.dataSource.query(`
+      WITH booking_stats AS (
+        SELECT 
+          COUNT(*) FILTER (WHERE b.status NOT IN ('đã hủy - vendor từ chối', 'đã hủy - người dùng tự hủy')) AS total_bookings,
+          COUNT(*) FILTER (WHERE b.status IN ('đã hủy - vendor từ chối', 'đã hủy - người dùng tự hủy')) AS cancelled_bookings,
+          COALESCE(SUM(p.amount), 0) AS total_amount
+        FROM booking b
+        LEFT JOIN locations l ON l.id = b.location_id
+        LEFT JOIN vendors v ON v.id = l.vendor_id
+        LEFT JOIN invoice i ON i.booking_id = b.id
+        LEFT JOIN payment p ON p.invoice_id = i.id AND p.status = 'đã hoàn thành'
+        WHERE v.id = $1
+      ),
+      review_stats AS (
+        SELECT COUNT(*) AS review_count, COALESCE(AVG(rating),0) AS avg_rating
+        FROM review WHERE vendor_id = $1
+      ),
+      subscription_bonus AS (
+        SELECT 
+          CASE WHEN EXISTS (
             SELECT 1 FROM subscription_vendor sv2 
             JOIN subscription_plan sp ON sp.id = sv2.plan_id 
             WHERE sv2.vendor_id = $1 
@@ -347,10 +370,62 @@ export class VendorService {
             AND sp.price_for_month = (
               SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
             )
-          ) THEN true 
-          ELSE false 
-        END as priority
+          ) THEN 20 ELSE 0 END AS sub_bonus,
+          MIN(sv2.joined_date) AS joined_date
+        FROM subscription_vendor sv2 WHERE sv2.vendor_id = $1
+      )
+      SELECT 
+        bs.total_bookings,
+        bs.cancelled_bookings,
+        bs.total_amount,
+        rs.review_count,
+        rs.avg_rating,
+        sb.sub_bonus,
+        sb.joined_date
+      FROM booking_stats bs, review_stats rs, subscription_bonus sb;
     `, [id]);
+
+    const p = priorityData[0] || {};
+    const totalBookings = Number(p.total_bookings) || 0;
+    const cancelledBookings = Number(p.cancelled_bookings) || 0;
+    const reviewCount = Number(p.review_count) || 0;
+    const avgRating = Number(p.avg_rating) || 0;
+    const subBonus = Number(p.sub_bonus) || 0;
+    const totalAmount = Number(p.total_amount) || 0;
+    const joinedDate = p.joined_date ? new Date(p.joined_date) : null;
+
+    // Bonus hợp tác lâu
+    let coopBonus = 0;
+    if (joinedDate) {
+      const now = new Date();
+      const diffMonths = (now.getFullYear() - joinedDate.getFullYear()) * 12 + (now.getMonth() - joinedDate.getMonth());
+      if (diffMonths >= 12) coopBonus = 10;
+      else if (diffMonths >= 6) coopBonus = 5;
+    }
+
+    // Bonus vol giao dịch
+    let volBonus = 0;
+    if (totalAmount >= 100_000_000) volBonus = 10;
+    else if (totalAmount >= 50_000_000) volBonus = 5;
+
+    // Tỷ lệ hủy
+    let cancelRate = 0;
+    if (totalBookings + cancelledBookings > 0) {
+      cancelRate = cancelledBookings / (totalBookings + cancelledBookings);
+    }
+
+    // Tính priority
+    const priority =
+      (totalBookings * 2)
+      + (reviewCount * 1)
+      + (avgRating * 10)
+      + subBonus
+      + coopBonus
+      + volBonus
+      - Math.round(cancelRate * 10);
+    this.logger.log(`[PRIORITY] vendorId=${id} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${priority}`);
+    await this.vendorRepository.update(id, { priority });
+    response.priority = priority;
 
     // Get isRemarkable status
     const campaignData = await this.dataSource.query(`
@@ -371,7 +446,6 @@ export class VendorService {
         END as is_remarkable
     `, [id]);
 
-    response.priority = subscriptionData[0]?.priority === true;
     response.isRemarkable = campaignData[0]?.is_remarkable === true;
 
     return response;
@@ -1389,6 +1463,92 @@ export class VendorService {
   
     // Apply pagination to return only the requested pageSize
     const pagedVendors = vendors.slice(start, start + pageSize);
+  
+    // Sau khi lấy vendorData và group thành vendorMap
+    // --- Tính priority cho từng vendor ---
+    // Lấy dữ liệu priority cho tất cả vendorIds
+    const priorityDatas = await Promise.all(vendorIds.map(async (vendorId: string) => {
+      const priorityData = await this.dataSource.query(`
+        WITH booking_stats AS (
+          SELECT 
+            COUNT(*) FILTER (WHERE b.status NOT IN ('đã hủy - vendor từ chối', 'đã hủy - người dùng tự hủy')) AS total_bookings,
+            COUNT(*) FILTER (WHERE b.status IN ('đã hủy - vendor từ chối', 'đã hủy - người dùng tự hủy')) AS cancelled_bookings,
+            COALESCE(SUM(p.amount), 0) AS total_amount
+          FROM booking b
+          LEFT JOIN locations l ON l.id = b.location_id
+          LEFT JOIN vendors v ON v.id = l.vendor_id
+          LEFT JOIN invoice i ON i.booking_id = b.id
+          LEFT JOIN payment p ON p.invoice_id = i.id AND p.status = 'đã hoàn thành'
+          WHERE v.id = $1
+        ),
+        review_stats AS (
+          SELECT COUNT(*) AS review_count, COALESCE(AVG(rating),0) AS avg_rating
+          FROM review WHERE vendor_id = $1
+        ),
+        subscription_bonus AS (
+          SELECT 
+            CASE WHEN EXISTS (
+              SELECT 1 FROM subscription_vendor sv2 
+              JOIN subscription_plan sp ON sp.id = sv2.plan_id 
+              WHERE sv2.vendor_id = $1 
+              AND sv2.is_active = true
+              AND sp.price_for_month = (
+                SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
+              )
+            ) THEN 20 ELSE 0 END AS sub_bonus,
+            MIN(sv2.joined_date) AS joined_date
+          FROM subscription_vendor sv2 WHERE sv2.vendor_id = $1
+        )
+        SELECT 
+          bs.total_bookings,
+          bs.cancelled_bookings,
+          bs.total_amount,
+          rs.review_count,
+          rs.avg_rating,
+          sb.sub_bonus,
+          sb.joined_date
+        FROM booking_stats bs, review_stats rs, subscription_bonus sb;
+      `, [vendorId]);
+      const p = priorityData[0] || {};
+      const totalBookings = Number(p.total_bookings) || 0;
+      const cancelledBookings = Number(p.cancelled_bookings) || 0;
+      const reviewCount = Number(p.review_count) || 0;
+      const avgRating = Number(p.avg_rating) || 0;
+      const subBonus = Number(p.sub_bonus) || 0;
+      const totalAmount = Number(p.total_amount) || 0;
+      const joinedDate = p.joined_date ? new Date(p.joined_date) : null;
+      let coopBonus = 0;
+      if (joinedDate) {
+        const now = new Date();
+        const diffMonths = (now.getFullYear() - joinedDate.getFullYear()) * 12 + (now.getMonth() - joinedDate.getMonth());
+        if (diffMonths >= 12) coopBonus = 10;
+        else if (diffMonths >= 6) coopBonus = 5;
+      }
+      let volBonus = 0;
+      if (totalAmount >= 100_000_000) volBonus = 10;
+      else if (totalAmount >= 50_000_000) volBonus = 5;
+      let cancelRate = 0;
+      if (totalBookings + cancelledBookings > 0) {
+        cancelRate = cancelledBookings / (totalBookings + cancelledBookings);
+      }
+      const priority =
+        (totalBookings * 2)
+        + (reviewCount * 1)
+        + (avgRating * 10)
+        + subBonus
+        + coopBonus
+        + volBonus
+        - Math.round(cancelRate * 10);
+      this.logger.log(`[PRIORITY] vendorId=${vendorId} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${priority}`);
+      return { vendorId, priority };
+    }));
+    const priorityMap = new Map(priorityDatas.map(p => [p.vendorId, p.priority]));
+    // Gán priority cho từng vendor
+    vendors.forEach(v => {
+      v.priority = priorityMap.get(v.id) ?? 0;
+    });
+    // Cập nhật priority vào DB cho tất cả vendor
+    await Promise.all(priorityDatas.map(p => this.vendorRepository.update(p.vendorId, { priority: p.priority })));
   
     return {
       data: pagedVendors,

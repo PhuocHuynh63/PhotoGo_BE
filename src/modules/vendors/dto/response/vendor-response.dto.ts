@@ -54,5 +54,5 @@ export class VendorResponseDto {
   isRemarkable: boolean;
 
   @ApiProperty({ description: 'Vendor có subscription plan giá cao nhất không' })
-  priority: boolean;
+  priority: number;
 }
