@@ -1539,6 +1539,7 @@ export class BookingService {
     finalPrice: number,
     discount: number,
     depositAmount: number,
+    priceAfterDiscount: number,
     remainingAmount: number,
     rushFee: number,
     totalPayable: number,
@@ -1631,6 +1632,7 @@ export class BookingService {
       finalPrice: Math.round(finalPrice),
       discount: Math.round(discountAmount),
       depositAmount: Math.round(depositAmount),
+      priceAfterDiscount: Math.round(priceAfterDiscount),
       remainingAmount: Math.round(remainingAmount),
       rushFee: Math.round(rushFee),
       totalPayable: Math.round(depositAmount)
