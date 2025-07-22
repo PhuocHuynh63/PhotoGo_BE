@@ -16,13 +16,12 @@ import { CreateMultipleUserCampaignDto } from './dto/create-user-campaign.dto';
 import { CampaignVoucherStatusDto, UpdateCampaignStatusDto, UpdateUserCampaignStatusDto } from './dto/update-status.dto';
 import { CampaignResponseDto } from './dto/campaign-response.dto';
 import { VoucherStatusEnum, VoucherUserStatusEnum, VoucherUserFromEnum, VoucherTypePoint } from 'src/constants/voucher.enum';
-import { CAMPAIGN_NAMES, VOUCHER_CODES } from 'src/constants/campaign.enum';
+import { CAMPAIGN_NAMES, VOUCHER_CODES, CampaignStatus } from 'src/constants/campaign.enum';
 import { CampaignVendor } from './entities/campaign-vendor.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { InviteVendorDto } from './dto/invite-vendor.dto';
 import { ConfirmVendorInviteDto } from './dto/confirm-vendor-invite.dto';
 import { MailService } from 'src/3rdService/mail/mail.service';
-import * as jwt from 'jsonwebtoken';
 import { Inject } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { randomBytes } from 'crypto';
@@ -1202,5 +1201,10 @@ export class CampaignService {
       .andWhere('voucher.quantity > 0')
       .andWhere('cv.voucherId IS NULL') // Loại bỏ voucher đã có trong campaign
       .getMany();
+  }
+
+  async getAllCampaignsAndVouchersIn(): Promise<{ data: Campaign[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
+    const [campaigns, total] = await this.campaignRepository.findAndCount({ where: { status: true }, relations: ['campaignVouchers', 'campaignVouchers.voucher'] });
+    return { data: campaigns, pagination: { current: 1, pageSize: 10, totalPage: Math.ceil(total / 10), totalItem: total } };
   }
 } 

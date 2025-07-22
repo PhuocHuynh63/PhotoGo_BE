@@ -80,6 +80,14 @@ export class CampaignController {
     return this.campaignService.getVendorInvitedByCampaignId(campaignId, query);
   }
 
+  // get all campaign + voucher detail
+  @Get('all')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách campaign và voucher' })
+  async getAllCampaignsAndVouchersIn(): Promise<{ data: Campaign[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
+    return this.campaignService.getAllCampaignsAndVouchersIn();
+  }
+
    // API nhập vendorId để list campaign vendor đã tham gia hoặc tự tạo
    @Get('by-vendor')
    @Public()
