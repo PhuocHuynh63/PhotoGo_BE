@@ -469,7 +469,7 @@ export class BookingService {
     );
 
     if (!slotLocked) {
-      throw new BadRequestException('Không thể khóa slot thời gian. Vui lòng thử lại sau.');
+      throw new BadRequestException('Slot thời gian này đã được đặt bởi người khác hoặc đang trong quá trình thanh toán. Vui lòng chọn thời gian khác.');
     }
 
     // Validate date and time
