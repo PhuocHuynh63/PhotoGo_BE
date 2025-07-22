@@ -1,6 +1,8 @@
 import { IsNotEmpty, IsOptional, IsString, IsEmail, Length, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRoles, UserRolesId, UserStatus } from 'src/constants/user.enum';
+import { User } from 'src/modules/users/entities/user.entity';
+import { Role } from 'src/modules/roles/entities/role.entity';
 
 export class CreateAuthDto {
   @IsNotEmpty({ message: 'Full name is required' })
@@ -79,3 +81,73 @@ export class CreateAuthDto {
   })
   auth?: string;
 }
+
+
+export class CreateAuthForAdminDto {
+  @IsEmail()
+  @ApiProperty({
+    example: 'user@example.com',
+    description: 'Địa chỉ email của người dùng',
+  })
+  email: string;
+
+  @IsString()
+  @Length(6, 50)
+  @ApiProperty({
+    example: 'password123',
+    description: 'Password for the user',
+    minLength: 6,
+    maxLength: 50,
+  })
+  password: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
+    example: 'Nguyễn Văn A',
+    description: 'Tên đầy đủ của người dùng',
+    required: false,
+  })
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
+    example: 'local',
+    enum: ['local', 'facebook', 'google'],
+    description: 'Phương thức xác thực (local, google, facebook, ...)',
+    required: false,
+  })
+  auth?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
+    example: 'R002',
+    enum: UserRolesId,
+    description: 'ID vai trò của người dùng',
+    required: false,
+  })
+  roleId?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
+    example: 'https://example.com/avatar.jpg',
+    description: 'URL avatar',
+    required: false,
+  })
+  avatarUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
+    example: 'ACTIVE',
+    enum: UserStatus,
+    description: 'Trạng thái user',
+    required: false,
+  })
+  status?: string;
+}
+
+

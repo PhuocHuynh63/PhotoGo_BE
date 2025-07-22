@@ -11,7 +11,7 @@ import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FindAllUserDto } from './dto/admin/find-all-user.dto';
-import { CreateAuthDto } from '../auth/dto/create-auth.dto';
+import { CreateAuthDto, CreateAuthForAdminDto } from '../auth/dto/create-auth.dto';
 import { RolesGuard } from '../auth/passport/roles.guard';
 import { UseGuards } from '@nestjs/common';
 import { Roles } from 'src/decorator/role.decorator';
@@ -22,7 +22,7 @@ import { Role } from '../roles/entities/role.entity';
 @ApiBearerAuth('access-token')
 export class UserController {
   constructor(private readonly userService: UserService) { }
-  
+
   @Post('/create/user')
   @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ApiConsumes('multipart/form-data')
@@ -30,8 +30,8 @@ export class UserController {
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'avatarUrl', maxCount: 1 },
   ]))
-  async createUser(@Body() createUser: CreateAuthDto): Promise<User> {
-    return this.userService.createUser(createUser);
+  async createUserForAdmin(@Body() createUser: CreateAuthForAdminDto): Promise<User> {
+    return this.userService.createUserForAdmin(createUser);
   }
 
   @Public()
