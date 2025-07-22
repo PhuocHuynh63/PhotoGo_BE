@@ -5,7 +5,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { RoleService } from '../roles/role.service';
 import { getInitials, hashPasswordHelper } from 'src/utils/utils';
-import { CreateAuthDto } from '../auth/dto/create-auth.dto';
+import { CreateAuthDto, CreateAuthForAdminDto } from '../auth/dto/create-auth.dto';
 import * as bcrypt from 'bcrypt';
 import { UploadService } from 'src/3rdService/upload/upload.service';
 import { MailService } from 'src/3rdService/mail/mail.service';
@@ -34,9 +34,9 @@ export class UserService {
     @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
   ) { }
 
-  // #region create 
-  async createUser(createAuthDto: CreateAuthDto): Promise<User> {
-    const { passwordHash, status, avatarUrl, ...userData } = createAuthDto;
+  // #region createUserForAdmin
+  async createUserForAdmin(createAuthDto: CreateAuthForAdminDto): Promise<User> {
+    const { password, status, avatarUrl, ...userData } = createAuthDto;
 
     // Kiểm tra xem email đã tồn tại chưa
     const existingUser = await this.userRepository.findOne({ where: { email: createAuthDto.email } });
@@ -44,10 +44,10 @@ export class UserService {
       throw new ConflictException(`Email ${createAuthDto.email} đã được sử dụng`);
     }
 
-    // Enforce the strong password regex for local registration
+    // Hash password nếu có
     let hashedPassword = '';
-    if (createAuthDto.auth === 'local') {
-      hashedPassword = await hashPasswordHelper(passwordHash);
+    if (createAuthDto.auth === 'local' && password) {
+      hashedPassword = await hashPasswordHelper(password);
     }
 
     let role = null;
@@ -55,8 +55,7 @@ export class UserService {
       role = await this.roleService.getDefaultRole(); // Lấy role mặc định từ RoleService
     } else {
       role = await this.roleService.findOne(createAuthDto.roleId);
-    } // Tìm role theo roleId
-
+    }
 
     const newUser = this.userRepository.create({
       passwordHash: hashedPassword,
@@ -78,6 +77,8 @@ export class UserService {
 
     return savedUser;
   }
+
+
   //#endregion create
 
   //#region create
