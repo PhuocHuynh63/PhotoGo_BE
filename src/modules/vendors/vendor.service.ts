@@ -200,6 +200,16 @@ export class VendorService {
             await campaignVendorRepo.save(campaignVendor);
           }
         }
+        // Gán vendor vào các campaign khác với isAvailable=false, invited=false
+        const otherCampaigns = await campaignRepo.find({ where: { name: Not('Chào Bạn Mới') } });
+        for (const other of otherCampaigns) {
+          // Kiểm tra đã tồn tại campaignVendor chưa
+          let otherCV = await campaignVendorRepo.findOne({ where: { campaign: { id: other.id }, vendor: { id: savedVendor.id } } });
+          if (!otherCV) {
+            otherCV = campaignVendorRepo.create({ campaign: other, vendor: savedVendor, isAvailable: false, invited: false });
+            await campaignVendorRepo.save(otherCV);
+          }
+        }
 
         return result;
       } catch (error) {
