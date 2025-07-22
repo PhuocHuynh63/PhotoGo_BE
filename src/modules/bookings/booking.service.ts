@@ -807,7 +807,7 @@ export class BookingService {
   }
   //#endregion Create Booking
 
-  
+
   // Create booking with old logic (single day)
   private async createBookingWithOldLogic(
     createBookingDto: CreateBookingDto,
@@ -1396,9 +1396,9 @@ export class BookingService {
       const updatedBooking = await this.bookingRepository.save(booking);
 
       // NEW: Reopen scheduled dates if booking is cancelled and it's a multi-day booking
-      if ((updateBookingDto.status === BookingStatus.CANCELLED_TIMEOUT || 
-           updateBookingDto.status === BookingStatus.CANCELLED_USER ||
-           updateBookingDto.status === BookingStatus.CANCELLED_VENDOR) &&
+      if ((updateBookingDto.status === BookingStatus.CANCELLED_TIMEOUT ||
+        updateBookingDto.status === BookingStatus.CANCELLED_USER ||
+        updateBookingDto.status === BookingStatus.CANCELLED_VENDOR) &&
         oldStatus !== updateBookingDto.status &&
         booking.schedules &&
         booking.schedules.length > 0) {
@@ -1906,11 +1906,11 @@ export class BookingService {
   }
 
   async updateStatus(id: string, updateStatusDto: UpdateStatusDto): Promise<Booking> {
-    const booking = await this.bookingRepository.findOne({ 
+    const booking = await this.bookingRepository.findOne({
       where: { id },
       relations: ['schedules']
     });
-    
+
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${id} not found`);
     }
@@ -1934,10 +1934,10 @@ export class BookingService {
     await this.bookingHistoryRepository.save(history);
 
     // Handle slot unlocking for cancellation statuses
-    if (newStatus === BookingStatus.CANCELLED_TIMEOUT || 
-        newStatus === BookingStatus.CANCELLED_USER ||
-        newStatus === BookingStatus.CANCELLED_VENDOR) {
-      
+    if (newStatus === BookingStatus.CANCELLED_TIMEOUT ||
+      newStatus === BookingStatus.CANCELLED_USER ||
+      newStatus === BookingStatus.CANCELLED_VENDOR) {
+
       // Reopen scheduled dates for multi-day booking
       if (booking.schedules && booking.schedules.length > 0) {
         try {
@@ -2153,8 +2153,8 @@ export class BookingService {
     }
 
     // Handle refund if booking was already paid
-    if (oldStatus === BookingStatus.PAID || oldStatus === BookingStatus.PENDING || 
-        oldStatus === BookingStatus.CONFIRMED || oldStatus === BookingStatus.PROGRESSING) {
+    if (oldStatus === BookingStatus.PAID || oldStatus === BookingStatus.PENDING ||
+      oldStatus === BookingStatus.CONFIRMED || oldStatus === BookingStatus.PROGRESSING) {
       try {
         // Create refund record for manual processing
         // This would typically call a refund service
