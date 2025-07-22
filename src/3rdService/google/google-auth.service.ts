@@ -53,11 +53,16 @@ export class GoogleAuthService {
     // TODO: Add notification after fixing dependency injection
     this.logger.log(`Google login successful for user ${existingUser.id}`);
 
+    const rolePayload = {
+      id: existingUser.role.id,
+      name: existingUser.role.name,
+    };
+
     // Tạo JWT token
     const accessToken = this.jwtService.sign({
       email: existingUser.email,
       sub: existingUser.id,
-      role: existingUser.role,
+      role: rolePayload,
     });
 
     return { user: existingUser, access_token_jwt: accessToken };

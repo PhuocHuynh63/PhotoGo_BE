@@ -32,7 +32,7 @@ export class GoogleAuthController {
 
     if (isMobileApp) {
       // Trả về dữ liệu JSON cho ứng dụng di động kèm theo URL chuyển hướng
-      const redirectUrl = `myapp://HomeScreen?user=${encodeURIComponent(JSON.stringify(user))}&token=${access_token_jwt}`;
+      const redirectUrl = `myapp://HomeScreen? user=${encodeURIComponent(JSON.stringify(user))}&token=${access_token_jwt}`;
       return res.json({
         message: 'Google login success',
         redirectUrl,

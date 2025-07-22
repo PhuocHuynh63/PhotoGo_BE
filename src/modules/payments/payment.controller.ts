@@ -19,7 +19,7 @@ import { PaginationDto } from './dto/pagination.dto';
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) {}
+  constructor(private readonly paymentService: PaymentService) { }
 
   @Post()
   @ApiOperation({ summary: 'Tạo mới một thanh toán' })
@@ -61,7 +61,7 @@ export class PaymentController {
       }
       throw new HttpException('Lỗi khi lấy danh sách thanh toán', HttpStatus.INTERNAL_SERVER_ERROR);
     }
-  }  
+  }
 
   @Get('/invoice/:invoiceId')
   @Public()
@@ -105,7 +105,7 @@ export class PaymentController {
       }
       throw new HttpException('Lỗi khi lấy thông tin thanh toán theo ID giao dịch', HttpStatus.INTERNAL_SERVER_ERROR);
     }
-  } 
+  }
 
   @Post('/:invoiceId/payos/link')
   @ApiOperation({ summary: 'Tạo liên kết thanh toán PayOS' })
@@ -118,18 +118,7 @@ export class PaymentController {
     @Param('invoiceId') invoiceId: string,
     @Body('type') type: PaymentType = PaymentType.DEPOSIT
   ): Promise<any> {
-    if (!invoiceId) {
-      throw new HttpException('ID hóa đơn không được để trống', HttpStatus.BAD_REQUEST);
-    }
-
-    try {
-      return await this.paymentService.createPayOSLink(invoiceId, type);
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException('Lỗi khi tạo liên kết thanh toán', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+    return await this.paymentService.createPayOSLink(invoiceId, type);
   }
 
   // @Get('/:invoiceId/check-slot-availability')

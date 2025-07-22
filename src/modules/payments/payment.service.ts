@@ -57,7 +57,7 @@ export class PaymentService {
     private readonly locationWorkingDateRepository: Repository<LocationWorkingDate>,
     @InjectRepository(Album)
     private readonly albumRepository: Repository<Album>,
-  ) {}
+  ) { }
 
   // Helper function to format date to DD/MM/YYYY
   private formatDate(date: Date): string {
@@ -224,11 +224,11 @@ export class PaymentService {
       throw new BadRequestException('ID hóa đơn không được để trống');
     }
 
-    const invoice = await this.invoiceRepo.findOne({ 
+    const invoice = await this.invoiceRepo.findOne({
       where: { id: invoiceId },
       relations: ['booking', 'booking.user', 'booking.serviceConcept'],
     });
-    
+
     if (!invoice) {
       throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${invoiceId}`);
     }
@@ -252,24 +252,24 @@ export class PaymentService {
         throw new BadRequestException('Slot thời gian không còn khả dụng. Vui lòng chọn slot khác.');
       }
     }
-  
+
     let amount = 0;
     if (paymentType === PaymentType.DEPOSIT) {
       amount = invoice.payablePrice; // Đã bao gồm depositAmount + rushFee
     } else {
       amount = invoice.remainingAmount;
     }
-  
+
     if (amount <= 0) {
       throw new BadRequestException('Số tiền thanh toán không hợp lệ');
     }
-  
+
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
     const serviceConcept = invoice.booking?.serviceConcept;
     const timestamp = Date.now();
     const orderCode = parseInt(`${timestamp}${paymentType === PaymentType.DEPOSIT ? '1' : '2'}`);
     const description = `PG#${orderCode}`;
-  
+
     const now = Math.floor(Date.now() / 1000);
     const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
 
@@ -290,10 +290,10 @@ export class PaymentService {
       ],
       expiredAt, // Unix timestamp (giây)
     };
-  
+
     try {
       const paymentLinkRes = await this.payos.createPaymentLink(paymentLinkData);
-  
+
       // Create payment record
       const payment = await this.create({
         invoiceId: invoice.id,
@@ -305,14 +305,14 @@ export class PaymentService {
         description,
         paymentOSId: paymentLinkRes.paymentLinkId,
       });
-  
+
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,
         paymentLinkId: paymentLinkRes.paymentLinkId,
       };
     } catch (error) {
-      console.error('PayOS error:', error);
-      throw new BadRequestException('Lỗi khi tạo liên kết thanh toán');
+      console.error('PayOS error:', error.response.message);
+      throw new BadRequestException(error.response.message);
     }
   }
 
@@ -322,15 +322,15 @@ export class PaymentService {
     }
 
     const { status, transactionId } = data;
-    
+
     // Find payment based on transactionId
-    const payment = await this.paymentRepository.findOne({ 
+    const payment = await this.paymentRepository.findOne({
       where: { transactionId },
       relations: [
-        'invoice', 
-        'invoice.booking', 
-        'invoice.booking.user', 
-        'invoice.booking.user.voucherUsers', 
+        'invoice',
+        'invoice.booking',
+        'invoice.booking.user',
+        'invoice.booking.user.voucherUsers',
         'invoice.booking.user.voucherUsers.voucher',
         'invoice.booking.histories',
         'invoice.booking.schedules' // Add schedules relation
@@ -355,7 +355,7 @@ export class PaymentService {
         // Slot is no longer available, reject payment and create refund record
         payment.status = PaymentStatus.REFUND_PENDING;
         await this.paymentRepository.save(payment);
-        
+
         // Create refund record for manual processing
         try {
           await this.refundService.createConflictRefund(payment.id, {
@@ -369,7 +369,7 @@ export class PaymentService {
         } catch (refundError) {
           console.error('Error creating refund record:', refundError);
         }
-        
+
         // Send notification to user about slot unavailability and pending refund
         if (booking.email) {
           await this.mailService.sendBookingCancellationEmail(
@@ -381,7 +381,7 @@ export class PaymentService {
             'Slot thời gian đã được đặt bởi người khác. Tiền sẽ được hoàn lại trong 1-3 ngày làm việc.'
           );
         }
-        
+
         return {
           success: false,
           message: 'Slot thời gian không còn khả dụng. Tiền sẽ được hoàn lại.'
@@ -431,7 +431,7 @@ export class PaymentService {
           console.error('Error locking slot after successful payment:', error);
         }
       }
-      
+
       // Handle voucher if exists
       if (invoice.voucherId) {
         try {
@@ -471,7 +471,7 @@ export class PaymentService {
           booking.locationId
         );
       }
-      
+
       return {
         success: false,
         message: status === 'FAILED' ? 'Thanh toán thất bại' : 'Đơn hàng đã bị huỷ'
@@ -485,13 +485,13 @@ export class PaymentService {
     const { status, code, id, orderCode } = callbackData;
 
     // Find payment based on transactionId (orderCode)
-    const payment = await this.paymentRepository.findOne({ 
+    const payment = await this.paymentRepository.findOne({
       where: { transactionId: paymentId },
       relations: [
-        'invoice', 
-        'invoice.booking', 
-        'invoice.booking.user', 
-        'invoice.booking.user.voucherUsers', 
+        'invoice',
+        'invoice.booking',
+        'invoice.booking.user',
+        'invoice.booking.user.voucherUsers',
         'invoice.booking.user.voucherUsers.voucher',
         'invoice.booking.histories',
         'invoice.booking.location',
@@ -515,7 +515,7 @@ export class PaymentService {
       // Slot is no longer available, reject payment
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);
-      
+
       // Send notification to user about slot unavailability
       if (booking.email) {
         await this.mailService.sendBookingCancellationEmail(
@@ -527,7 +527,7 @@ export class PaymentService {
           'Slot thời gian đã được đặt bởi người khác trước khi bạn thanh toán'
         );
       }
-      
+
       return {
         success: false,
         message: 'Slot thời gian không còn khả dụng'
@@ -629,7 +629,7 @@ export class PaymentService {
         console.error('Error updating voucher usage:', error);
       }
     }
-    
+
     const voucher = await this.voucherRepository.findOne({
       where: { id: invoice.voucherId },
     });
@@ -660,18 +660,18 @@ export class PaymentService {
     const { status, code, id, orderCode } = callbackData;
 
     // Find payment based on transactionId (orderCode)
-    const payment = await this.paymentRepository.findOne({ 
+    const payment = await this.paymentRepository.findOne({
       where: { transactionId: paymentId },
       relations: [
-        'invoice', 
-        'invoice.booking', 
+        'invoice',
+        'invoice.booking',
         'invoice.booking.histories',
         'invoice.booking.schedules' // Add schedules relation
       ]
     });
 
     if (!payment) {
-        throw new NotFoundException(`Không tìm thấy thanh toán với ID ${paymentId}`);
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${paymentId}`);
     }
 
     // Update payment status to failed
@@ -763,7 +763,7 @@ export class PaymentService {
           // Convert date format from DD/MM/YYYY to YYYY-MM-DD
           const [day, month, year] = schedule.date.split('/');
           const convertedDate = `${year}-${month}-${day}`;
-          
+
           // Find and close the working date
           const workingDate = await this.locationWorkingDateRepository.findOne({
             where: {
@@ -796,7 +796,7 @@ export class PaymentService {
           // Convert date format from DD/MM/YYYY to YYYY-MM-DD
           const [day, month, year] = schedule.date.split('/');
           const convertedDate = `${year}-${month}-${day}`;
-          
+
           // Find and reopen the working date
           const workingDate = await this.locationWorkingDateRepository.findOne({
             where: {
@@ -829,16 +829,16 @@ export class PaymentService {
    */
   private async updateBookingStatus(booking: Booking, paymentType: PaymentType): Promise<void> {
     if (paymentType === PaymentType.DEPOSIT) {
-    // Thanh toán thành công - chuyển từ NOT_PAID sang PAID
-    if (booking.status === BookingStatus.NOT_PAID) {
-      booking.status = BookingStatus.PENDING;
-      await this.bookingRepository.save(booking);
-      // Create booking history
-      const history = this.bookingHistoryRepository.create({
-        booking: booking,
-        status: BookingStatus.PENDING,
-      });
-      await this.bookingHistoryRepository.save(history);
+      // Thanh toán thành công - chuyển từ NOT_PAID sang PAID
+      if (booking.status === BookingStatus.NOT_PAID) {
+        booking.status = BookingStatus.PENDING;
+        await this.bookingRepository.save(booking);
+        // Create booking history
+        const history = this.bookingHistoryRepository.create({
+          booking: booking,
+          status: BookingStatus.PENDING,
+        });
+        await this.bookingHistoryRepository.save(history);
       }
     }
   }
