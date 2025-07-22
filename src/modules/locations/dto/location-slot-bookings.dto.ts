@@ -47,6 +47,11 @@ export class SlotBookingDetailDto {
   @IsOptional()
   @IsNumber()
   total?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export class SlotBookingsDto {
@@ -76,4 +81,4 @@ export class LocationSlotBookingsResponseDto {
   @ApiProperty({ type: [SlotBookingsDto] })
   @IsArray()
   slots: SlotBookingsDto[];
-} 
+}
