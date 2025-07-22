@@ -824,14 +824,17 @@ export class BookingService {
       const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
       if (campaignVoucher) {
         const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
-        if (campaignVendor) {
-          const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
-          if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
-            throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
-          }
-        } else {
-          throw new BadRequestException('Voucher này chưa được xác nhận mời vendor hoặc vendor chưa xác nhận tham gia campaign');
+        // Lấy vendorId từ location
+        const location = await this.locationRepository.findOne({ where: { id: createBookingDto.locationId }, relations: ['vendor'] });
+        if (!location) {
+          throw new NotFoundException('Không tìm thấy chi nhánh');
+        }
+        const conceptVendorId = location.vendor.id;
+        // Lấy tất cả các vendor hợp lệ của campaign
+        const campaignVendors = await campaignVendorRepo.find({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
+        const isValid = campaignVendors.some(cv => String(cv.vendor.id) === String(conceptVendorId));
+        if (!isValid) {
+          throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
         }
       }
     }
@@ -882,120 +885,148 @@ export class BookingService {
     // Convert date format from DD/MM/YYYY to YYYY-MM-DD
     const convertedDate = this.convertDateFormat(createBookingDto.date);
 
-    const booking = this.bookingRepository.create({
-      ...createBookingDto,
-      date: convertedDate,
-      userId,
-      serviceConceptId,
-      locationId: createBookingDto.locationId,
-      status: BookingStatus.NOT_PAID,
-      depositAmount: createBookingDto.depositAmount,
-      depositType: BookingDepositType.PERCENTAGE,
-      bookingType: BookingType.SINGLE_DAY,
-      code: randomCode
-    });
-
-    const savedBooking = await this.bookingRepository.save(booking);
-
-    // Find voucher if provided
-    let voucher = null;
-    if (createBookingDto.voucherId) {
-      voucher = await this.voucherRepository.findOne({
-        where: { id: createBookingDto.voucherId },
+    let savedBooking = null;
+    let invoice = null;
+    let album = null;
+    let vendorAlbum = null;
+    try {
+      const booking = this.bookingRepository.create({
+        ...createBookingDto,
+        date: convertedDate,
+        userId,
+        serviceConceptId,
+        locationId: createBookingDto.locationId,
+        status: BookingStatus.NOT_PAID,
+        depositAmount: createBookingDto.depositAmount,
+        depositType: BookingDepositType.PERCENTAGE,
+        bookingType: BookingType.SINGLE_DAY,
+        code: randomCode
       });
-    }
+      savedBooking = await this.bookingRepository.save(booking);
 
-    const history = this.bookingHistoryRepository.create({
-      bookingId: savedBooking.id,
-      status: BookingStatus.NOT_PAID,
-    });
-    await this.bookingHistoryRepository.save(history);
-
-    // Create invoice using InvoiceService
-    const invoice = await this.invoiceService.create(
-      savedBooking.id,
-      voucher?.id,
-      {
-        issuedAt: new Date().toISOString(),
-      }
-    );
-
-    // Create payment link for deposit
-    const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
-
-    // Set timeout to unlock slot if payment is not completed
-    setTimeout(async () => {
-      try {
-        // Check if booking is still pending
-        const currentBooking = await this.bookingRepository.findOne({
-          where: { id: savedBooking.id }
+      // Find voucher if provided
+      let voucher = null;
+      if (createBookingDto.voucherId) {
+        voucher = await this.voucherRepository.findOne({
+          where: { id: createBookingDto.voucherId },
         });
+      }
 
-        if (currentBooking && currentBooking.status === BookingStatus.NOT_PAID) {
-          // Unlock the slot
-          await this.locationAvailabilityService.unlockSlot(
-            createBookingDto.date,
-            createBookingDto.time,
-            createBookingDto.locationId
-          );
+      const history = this.bookingHistoryRepository.create({
+        bookingId: savedBooking.id,
+        status: BookingStatus.NOT_PAID,
+      });
+      await this.bookingHistoryRepository.save(history);
 
-          // Cancel the booking
-          currentBooking.status = BookingStatus.CANCELLED_TIMEOUT;
-          await this.bookingRepository.save(currentBooking);
+      // Create invoice using InvoiceService
+      invoice = await this.invoiceService.create(
+        savedBooking.id,
+        voucher?.id,
+        {
+          issuedAt: new Date().toISOString(),
+        }
+      );
 
-          // Create cancellation history
-          const timeoutHistory = this.bookingHistoryRepository.create({
-            bookingId: currentBooking.id,
-            status: BookingStatus.CANCELLED_TIMEOUT,
+      // Create payment link for deposit
+      const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
+
+      // Set timeout to unlock slot if payment is not completed
+      setTimeout(async () => {
+        try {
+          // Check if booking is still pending
+          const currentBooking = await this.bookingRepository.findOne({
+            where: { id: savedBooking.id }
           });
-          await this.bookingHistoryRepository.save(timeoutHistory);
 
-          // Send notification to user about timeout
-          if (currentBooking.email) {
-            try {
-              await this.mailService.sendBookingCancellationEmail(
-                currentBooking.email,
-                currentBooking.fullName,
-                currentBooking.code,
-                currentBooking.date,
-                currentBooking.time,
-                'Đặt lịch đã hết hạn do không thanh toán trong thời gian quy định'
-              );
-            } catch (error) {
-              console.error('Error sending timeout email:', error);
+          if (currentBooking && currentBooking.status === BookingStatus.NOT_PAID) {
+            // Unlock the slot
+            await this.locationAvailabilityService.unlockSlot(
+              createBookingDto.date,
+              createBookingDto.time,
+              createBookingDto.locationId
+            );
+
+            // Cancel the booking
+            currentBooking.status = BookingStatus.CANCELLED_TIMEOUT;
+            await this.bookingRepository.save(currentBooking);
+
+            // Create cancellation history
+            const timeoutHistory = this.bookingHistoryRepository.create({
+              bookingId: currentBooking.id,
+              status: BookingStatus.CANCELLED_TIMEOUT,
+            });
+            await this.bookingHistoryRepository.save(timeoutHistory);
+
+            // Send notification to user about timeout
+            if (currentBooking.email) {
+              try {
+                await this.mailService.sendBookingCancellationEmail(
+                  currentBooking.email,
+                  currentBooking.fullName,
+                  currentBooking.code,
+                  currentBooking.date,
+                  currentBooking.time,
+                  'Đặt lịch đã hết hạn do không thanh toán trong thời gian quy định'
+                );
+              } catch (error) {
+                console.error('Error sending timeout email:', error);
+              }
             }
           }
+        } catch (error) {
+          console.error('Error in booking timeout handler:', error);
         }
-      } catch (error) {
-        console.error('Error in booking timeout handler:', error);
+      }, 15 * 60 * 1000); // 15 minutes timeout
+
+      // create album with status not_upload
+      // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
+      vendorAlbum = await this.vendorAlbumRepository.findOne({
+        where: { location: { id: savedBooking.locationId } }
+      });
+      if (!vendorAlbum) {
+        throw new NotFoundException('Không tìm thấy vendor album cho location này');
       }
-    }, 15 * 60 * 1000); // 15 minutes timeout
 
-    // create album with status not_upload
-    // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
-    const vendorAlbum = await this.vendorAlbumRepository.findOne({
-      where: { location: { id: savedBooking.locationId } }
-    });
-    if (!vendorAlbum) {
-      throw new NotFoundException('Không tìm thấy vendor album cho location này');
+      album = this.albumRepository.create({
+        bookingId: savedBooking.id,
+        status: AlbumStatus.NOT_UPLOAD,
+        date: savedBooking.date,
+        driveLink: null,
+        photos: [],
+        behindTheScenes: [],
+        vendorAlbum: vendorAlbum,
+      });
+      await this.albumRepository.save(album);
+
+      return {
+        booking: this.formatBookingDates(savedBooking),
+        paymentLink: paymentLinkData.checkoutUrl,
+        code: randomCode,
+      };
+    } catch (error) {
+      // Rollback logic
+      if (album && album.id) {
+        await this.albumRepository.delete(album.id);
+      }
+      if (invoice && invoice.id) {
+        await this.paymentService.deleteAllByInvoiceId(invoice.id);
+        await this.invoiceRepository.delete(invoice.id);
+      }
+      if (savedBooking && savedBooking.id) {
+        await this.bookingRepository.delete(savedBooking.id);
+      }
+      // Unlock slot nếu đã lock (single day)
+      try {
+        await this.locationAvailabilityService.unlockSlot(
+          createBookingDto.date,
+          createBookingDto.time,
+          createBookingDto.locationId
+        );
+      } catch (unlockErr) {
+        // ignore
+      }
+      throw error;
     }
-
-    const album = this.albumRepository.create({
-      bookingId: savedBooking.id,
-      status: AlbumStatus.NOT_UPLOAD,
-      date: savedBooking.date,
-      driveLink: null,
-      photos: [],
-      behindTheScenes: [],
-      vendorAlbum: vendorAlbum,
-    });
-    await this.albumRepository.save(album);
-
-    return {
-      booking: this.formatBookingDates(savedBooking),
-      paymentLink: paymentLinkData.checkoutUrl,
-      code: randomCode,
-    };
   }
 
   // Create booking with new logic (multi-day)
@@ -1014,14 +1045,17 @@ export class BookingService {
       const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { voucherId: voucher.id, isAvailable: true }, relations: ['campaign'] });
       if (campaignVoucher) {
         const campaignVendorRepo = this.campaignVoucherRepository.manager.getRepository(CampaignVendor);
-        const campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
-        if (campaignVendor) {
-          const conceptVendorId = serviceConcept.servicePackage?.vendor?.id;
-          if (!conceptVendorId || conceptVendorId !== campaignVendor.vendor.id) {
-            throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
-          }
-        } else {
-          throw new BadRequestException('Voucher này chưa được xác nhận mời vendor hoặc vendor chưa xác nhận tham gia campaign');
+        // Lấy vendorId từ location
+        const location = await this.locationRepository.findOne({ where: { id: createBookingDto.locationId }, relations: ['vendor'] });
+        if (!location) {
+          throw new NotFoundException('Không tìm thấy chi nhánh');
+        }
+        const conceptVendorId = location.vendor.id;
+        // Lấy tất cả các vendor hợp lệ của campaign
+        const campaignVendors = await campaignVendorRepo.find({ where: { campaign: { id: campaignVoucher.campaign.id }, invited: true, isAvailable: true }, relations: ['vendor'] });
+        const isValid = campaignVendors.some(cv => String(cv.vendor.id) === String(conceptVendorId));
+        if (!isValid) {
+          throw new BadRequestException('Voucher này chỉ áp dụng cho dịch vụ thuộc vendor của campaign');
         }
       }
     }
@@ -1073,87 +1107,133 @@ export class BookingService {
     const firstSchedule = createBookingDto.schedules[0];
     const convertedDate = this.convertDateFormat(firstSchedule.date);
 
-    const booking = this.bookingRepository.create({
-      ...createBookingDto,
-      date: convertedDate,
-      userId,
-      serviceConceptId,
-      locationId: createBookingDto.locationId,
-      status: BookingStatus.PENDING,
-      depositAmount: createBookingDto.depositAmount,
-      depositType: BookingDepositType.PERCENTAGE,
-      bookingType: BookingType.MULTI_DAY,
-      code: randomCode
-    });
-
-    const savedBooking = await this.bookingRepository.save(booking);
-
-    // Create booking schedules for all dates
-    const scheduleEntities = createBookingDto.schedules.map(schedule =>
-      this.bookingScheduleRepository.create({
-        bookingId: savedBooking.id,
-        date: new Date(this.convertDateFormat(schedule.date)),
-        // notes: schedule.notes,
-        status: BookingScheduleStatus.SCHEDULED,
-      })
-    );
-
-    await this.bookingScheduleRepository.save(scheduleEntities);
-
-    // Find voucher if provided
-    let voucher = null;
-    if (createBookingDto.voucherId) {
-      voucher = await this.voucherRepository.findOne({
-        where: { id: createBookingDto.voucherId },
+    let savedBooking = null;
+    let invoice = null;
+    let album = null;
+    let vendorAlbum = null;
+    let scheduleEntities = [];
+    try {
+      const booking = this.bookingRepository.create({
+        ...createBookingDto,
+        date: convertedDate,
+        userId,
+        serviceConceptId,
+        locationId: createBookingDto.locationId,
+        status: BookingStatus.PENDING,
+        depositAmount: createBookingDto.depositAmount,
+        depositType: BookingDepositType.PERCENTAGE,
+        bookingType: BookingType.MULTI_DAY,
+        code: randomCode
       });
-    }
+      savedBooking = await this.bookingRepository.save(booking);
 
-    const history = this.bookingHistoryRepository.create({
-      bookingId: savedBooking.id,
-      status: BookingStatus.NOT_PAID,
-    });
-    await this.bookingHistoryRepository.save(history);
+      // Create booking schedules for all dates
+      scheduleEntities = createBookingDto.schedules.map(schedule =>
+        this.bookingScheduleRepository.create({
+          bookingId: savedBooking.id,
+          date: new Date(this.convertDateFormat(schedule.date)),
+          // notes: schedule.notes,
+          status: BookingScheduleStatus.SCHEDULED,
+        })
+      );
+      await this.bookingScheduleRepository.save(scheduleEntities);
 
-    // Create invoice using InvoiceService
-    const invoice = await this.invoiceService.create(
-      savedBooking.id,
-      voucher?.id,
-      {
-        issuedAt: new Date().toISOString(),
+      // Find voucher if provided
+      let voucher = null;
+      if (createBookingDto.voucherId) {
+        voucher = await this.voucherRepository.findOne({
+          where: { id: createBookingDto.voucherId },
+        });
       }
-    );
 
-    // Create payment link for deposit
-    const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
+      const history = this.bookingHistoryRepository.create({
+        bookingId: savedBooking.id,
+        status: BookingStatus.NOT_PAID,
+      });
+      await this.bookingHistoryRepository.save(history);
 
-    // For multi-day booking, we don't set timeout because we don't lock slots
-    // The entire day is closed when booking is created
+      // Create invoice using InvoiceService
+      invoice = await this.invoiceService.create(
+        savedBooking.id,
+        voucher?.id,
+        {
+          issuedAt: new Date().toISOString(),
+        }
+      );
 
-    // create album with status not_upload
-    // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
-    const vendorAlbum = await this.vendorAlbumRepository.findOne({
-      where: { location: { id: savedBooking.locationId } }
-    });
-    if (!vendorAlbum) {
-      throw new NotFoundException('Không tìm thấy vendor album cho location này');
+      // Create payment link for deposit
+      const paymentLinkData = await this.paymentService.createPayOSLink(invoice.id, PaymentType.DEPOSIT);
+
+      // create album with status not_upload
+      // Lấy vendorAlbum theo locationId, nếu không có thì throw lỗi
+      vendorAlbum = await this.vendorAlbumRepository.findOne({
+        where: { location: { id: savedBooking.locationId } }
+      });
+      if (!vendorAlbum) {
+        throw new NotFoundException('Không tìm thấy vendor album cho location này');
+      }
+
+      album = this.albumRepository.create({
+        bookingId: savedBooking.id,
+        status: AlbumStatus.NOT_UPLOAD,
+        date: savedBooking.date,
+        driveLink: null,
+        photos: [],
+        behindTheScenes: [],
+        vendorAlbum: vendorAlbum,
+      });
+      await this.albumRepository.save(album);
+
+      return {
+        booking: this.formatBookingDates(savedBooking),
+        paymentLink: paymentLinkData.checkoutUrl,
+        code: randomCode,
+      };
+    } catch (error) {
+      // Rollback logic
+      if (album && album.id) {
+        await this.albumRepository.delete(album.id);
+      }
+      if (invoice && invoice.id) {
+        await this.paymentService.deleteAllByInvoiceId(invoice.id);
+        await this.invoiceRepository.delete(invoice.id);
+      }
+      if (scheduleEntities && scheduleEntities.length > 0) {
+        for (const schedule of scheduleEntities) {
+          if (schedule.id) {
+            await this.bookingScheduleRepository.delete(schedule.id);
+          }
+        }
+      }
+      if (savedBooking && savedBooking.id) {
+        await this.bookingRepository.delete(savedBooking.id);
+      }
+      // Reopen working dates if needed (multi-day)
+      try {
+        for (const schedule of createBookingDto.schedules) {
+          if (schedule.date) {
+            const [day, month, year] = schedule.date.split('/');
+            const convertedDate = `${year}-${month}-${day}`;
+            const workingDate = await this.locationWorkingDateRepository.findOne({
+              where: {
+                date: new Date(convertedDate),
+                locationAvailability: {
+                  location: { id: createBookingDto.locationId }
+                }
+              },
+              relations: ['locationAvailability', 'locationAvailability.location']
+            });
+            if (workingDate) {
+              workingDate.isAvailable = true;
+              await this.locationWorkingDateRepository.save(workingDate);
+            }
+          }
+        }
+      } catch (unlockErr) {
+        // ignore
+      }
+      throw error;
     }
-
-    const album = this.albumRepository.create({
-      bookingId: savedBooking.id,
-      status: AlbumStatus.NOT_UPLOAD,
-      date: savedBooking.date,
-      driveLink: null,
-      photos: [],
-      behindTheScenes: [],
-      vendorAlbum: vendorAlbum,
-    });
-    await this.albumRepository.save(album);
-
-    return {
-      booking: this.formatBookingDates(savedBooking),
-      paymentLink: paymentLinkData.checkoutUrl,
-      code: randomCode,
-    };
   }
   //#endregion
 

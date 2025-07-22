@@ -187,7 +187,7 @@ export class VendorService {
         this.logger.log(`Tạo nhà cung cấp hoàn tất trong ${Date.now() - startTime}ms`);
 
         // Gán campaign chào bạn mới tự động khi tạo vendor mới
-        const campaign = await campaignRepo.findOne({ where: { name: 'Chào bạn mới' } });
+        const campaign = await campaignRepo.findOne({ where: { name: 'Chào Bạn Mới' } });
         if (campaign) {
           let campaignVendor = await campaignVendorRepo.findOne({ where: { campaign: { id: campaign.id } }, relations: ['vendor'] });
           if (campaignVendor) {

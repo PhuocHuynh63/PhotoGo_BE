@@ -1103,7 +1103,7 @@ export class CampaignService {
       JSON.stringify({ campaignId, vendorId })
     );
     // Link xác nhận
-    const confirmLink = `${'https://photogo.id.vn'}/api/campaigns/confirm-invite?token=${token}`;
+    const confirmLink = `${'https://photogo.id.vn'}/campaigns/confirm-invite?token=${token}`;
     // Gửi mail
     await this.mailService.sendMail(
       vendor.user_id.email,

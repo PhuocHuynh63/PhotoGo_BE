@@ -755,6 +755,10 @@ export class PaymentService {
     return await this.bookingService['isSlotStillAvailable'](invoice.booking.id);
   }
 
+  async deleteAllByInvoiceId(invoiceId: string): Promise<void> {
+    await this.paymentRepository.delete({ invoiceId });
+  }
+
   // NEW: Method to close all scheduled dates for multi-day booking
   private async closeAllScheduledDates(schedules: any[], locationId: string): Promise<void> {
     try {

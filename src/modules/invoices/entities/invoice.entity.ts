@@ -37,7 +37,7 @@ export class Invoice {
   @Column({ type: 'integer', default: 0 })
   originalPrice: number;
 
-  @Column({ type: 'integer', default: 0 })
+  @Column({ type: 'integer', default: 0, name: 'discount_amount' })
   discountAmount: number;
 
   @Column({ type: 'integer', default: 0 })
