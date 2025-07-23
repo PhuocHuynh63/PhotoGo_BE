@@ -18,7 +18,6 @@ export enum UserRoles {
 export enum UserStatus {
     ACTIVE = 'hoạt động',
     INACTIVE = 'không hoạt động',
-    BANNED = 'bị cấm',
     SUSPENDED = 'bị tạm ngưng',
 }
 

@@ -14,7 +14,7 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
         const user = await this.authService.validateUser(email, password);
 
         if (user.status != 'hoạt động') {
-            if (user.status == UserStatus.BANNED) {
+            if (user.status == UserStatus.SUSPENDED) {
                 throw new UnauthorizedException('Tài khoản đã bị chặn vui lòng liên hệ với quản trị viên');
             }
             if (user.status == UserStatus.INACTIVE) {

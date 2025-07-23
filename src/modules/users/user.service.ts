@@ -222,7 +222,8 @@ export class UserService {
       throw new NotFoundException(`Người dùng với ID ${id} không tồn tại`);
     }
     user.status = status;
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    return saved;
   }
   //#endregion updateStatus
 
