@@ -48,9 +48,9 @@ export class UserService {
 
     // Hash password nếu có
     let hashedPassword = '';
-    if (createAuthDto.auth === 'local' && password) {
+    // if (createAuthDto.auth === 'local' && password) {
       hashedPassword = await hashPasswordHelper(password);
-    }
+    // }
 
     let role = null;
     if (!createAuthDto.roleId) {
