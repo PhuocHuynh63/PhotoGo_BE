@@ -213,13 +213,13 @@ export class SubscriptionVendorService {
           updatedAt: sv.updatedAt,
         },
         plan: sv.plan,
-        history,
+        historyDetails: history,
       });
     }
     // Phân trang
     const pageNum = Math.max(1, historyDto.current || 1);
     const pageSizeNum = Math.max(1, historyDto.pageSize || 10);
-    const totalRecords = mapped.length;
+    const totalRecords = mapped.reduce((acc, curr) => acc + curr.historyDetails.length, 0);
     const totalPage = Math.ceil(totalRecords / pageSizeNum);
     const paged = mapped.slice((pageNum - 1) * pageSizeNum, pageNum * pageSizeNum);
     return {
