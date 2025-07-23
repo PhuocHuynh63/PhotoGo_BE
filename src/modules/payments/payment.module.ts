@@ -18,10 +18,13 @@ import { LocationAvailabilityModule } from '../locations/location-availability.m
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 import { Album } from '../album/entities/album.entity';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
+import { PaymentTransactionService } from './payment-transaction.service';
+import { PaymentTransactionController } from './payment-transaction.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction, Voucher, LocationWorkingDate, Album]),
+    TypeOrmModule.forFeature([Payment, Invoice, Booking, BookingHistory, Point, PointTransaction, Voucher, LocationWorkingDate, Album, PaymentTransaction]),
     VoucherModule,
     PayosModule,
     AuthModule,
@@ -30,8 +33,8 @@ import { Album } from '../album/entities/album.entity';
     forwardRef(() => RefundModule),
     LocationAvailabilityModule,
   ],
-  controllers: [PaymentController],
-  providers: [PaymentService],
+  controllers: [PaymentController, PaymentTransactionController],
+  providers: [PaymentService, PaymentTransactionService],
   exports: [PaymentService],
 })
 export class PaymentModule {}

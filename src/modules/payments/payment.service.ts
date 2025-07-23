@@ -26,6 +26,8 @@ import { LocationAvailabilityService } from '../locations/location-availability.
 import { Voucher } from '../vouchers/entities/voucher.entity';
 import { LocationWorkingDate } from '../locations/entities/location-workingdate.entity';
 import { Album } from '../album/entities/album.entity';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
+import { CreatePaymentTransactionDto } from './dto/create-payment-transaction.dto';
 
 @Injectable()
 export class PaymentService {
@@ -57,6 +59,8 @@ export class PaymentService {
     private readonly locationWorkingDateRepository: Repository<LocationWorkingDate>,
     @InjectRepository(Album)
     private readonly albumRepository: Repository<Album>,
+    @InjectRepository(PaymentTransaction)
+    private readonly paymentTransactionRepository: Repository<PaymentTransaction>,
   ) { }
 
   // Helper function to format date to DD/MM/YYYY
@@ -306,6 +310,20 @@ export class PaymentService {
         paymentOSId: paymentLinkRes.paymentLinkId,
       });
 
+      // Create payment transaction record
+      const paymentTransactionDto: CreatePaymentTransactionDto = {
+        paymentId: payment.id,
+        amount,
+        paymentMethod: PaymentMethod.PAYOS,
+        status: PaymentStatus.PENDING,
+        type: paymentType,
+        description,
+        transactionId: orderCode.toString(),
+      };
+      await this.paymentTransactionRepository.save(
+        this.paymentTransactionRepository.create(paymentTransactionDto)
+      );
+
       return {
         checkoutUrl: paymentLinkRes.checkoutUrl,
         paymentLinkId: paymentLinkRes.paymentLinkId,
@@ -392,6 +410,20 @@ export class PaymentService {
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
 
+      // Create payment transaction record (success)
+      const paymentTransactionDto: CreatePaymentTransactionDto = {
+        paymentId: payment.id,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        status: PaymentStatus.PAID,
+        type: payment.type,
+        description: payment.description,
+        transactionId: payment.transactionId,
+      };
+      await this.paymentTransactionRepository.save(
+        this.paymentTransactionRepository.create(paymentTransactionDto)
+      );
+
       // Update invoice status and paid amount
       const paymentAmount = Math.round(Number(payment.amount));
       invoice.paidAmount += paymentAmount;
@@ -455,6 +487,20 @@ export class PaymentService {
     } else if (status === 'FAILED' || status === 'CANCELLED') {
       payment.status = PaymentStatus.FAILED;
       await this.paymentRepository.save(payment);
+
+      // Create payment transaction record (failed)
+      const paymentTransactionDto: CreatePaymentTransactionDto = {
+        paymentId: payment.id,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        status: PaymentStatus.FAILED,
+        type: payment.type,
+        description: payment.description,
+        transactionId: payment.transactionId,
+      };
+      await this.paymentTransactionRepository.save(
+        this.paymentTransactionRepository.create(paymentTransactionDto)
+      );
 
       // NEW: Reopen scheduled dates for multi-day booking if payment failed
       if (booking.schedules && booking.schedules.length > 0) {
@@ -537,6 +583,20 @@ export class PaymentService {
     // Update payment status
     payment.status = PaymentStatus.PAID;
     await this.paymentRepository.save(payment);
+
+    // Create payment transaction record (success)
+    const paymentTransactionDto: CreatePaymentTransactionDto = {
+      paymentId: payment.id,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      status: PaymentStatus.PAID,
+      type: payment.type,
+      description: payment.description,
+      transactionId: payment.transactionId,
+    };
+    await this.paymentTransactionRepository.save(
+      this.paymentTransactionRepository.create(paymentTransactionDto)
+    );
 
     // Update invoice status and paid amount
     const paymentAmount = Math.round(Number(payment.amount));
@@ -723,6 +783,20 @@ export class PaymentService {
       });
       await this.bookingHistoryRepository.save(history);
     }
+
+    // Create payment transaction record (failed)
+    const paymentTransactionDto: CreatePaymentTransactionDto = {
+      paymentId: payment.id,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      status: PaymentStatus.FAILED,
+      type: payment.type,
+      description: payment.description,
+      transactionId: payment.transactionId,
+    };
+    await this.paymentTransactionRepository.save(
+      this.paymentTransactionRepository.create(paymentTransactionDto)
+    );
   }
 
   async findOneByTransactionId(transactionId: string): Promise<string> {

@@ -1,6 +1,7 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { PaymentMethod, PaymentStatus, PaymentType } from '../../../constants/payment.enum';
+import { PaymentTransaction } from './payment-transaction.entity';
 
 @Entity('payment')
 export class Payment {
@@ -40,4 +41,7 @@ export class Payment {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+
+  @OneToMany(() => PaymentTransaction, (paymentTransaction) => paymentTransaction.payment)
+  paymentTransactions: PaymentTransaction[];
 }
