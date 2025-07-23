@@ -1608,14 +1608,11 @@ export class BookingService {
     }
 
     const hasMembership = await this.hasActiveMembership(userId);
-
-    if (hasMembership && diffDays >= 3) {
+    if (hasMembership) {
       return 0;
-    } else if (diffDays < 3) {
+    } else {
       return Math.round(serviceBasePrice * 0.05);
     }
-
-    return 0;
   }
 
   async getDiscountAmount(
