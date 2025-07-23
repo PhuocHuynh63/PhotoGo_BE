@@ -169,6 +169,28 @@ export class SubscriptionVendorService {
     return this.mapToResponseDto(saved);
   }
 
+  /**
+   * Lấy lịch sử subscription của vendor, group theo từng lần tham gia plan
+   */
+  async getGroupedSubscriptionHistoryByVendorId(vendorId: string) {
+    const records = await this.subscriptionVendorRepository.find({
+      where: { vendorId },
+      relations: ['plan'],
+      order: { createdAt: 'DESC' },
+    });
+    return records.map(sv => ({
+      subscriptionVendor: {
+        id: sv.id,
+        joinedDate: sv.joinedDate,
+        endedDate: sv.endedDate,
+        isActive: sv.isActive,
+        createdAt: sv.createdAt,
+        updatedAt: sv.updatedAt,
+      },
+      plan: sv.plan,
+    }));
+  }
+
   private mapToResponseDto(subscriptionVendor: SubscriptionVendor): SubscriptionVendorResponseDto {
     return {
       id: subscriptionVendor.id,

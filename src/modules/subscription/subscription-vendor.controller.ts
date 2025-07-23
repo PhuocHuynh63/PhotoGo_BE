@@ -55,6 +55,19 @@ export class SubscriptionVendorController {
     return this.subscriptionVendorService.canVendorJoinPlan(vendorId, planId);
   }
 
+  @Get('history/:vendorId')
+  @ApiOperation({ summary: 'Lấy lịch sử subscription của vendor (group từng lần tham gia plan)' })
+  @ApiParam({ name: 'vendorId', description: 'ID của vendor' })
+  @ApiResponse({ status: 200, description: 'Thành công' })
+  async getGroupedSubscriptionHistoryByVendorId(@Param('vendorId') vendorId: string) {
+    const grouped = await this.subscriptionVendorService.getGroupedSubscriptionHistoryByVendorId(vendorId);
+    return {
+      vendorId,
+      history: grouped,
+      totalRecords: grouped.length
+    };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Lấy thông tin subscription vendor theo ID' })
   @ApiParam({ name: 'id', description: 'ID của subscription vendor' })
