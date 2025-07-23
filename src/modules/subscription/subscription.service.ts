@@ -428,7 +428,7 @@ export class SubscriptionService {
     // Phân trang
     const pageNum = Math.max(1, historyDto.current || 1);
     const pageSizeNum = Math.max(1, historyDto.pageSize || 10);
-    const totalRecords = result.reduce((acc, curr) => acc + curr.historyDetails.length, 0);
+    const totalRecords = Math.max(1, result.length);
     const totalPage = Math.ceil(totalRecords / pageSizeNum);
     const paged = result.slice((pageNum - 1) * pageSizeNum, pageNum * pageSizeNum);
     return {
