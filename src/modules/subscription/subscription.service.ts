@@ -14,6 +14,8 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { SubscriptionReminderJobData } from './bull/subscription.processor';
 import { SubscriptionHistory } from './entities/subscription-history.entity';
+import { PaymentService } from '../payments/payment.service';
+import { SubscriptionPaymentService } from './subscription-payment.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -24,6 +26,7 @@ export class SubscriptionService {
     private readonly subscriptionRepository: Repository<Subscription>,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
+    private readonly subscriptionPaymentService: SubscriptionPaymentService,
     private readonly bullQueueService: BullQueueService,
     @InjectQueue('subscription-reminders') private readonly reminderQueue: Queue,
   ) { }
@@ -409,6 +412,23 @@ export class SubscriptionService {
       if (historyDto.action) {
         history = history.filter(h => h.action === historyDto.action);
       }
+      let payment = null;
+      try {
+        if (history.length < 2) {
+          const createPayment = history
+            .filter(h => h?.metadata?.action === SubscriptionStatus.PENDING)
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .at(0);
+
+          if (createPayment && createPayment.metadata && createPayment.metadata.paymentId) {
+            payment = await this.subscriptionPaymentService.getPaymentById(createPayment.metadata.paymentId);
+          }
+        }
+      } catch (err) {
+        this.logger.error(`Error fetching payment for subscription history: ${err.message}`, err.stack);
+      }
+
+
       result.push({
         subscription: {
           id: sub.id,
@@ -423,6 +443,7 @@ export class SubscriptionService {
         },
         plan: sub.plan,
         historyDetails: history,
+        payment: payment?.paymentOSId,
       });
     }
     // Phân trang
