@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { SubscriptionVendorService } from './subscription-vendor.service';
 import { CreateSubscriptionVendorDto, UpdateSubscriptionVendorDto, SubscriptionVendorResponseDto } from './dto/subscription-vendor.dto';
+import { HistoryDto, PaginationDto } from '../subscription/dto/find-subscription.dto';
 
 @ApiTags('subscription-vendors')
 @Controller('subscription-vendors')
@@ -59,13 +60,15 @@ export class SubscriptionVendorController {
   @ApiOperation({ summary: 'Lấy lịch sử subscription của vendor (group từng lần tham gia plan)' })
   @ApiParam({ name: 'vendorId', description: 'ID của vendor' })
   @ApiResponse({ status: 200, description: 'Thành công' })
-  async getGroupedSubscriptionHistoryByVendorId(@Param('vendorId') vendorId: string) {
-    const grouped = await this.subscriptionVendorService.getGroupedSubscriptionHistoryByVendorId(vendorId);
-    return {
-      vendorId,
-      history: grouped,
-      totalRecords: grouped.length
-    };
+  @ApiQuery({ name: 'current', required: false, type: Number, description: 'Trang hiện tại' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số lượng item trên mỗi trang' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Trường sắp xếp', enum: ['createdAt', 'updatedAt'] })
+  @ApiQuery({ name: 'sortDirection', required: false, type: String, description: 'Thứ tự sắp xếp', enum: ['asc', 'desc'] })
+  async getGroupedSubscriptionHistoryByVendorId(
+    @Param('vendorId') vendorId: string,
+    @Query() query: HistoryDto,
+  ) {
+    return this.subscriptionVendorService.getGroupedSubscriptionHistoryByVendorIdWithPagination(vendorId, query);
   }
 
   @Get(':id')

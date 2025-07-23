@@ -1,11 +1,11 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubscriptionService } from './subscription.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
-import { FindSubscriptionDto } from './dto/find-subscription.dto';
+import { FindSubscriptionDto, HistoryDto, PaginationDto } from './dto/find-subscription.dto';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionInvoice } from './entities/subscription-invoice.entity';
 import { Public } from 'src/decorator/custom';
@@ -131,13 +131,15 @@ export class SubscriptionController {
   @ApiOperation({ summary: 'Lấy lịch sử subscription theo user id (group theo từng subscription)' })
   @ApiParam({ name: 'userId', description: 'ID của user' })
   @ApiResponse({ status: 200, description: 'Thành công' })
-  async getSubscriptionHistoryByUserId(@Param('userId') userId: string) {
-    const grouped = await this.subscriptionService.getGroupedSubscriptionHistoryByUserId(userId);
-    return {
-      userId,
-      history: grouped,
-      totalRecords: grouped.length
-    };
+  @ApiQuery({ name: 'current', required: false, type: Number, description: 'Trang hiện tại' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số lượng item trên mỗi trang' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Trường sắp xếp', enum: ['createdAt', 'updatedAt'] })
+  @ApiQuery({ name: 'sortDirection', required: false, type: String, description: 'Thứ tự sắp xếp', enum: ['asc', 'desc'] })
+  async getSubscriptionHistoryByUserId(
+    @Param('userId') userId: string,
+    @Query() query: HistoryDto,
+  ) {
+    return this.subscriptionService.getGroupedSubscriptionHistoryByUserIdWithPagination(userId, query);
   }
 
   @Get('invoice/:invoiceId/payments')

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Subscription } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
-import { FindSubscriptionDto } from './dto/find-subscription.dto';
+import { FindSubscriptionDto, HistoryDto, PaginationDto } from './dto/find-subscription.dto';
 import { BillingCycle, PlanType, SubscriptionStatus, SubscriptionHistoryAction } from 'src/constants/subscription.enum';
 import { PayerType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
@@ -381,20 +381,34 @@ export class SubscriptionService {
   //#endregion scheduleCleanupJob
 
   /**
-   * Lấy lịch sử subscription của user, group theo từng subscription
-   * Nếu user chỉ có 1 subscription thì vẫn trả về dạng mảng 1 phần tử
+   * Lấy lịch sử subscription của user, group theo từng subscription, có phân trang và sắp xếp
    */
-  async getGroupedSubscriptionHistoryByUserId(userId: string) {
+  async getGroupedSubscriptionHistoryByUserIdWithPagination(userId: string, historyDto: HistoryDto) {
     // Lấy tất cả subscription của user (bao gồm cả plan)
-    const subscriptions = await this.subscriptionRepository.find({
+    let subscriptions = await this.subscriptionRepository.find({
       where: { userId },
       relations: ['plan'],
-      order: { createdAt: 'DESC' },
     });
-    // Lấy lịch sử cho từng subscription
+    // Sắp xếp
+    if (historyDto.sortBy && ['createdAt', 'updatedAt'].includes(historyDto.sortBy)) {
+      const dir = historyDto.sortDirection === 'asc' ? 1 : -1;
+      subscriptions = subscriptions.sort((a, b) => {
+        const aVal = a[historyDto.sortBy] instanceof Date ? a[historyDto.sortBy].getTime() : a[historyDto.sortBy];
+        const bVal = b[historyDto.sortBy] instanceof Date ? b[historyDto.sortBy].getTime() : b[historyDto.sortBy];
+        if (aVal < bVal) return -1 * dir;
+        if (aVal > bVal) return 1 * dir;
+        return 0;
+      });
+    } else {
+      subscriptions = subscriptions.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    }
+    // Lấy lịch sử cho từng subscription, lọc theo action nếu có
     const result = [];
     for (const sub of subscriptions) {
-      const history = await this.subscriptionHistoryService.findBySubscriptionId(sub.id);
+      let history = await this.subscriptionHistoryService.findBySubscriptionId(sub.id);
+      if (historyDto.action) {
+        history = history.filter(h => h.action === historyDto.action);
+      }
       result.push({
         subscription: {
           id: sub.id,
@@ -411,6 +425,21 @@ export class SubscriptionService {
         history,
       });
     }
-    return result;
+    // Phân trang
+    const pageNum = Math.max(1, historyDto.current || 1);
+    const pageSizeNum = Math.max(1, historyDto.pageSize || 10);
+    const totalRecords = result.length;
+    const totalPage = Math.ceil(totalRecords / pageSizeNum);
+    const paged = result.slice((pageNum - 1) * pageSizeNum, pageNum * pageSizeNum);
+    return {
+      history: paged,
+      totalRecords,
+      pagination: {
+        current: pageNum,
+        pageSize: pageSizeNum,
+        totalPage,
+        totalItem: totalRecords,
+      },
+    };
   }
 } 

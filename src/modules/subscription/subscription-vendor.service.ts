@@ -5,12 +5,15 @@ import { SubscriptionVendor } from './entities/subscription-vendor.entity';
 import { CreateSubscriptionVendorDto, UpdateSubscriptionVendorDto, SubscriptionVendorResponseDto } from './dto/subscription-vendor.dto';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { PlanType, BillingCycle } from 'src/constants/subscription.enum';
+import { HistoryDto, PaginationDto } from '../subscription/dto/find-subscription.dto';
+import { SubscriptionHistoryService } from './subscription-history.service';
 
 @Injectable()
 export class SubscriptionVendorService {
   constructor(
     @InjectRepository(SubscriptionVendor)
     private subscriptionVendorRepository: Repository<SubscriptionVendor>,
+    private readonly subscriptionHistoryService: SubscriptionHistoryService,
   ) {}
 
   async create(createDto: CreateSubscriptionVendorDto): Promise<SubscriptionVendorResponseDto> {
@@ -170,25 +173,65 @@ export class SubscriptionVendorService {
   }
 
   /**
-   * Lấy lịch sử subscription của vendor, group theo từng lần tham gia plan
+   * Lấy lịch sử subscription của vendor, group theo từng lần tham gia plan, có phân trang và sắp xếp
    */
-  async getGroupedSubscriptionHistoryByVendorId(vendorId: string) {
-    const records = await this.subscriptionVendorRepository.find({
+  async getGroupedSubscriptionHistoryByVendorIdWithPagination(vendorId: string, historyDto: HistoryDto) {
+    let records = await this.subscriptionVendorRepository.find({
       where: { vendorId },
       relations: ['plan'],
-      order: { createdAt: 'DESC' },
     });
-    return records.map(sv => ({
-      subscriptionVendor: {
-        id: sv.id,
-        joinedDate: sv.joinedDate,
-        endedDate: sv.endedDate,
-        isActive: sv.isActive,
-        createdAt: sv.createdAt,
-        updatedAt: sv.updatedAt,
+    // Sắp xếp nếu có
+    if (historyDto.sortBy && ['createdAt', 'updatedAt'].includes(historyDto.sortBy)) {
+      const dir = historyDto.sortDirection === 'asc' ? 1 : -1;
+      records = records.sort((a, b) => {
+        const aVal = a[historyDto.sortBy] instanceof Date ? a[historyDto.sortBy].getTime() : a[historyDto.sortBy];
+        const bVal = b[historyDto.sortBy] instanceof Date ? b[historyDto.sortBy].getTime() : b[historyDto.sortBy];
+        if (aVal < bVal) return -1 * dir;
+        if (aVal > bVal) return 1 * dir;
+        return 0;
+      });
+    } else {
+      records = records.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    }
+    // Lấy lịch sử cho từng subscriptionVendor nếu có, lọc theo action nếu có
+    const mapped = [];
+    for (const sv of records) {
+      let history = [];
+      if (sv.id) {
+        history = await this.subscriptionHistoryService.findBySubscriptionId(sv.id);
+        if (historyDto.action) {
+          history = history.filter(h => h.action === historyDto.action);
+        }
+      }
+      mapped.push({
+        subscriptionVendor: {
+          id: sv.id,
+          joinedDate: sv.joinedDate,
+          endedDate: sv.endedDate,
+          isActive: sv.isActive,
+          createdAt: sv.createdAt,
+          updatedAt: sv.updatedAt,
+        },
+        plan: sv.plan,
+        history,
+      });
+    }
+    // Phân trang
+    const pageNum = Math.max(1, historyDto.current || 1);
+    const pageSizeNum = Math.max(1, historyDto.pageSize || 10);
+    const totalRecords = mapped.length;
+    const totalPage = Math.ceil(totalRecords / pageSizeNum);
+    const paged = mapped.slice((pageNum - 1) * pageSizeNum, pageNum * pageSizeNum);
+    return {
+      history: paged,
+      totalRecords,
+      pagination: {
+        current: pageNum,
+        pageSize: pageSizeNum,
+        totalPage,
+        totalItem: totalRecords,
       },
-      plan: sv.plan,
-    }));
+    };
   }
 
   private mapToResponseDto(subscriptionVendor: SubscriptionVendor): SubscriptionVendorResponseDto {

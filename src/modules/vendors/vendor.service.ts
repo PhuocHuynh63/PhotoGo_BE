@@ -438,6 +438,7 @@ export class VendorService {
     response.priority = priority;
 
     // Get isRemarkable status
+    // this.logger.log(`[isRemarkable] Checking for vendorId=${id}`);
     const campaignData = await this.dataSource.query(`
       SELECT 
         CASE 
@@ -447,16 +448,19 @@ export class VendorService {
             JOIN user_campaign uc ON uc.campaign_id = c.id
             WHERE cv.vendor_id = $1 
             AND cv.is_available = true
+            AND cv.invited = true
             AND c.status = true
             AND uc.isavailable = true
+            AND c.name != 'Chào Bạn Mới'
             GROUP BY cv.campaign_id
             HAVING COUNT(uc.user_id) >= 5
           ) THEN true 
           ELSE false 
         END as is_remarkable
     `, [id]);
-
+    // this.logger.log(`[isRemarkable] campaignData for vendorId=${id}: ${JSON.stringify(campaignData)}`);
     response.isRemarkable = campaignData[0]?.is_remarkable === true;
+    // this.logger.log(`[isRemarkable] Result for vendorId=${id}: ${response.isRemarkable}`);
 
     return response;
   }
@@ -1089,8 +1093,10 @@ export class VendorService {
               JOIN user_campaign uc ON uc.campaign_id = c.id
               WHERE cv.vendor_id = v.id 
               AND cv.is_available = true
+              AND cv.invited = true
               AND c.status = true
               AND uc.isavailable = true
+              AND c.name != 'Chào Bạn Mới'
               GROUP BY cv.campaign_id
               HAVING COUNT(uc.user_id) >= 5
             ) THEN true 
@@ -1420,6 +1426,8 @@ export class VendorService {
     const vendorMap = new Map();
   
     vendorData.forEach((row: any) => {
+      const isRemarkable = row.is_remarkable === true;
+      // this.logger.log(`[filterVendors][isRemarkable] vendorId=${row.id} | row.is_remarkable=${row.is_remarkable} | isRemarkable=${isRemarkable}`);
       if (!vendorMap.has(row.id)) {
         vendorMap.set(row.id, {
           id: row.id,
@@ -1439,8 +1447,8 @@ export class VendorService {
           maxPrice: Math.round(
             row.max_price ? this.convertOriginPriceToFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
           ),
-          isRemarkable: row.is_remarkable === true,
-          priority: row.priority === true,
+          isRemarkable,
+          priority: row.priority ?? 0,
           distance: row.distance ? Number(parseFloat(row.distance).toFixed(2)) : null,
           locations: [],
           servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
@@ -1560,6 +1568,56 @@ export class VendorService {
     // Cập nhật priority vào DB cho tất cả vendor
     await Promise.all(priorityDatas.map(p => this.vendorRepository.update(p.vendorId, { priority: p.priority })));
   
+    // Sau khi đã map vendorMap xong, cần xử lý giới hạn isRemarkable tối đa 3 vendor/tháng
+    // Lọc ra các vendor có isRemarkable=true
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    // Tạo mảng vendorId cần kiểm tra
+    const remarkableVendors = Array.from(vendorMap.values())
+      .filter(v => v.isRemarkable)
+      .map(v => v.id);
+    if (remarkableVendors.length > 0) {
+      // Lấy thời gian user đầu tiên tham gia campaign hợp lệ của từng vendor trong tháng hiện tại
+      const vendorJoinDates = await Promise.all(remarkableVendors.map(async (vendorId) => {
+        // Lấy ngày user đầu tiên tham gia campaign hợp lệ (không phải Chào Bạn Mới, isAvailable, invited đều true, đủ 5 user, trong tháng hiện tại)
+        const result = await this.dataSource.query(`
+          SELECT MIN(uc.joined_at) as first_joined
+          FROM campaign_vendor cv
+          JOIN campaign c ON c.id = cv.campaign_id
+          JOIN user_campaign uc ON uc.campaign_id = c.id
+          WHERE cv.vendor_id = $1
+            AND cv.is_available = true
+            AND cv.invited = true
+            AND c.status = true
+            AND c.name != 'Chào Bạn Mới'
+            AND uc.isavailable = true
+            AND EXTRACT(MONTH FROM uc.joined_at) = $2
+            AND EXTRACT(YEAR FROM uc.joined_at) = $3
+          GROUP BY cv.campaign_id
+          HAVING COUNT(uc.user_id) >= 5
+          ORDER BY first_joined ASC
+          LIMIT 1
+        `, [vendorId, currentMonth + 1, currentYear]);
+        return {
+          vendorId,
+          firstJoined: result[0]?.first_joined ? new Date(result[0].first_joined) : null
+        };
+      }));
+      // Sắp xếp theo ngày joined tăng dần, lấy tối đa 3 vendor
+      const top3 = vendorJoinDates
+        .filter(v => v.firstJoined)
+        .sort((a, b) => a.firstJoined.getTime() - b.firstJoined.getTime())
+        .slice(0, 3)
+        .map(v => v.vendorId);
+      // Set lại isRemarkable cho vendorMap
+      vendorMap.forEach(v => {
+        if (v.isRemarkable) {
+          v.isRemarkable = top3.includes(v.id);
+        }
+      });
+    }
+  
     return {
       data: pagedVendors,
       pagination: {
@@ -1674,8 +1732,10 @@ export class VendorService {
               JOIN user_campaign uc ON uc.campaign_id = c.id
               WHERE cv.vendor_id = v.id 
               AND cv.is_available = true
+              AND cv.invited = true
               AND c.status = true
               AND uc.isavailable = true
+              AND c.name != 'Chào Bạn Mới'
               GROUP BY cv.campaign_id
               HAVING COUNT(uc.user_id) >= 5
             ) THEN true 
@@ -2059,7 +2119,7 @@ export class VendorService {
       slug: row.slug,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      priority: row.priority === true,
+      priority: row.priority ?? 0,
       isRemarkable: row.is_remarkable === true,
       averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
       reviewCount: parseInt(row.review_count) || 0,
