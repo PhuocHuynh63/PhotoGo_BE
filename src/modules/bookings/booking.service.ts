@@ -2252,9 +2252,14 @@ export class BookingService {
     booking.isCheckedIn = true;
     booking.checkInTime = new Date();
     booking.status = BookingStatus.PROGRESSING;
-    await this.bookingRepository.save(booking);
+    // await this.bookingRepository.save(booking);
 
     // (Có thể lưu lịch sử vào bảng riêng nếu muốn)
+    const history = this.bookingHistoryRepository.create({
+      bookingId: booking.id,
+      status: BookingStatus.PROGRESSING,
+    });
+    // await this.bookingHistoryRepository.save(history);
 
     // 7. Trả về thông tin booking cho vendor xác nhận lại với khách
     return {

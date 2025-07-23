@@ -10,6 +10,7 @@ import {
   HttpException,
   HttpStatus,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { BookingScheduleService } from './booking-schedule.service';
@@ -35,6 +36,7 @@ import { JwtAuthGuard } from '../auth/passport/jwt-auth.guard';
 import { RolesGuard } from '../auth/passport/roles.guard';
 import { Roles } from 'src/decorator/role.decorator';
 import { Role } from 'src/modules/roles/entities/role.entity';
+import { CodeVerificationDto } from './dto/code-verification.dto';
 
 @Controller('bookings')
 @ApiExtraModels(CreateBookingDto)
@@ -146,15 +148,14 @@ export class BookingController {
     }
   }
 
-  //get code verification
-  @Get('code-verification')
-  @Public()
-  @ApiResponse({ status: 200, description: 'Lấy code verification thành công', type: String })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy code verification' })
+  @Put('code-verification')
+  // @Public()
+  @ApiOperation({ summary: 'Xác nhận check-in bằng code' })
+  @ApiResponse({ status: 200, description: 'Check-in thành công', type: String })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy booking hoặc code không hợp lệ' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
-  @ApiOperation({ summary: 'Lấy code verification' })
-  async getCodeVerification(@Query('code') code: string, @Query('userId') userId: string, @Query('vendorId') vendorId: string): Promise<{ message: string, code: string }> {
-    return await this.bookingService.getCodeVerification(code, userId, vendorId);
+  async verifyCode(@Body() dto: CodeVerificationDto): Promise<{ message: string, code: string }> {
+    return await this.bookingService.getCodeVerification(dto.code, dto.userId, dto.vendorId);
   }
 
   @Get('check-in-status')
