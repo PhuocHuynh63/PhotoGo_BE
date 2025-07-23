@@ -1,7 +1,6 @@
 import { IsString, IsOptional, IsBoolean, IsEnum, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SubscriptionInvoiceStatus } from 'src/constants/subscription.enum';
-import { PayerType } from 'src/constants/payment.enum';
 
 export class SubscriptionPaymentCallbackDto {
 

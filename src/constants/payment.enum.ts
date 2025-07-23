@@ -1,7 +1,12 @@
 export enum PaymentType {
   DEPOSIT = 'đặt cọc',
-  RENEWAL = 'gia hạn',
+  // RENEWAL = 'gia hạn',
   REMAINING = 'còn lại',
+  FULL_PAYMENT = 'thanh toán đầy đủ'
+}
+
+export enum PaymentSubscriptionType {
+  RENEWAL = 'gia hạn',
   FULL_PAYMENT = 'thanh toán đầy đủ'
 }
 

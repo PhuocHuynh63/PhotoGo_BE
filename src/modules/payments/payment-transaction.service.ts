@@ -43,6 +43,7 @@ export class PaymentTransactionService {
 
     // Ẩn các booking đã hủy
     query.andWhere('booking.status NOT IN (:...excludedStatus)', { excludedStatus: [BookingStatus.CANCELLED, BookingStatus.CANCELLED_TIMEOUT, BookingStatus.CANCELLED_VENDOR, BookingStatus.CANCELLED_USER] });
+    query.andWhere('pt.status = :status', { status: PaymentStatus.PAID });
 
     if (findAllPaymentTransactionsDto.vendorId) {
       query.andWhere('vendor.id = :vendorId', { vendorId: findAllPaymentTransactionsDto.vendorId });

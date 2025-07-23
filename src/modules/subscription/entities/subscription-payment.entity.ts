@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { SubscriptionInvoice } from './subscription-invoice.entity';
-import { PaymentMethod, PaymentStatus, PaymentType, PayerType } from '../../../constants/payment.enum';
+import { PaymentMethod, PaymentStatus, PaymentSubscriptionType, PayerType } from '../../../constants/payment.enum';
 
 @Entity('subscription_payment')
 export class SubscriptionPayment {
@@ -26,8 +26,8 @@ export class SubscriptionPayment {
   @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
   status: PaymentStatus;
 
-  @Column({ type: 'enum', enum: PaymentType, default: PaymentType.FULL_PAYMENT })
-  type: PaymentType;
+  @Column({ type: 'enum', enum: PaymentSubscriptionType, default: PaymentSubscriptionType.FULL_PAYMENT })
+  type: PaymentSubscriptionType;
 
   @Column({ type: 'varchar', length: 100, nullable: true, name: 'transaction_id' })
   transactionId: string;

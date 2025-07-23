@@ -121,6 +121,20 @@ export class PaymentController {
     return await this.paymentService.createPayOSLink(invoiceId, type);
   }
 
+  // thanh toán remaining amount
+  @Post('/:invoiceId/payos/remaining-amount')
+  @ApiOperation({ summary: 'Thanh toán remaining amount' })
+  @ApiResponse({ status: 200, description: 'Thanh toán remaining amount thành công' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy hóa đơn' })
+  @ResponseMessage('Thanh toán remaining amount thành công')
+  async createPayOSLinkRemainingAmount(
+    @Param('invoiceId') invoiceId: string,
+    @Body('type') type: PaymentType = PaymentType.REMAINING
+  ): Promise<any> {
+    return await this.paymentService.createPayOSLinkRemainingAmount(invoiceId, type);
+  }
+
   // @Get('/:invoiceId/check-slot-availability')
   // @ApiOperation({ summary: 'Kiểm tra slot thời gian còn khả dụng không trước khi thanh toán' })
   // @ApiResponse({ status: 200, description: 'Kiểm tra thành công' })

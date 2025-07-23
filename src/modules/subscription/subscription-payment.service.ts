@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubscriptionInvoice } from './entities/subscription-invoice.entity';
 import { SubscriptionPayment } from './entities/subscription-payment.entity';
-import { PaymentMethod, PaymentStatus, PaymentType, PayerType } from '../../constants/payment.enum';
+import { PaymentMethod, PaymentStatus, PaymentSubscriptionType, PayerType } from '../../constants/payment.enum';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionStatus, BillingCycle, SubscriptionInvoiceStatus } from '../../constants/subscription.enum';
 import { SubscriptionPaymentCallbackDto } from './dto/subscription-payment-callback.dto';
@@ -57,7 +57,7 @@ export class SubscriptionPaymentService {
 
   async createPayOSLinkForSubscriptionInvoice(
     planId: string,
-    type: PaymentType = PaymentType.FULL_PAYMENT,
+    type: PaymentSubscriptionType = PaymentSubscriptionType.FULL_PAYMENT,
     userId?: string,
     // vendorId?: string
   ) {
@@ -387,7 +387,7 @@ export class SubscriptionPaymentService {
         subscription.endDate = newEndDate;
 
         // Xác định loại action dựa trên payment type
-        const isRenewal = payment.type === PaymentType.RENEWAL;
+        const isRenewal = payment.type === PaymentSubscriptionType.RENEWAL;
         const renewalAction = isRenewal ? SubscriptionHistoryAction.RENEWED : SubscriptionHistoryAction.ACTIVATED;
 
         // Calculate duration based on billing cycle
@@ -562,7 +562,7 @@ export class SubscriptionPaymentService {
       subscriptionPaymentId: payment.id,
       invoiceId: invoice.id,
       subscriptionId: invoice.subscriptionId,
-      isRenewal: payment.type === PaymentType.RENEWAL,
+      isRenewal: payment.type === PaymentSubscriptionType.RENEWAL,
       paymentStatus: payment.status,
       payosStatus: status,
       payerType: payment.payerType,

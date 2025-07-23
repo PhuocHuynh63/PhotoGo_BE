@@ -337,6 +337,101 @@ export class PaymentService {
     }
   }
 
+  async createPayOSLinkRemainingAmount(invoiceId: string, paymentType: PaymentType) {
+    if (!invoiceId) {
+      throw new BadRequestException('ID hóa đơn không được để trống');
+    }
+    if (paymentType !== PaymentType.REMAINING) {
+      throw new BadRequestException('Chỉ hỗ trợ thanh toán số tiền còn lại (remaining amount)');
+    }
+
+    const invoice = await this.invoiceRepo.findOne({
+      where: { id: invoiceId },
+      relations: ['booking', 'booking.user', 'booking.serviceConcept'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${invoiceId}`);
+    }
+
+    // Check if payment already exists
+    const existingPayment = await this.paymentRepository.findOne({
+      where: {
+        invoiceId,
+        type: paymentType,
+        status: PaymentStatus.PAID
+      }
+    });
+    if (existingPayment) {
+      throw new ConflictException(`Đã tồn tại thanh toán ${paymentType} cho hóa đơn này`);
+    }
+
+    let amount = invoice.remainingAmount;
+    if (amount <= 0) {
+      throw new BadRequestException('Số tiền thanh toán không hợp lệ');
+    }
+
+    const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
+    const timestamp = Date.now();
+    const orderCode = parseInt(`${timestamp}2`); // 2 cho remaining
+    const description = `PG#${orderCode}`;
+    const now = Math.floor(Date.now() / 1000);
+    const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
+
+    const paymentLinkData = {
+      orderCode,
+      amount,
+      description,
+      returnUrl: `https://photogo.id.vn/payment/successful?paymentId=${orderCode}&status=success`,
+      cancelUrl: `https://photogo.id.vn/payment/error?paymentId=${orderCode}&status=error`,
+      webhookUrl: this.configService.get<string>('PAYOS_WEBHOOK_URL'),
+      buyerName,
+      items: [
+        {
+          name: invoice.booking.user.fullName,
+          quantity: 1,
+          price: amount,
+        },
+      ],
+      expiredAt,
+    };
+
+    try {
+      const paymentLinkRes = await this.payos.createPaymentLink(paymentLinkData);
+      // Create payment record
+      const payment = await this.create({
+        invoiceId: invoice.id,
+        amount,
+        paymentMethod: PaymentMethod.PAYOS,
+        status: PaymentStatus.PENDING,
+        transactionId: orderCode.toString(),
+        type: paymentType,
+        description,
+        paymentOSId: paymentLinkRes.paymentLinkId,
+      });
+      // Create payment transaction record
+      const paymentTransactionDto: CreatePaymentTransactionDto = {
+        paymentId: payment.id,
+        amount,
+        paymentMethod: PaymentMethod.PAYOS,
+        status: PaymentStatus.PENDING,
+        type: paymentType,
+        description,
+        transactionId: orderCode.toString(),
+      };
+      await this.paymentTransactionRepository.save(
+        this.paymentTransactionRepository.create(paymentTransactionDto)
+      );
+      return {
+        checkoutUrl: paymentLinkRes.checkoutUrl,
+        paymentLinkId: paymentLinkRes.paymentLinkId,
+      };
+    } catch (error) {
+      console.error('PayOS error:', error.response?.message || error.message);
+      throw new BadRequestException(error.response?.message || error.message);
+    }
+  }
+
   async handlePayOSWebhook(data: any) {
     if (!data || !data.transactionId) {
       throw new BadRequestException('Dữ liệu webhook không hợp lệ');
@@ -611,105 +706,104 @@ export class PaymentService {
       } else {
         invoice.status = InvoiceStatus.PARTIALLY_PAID;
       }
-    } else if (payment.type === PaymentType.REMAINING) {
-      invoice.status = InvoiceStatus.PAID;
-    }
-    await this.invoiceRepo.save(invoice);
+      await this.invoiceRepo.save(invoice);
 
-    // Update booking status using helper method
-    await this.updateBookingStatus(booking, payment.type);
+      // Update booking status using helper method
+      await this.updateBookingStatus(booking, payment.type);
 
-    // Handle payment priority - cancel overlapping bookings
-    if (payment.type === PaymentType.DEPOSIT) {
+      // Handle payment priority - cancel overlapping bookings
       await this.bookingService['handlePaymentPriority'](booking.id);
-    }
 
-    // NEW: Handle multi-day booking - close all scheduled dates when payment is successful
-    if (payment.type === PaymentType.DEPOSIT && booking.schedules && booking.schedules.length > 0) {
-      try {
-        await this.closeAllScheduledDates(booking.schedules, booking.locationId);
-      } catch (error) {
-        console.error('Error closing scheduled dates after successful payment:', error);
-      }
-    }
-
-    // handle point
-    let points = booking?.user?.points;
-    const userId = booking?.user?.id;
-    const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
-    // Nếu chưa có point record cho user thì tạo mới (dùng logic chuẩn của PointService)
-    if ((!points || points.length === 0) && userId) {
-      const userPoint = await this.pointService.findMyPoints(userId);
-      points = [userPoint];
-    }
-    if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
-      // Tính phần trăm đặt cọc
-      const depositPercent = booking.depositAmount;
-      points.forEach(async (point) => {
-        let earnedPoint = payment.amount / 1000000;
-        // Nếu là đặt cọc dạng phần trăm và từ 30 đến <70% thì trừ 5 điểm
-        if (
-          booking.depositType === BookingDepositType.PERCENTAGE &&
-          depositPercent >= 30 && depositPercent < 70
-        ) {
-          earnedPoint -= 5;
+      // NEW: Handle multi-day booking - close all scheduled dates when payment is successful
+      if (booking.schedules && booking.schedules.length > 0) {
+        try {
+          await this.closeAllScheduledDates(booking.schedules, booking.locationId);
+        } catch (error) {
+          console.error('Error closing scheduled dates after successful payment:', error);
         }
-        // Áp dụng multiplier nếu có
-        earnedPoint = earnedPoint * userMultiplier;
-        // Nếu >= 70% hoặc không phải dạng phần trăm thì nhận full điểm
-        point.balance += Math.round(earnedPoint);
-        await this.pointRepository.save(point);
-        const pointTransaction = this.pointTransactionRepository.create({
-          point: point,
-          amount: Math.round(earnedPoint),
-          type: PointTransactionType.EARN,
-          description: `Thanh toán đặt cọc`,
+      }
+
+      // handle point
+      let points = booking?.user?.points;
+      const userId = booking?.user?.id;
+      const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
+      // Nếu chưa có point record cho user thì tạo mới (dùng logic chuẩn của PointService)
+      if ((!points || points.length === 0) && userId) {
+        const userPoint = await this.pointService.findMyPoints(userId);
+        points = [userPoint];
+      }
+      if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
+        // Tính phần trăm đặt cọc
+        const depositPercent = booking.depositAmount;
+        points.forEach(async (point) => {
+          let earnedPoint = payment.amount / 1000000;
+          // Nếu là đặt cọc dạng phần trăm và từ 30 đến <70% thì trừ 5 điểm
+          if (
+            booking.depositType === BookingDepositType.PERCENTAGE &&
+            depositPercent >= 30 && depositPercent < 70
+          ) {
+            earnedPoint -= 5;
+          }
+          // Áp dụng multiplier nếu có
+          earnedPoint = earnedPoint * userMultiplier;
+          // Nếu >= 70% hoặc không phải dạng phần trăm thì nhận full điểm
+          point.balance += Math.round(earnedPoint);
+          await this.pointRepository.save(point);
+          const pointTransaction = this.pointTransactionRepository.create({
+            point: point,
+            amount: Math.round(earnedPoint),
+            type: PointTransactionType.EARN,
+            description: `Thanh toán đặt cọc`,
+          });
+          await this.pointTransactionRepository.save(pointTransaction);
         });
-        await this.pointTransactionRepository.save(pointTransaction);
-      });
-    }
-
-    // Send invoice to user's email if payment handled successfully
-    if (invoice.booking?.email) {
-      // Format issuedAt to VN time (Asia/Ho_Chi_Minh)
-      const issuedAtVN = new Date(invoice.issuedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-      await this.mailService.sendMail(
-        invoice.booking?.email,
-        'Hóa đơn thanh toán của bạn',
-        'invoice', // template name
-        { invoice: { ...invoice, issuedAt: issuedAtVN } }
-      );
-    }
-
-    // Handle voucher if exists
-    // Since voucher validation is already done during booking creation, 
-    // we can now read the voucherId directly from the invoice
-    if (invoice.voucherId) {
-      try {
-        await this.voucherService.updateVoucherUsage(invoice.voucherId);
-      } catch (error) {
-        console.error('Error updating voucher usage:', error);
       }
-    }
 
-    const voucher = await this.voucherRepository.findOne({
-      where: { id: invoice.voucherId },
-    });
-    if (voucher) {
-      await this.voucherService.useVoucher(voucher.id, booking.userId);
-    }
-
-    // Block the slot since payment is successful (for single day booking)
-    if (payment.type === PaymentType.DEPOSIT && !booking.schedules) {
-      try {
-        await this.locationAvailabilityService.lockSlotForBooking(
-          this.formatDate(booking.date),
-          booking.time,
-          booking.locationId
+      // Send invoice to user's email if payment handled successfully
+      if (invoice.booking?.email) {
+        // Format issuedAt to VN time (Asia/Ho_Chi_Minh)
+        const issuedAtVN = new Date(invoice.issuedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        await this.mailService.sendMail(
+          invoice.booking?.email,
+          'Hóa đơn thanh toán của bạn',
+          'invoice', // template name
+          { invoice: { ...invoice, issuedAt: issuedAtVN } }
         );
-      } catch (error) {
-        console.error('Error locking slot after successful payment:', error);
       }
+
+      // Handle voucher if exists
+      if (invoice.voucherId) {
+        try {
+          await this.voucherService.updateVoucherUsage(invoice.voucherId);
+        } catch (error) {
+          console.error('Error updating voucher usage:', error);
+        }
+      }
+
+      const voucher = await this.voucherRepository.findOne({
+        where: { id: invoice.voucherId },
+      });
+      if (voucher) {
+        await this.voucherService.useVoucher(voucher.id, booking.userId);
+      }
+
+      // Block the slot since payment is successful (for single day booking)
+      if (!booking.schedules) {
+        try {
+          await this.locationAvailabilityService.lockSlotForBooking(
+            this.formatDate(booking.date),
+            booking.time,
+            booking.locationId
+          );
+        } catch (error) {
+          console.error('Error locking slot after successful payment:', error);
+        }
+      }
+    } else if (payment.type === PaymentType.REMAINING) {
+      // Chỉ cập nhật trạng thái hóa đơn và booking, không xử lý điểm, voucher, slot, mail
+      invoice.status = InvoiceStatus.PAID;
+      await this.invoiceRepo.save(invoice);
+      await this.updateBookingStatus(booking, payment.type);
     }
 
     return {

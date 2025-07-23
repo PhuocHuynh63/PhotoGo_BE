@@ -15,7 +15,7 @@ import { SubscriptionPlanService } from './subscription-plan.service';
 import { SubscriptionPaymentCallbackDto } from './dto/subscription-payment-callback.dto';
 import { CreatePaymentLinkDto } from './dto/create-payment-link.dto';
 import { SubscriptionStatus } from '../../constants/subscription.enum';
-import { PaymentType, PayerType } from '../../constants/payment.enum';
+import { PaymentSubscriptionType } from '../../constants/payment.enum';
 import { SubscriptionHistoryService } from './subscription-history.service';
 import { UserService } from '../users/user.service';
 import { BillingCycle } from '../../constants/subscription.enum';
@@ -209,7 +209,7 @@ export class SubscriptionController {
     // Tạo link thanh toán cho gia hạn
     const result = await this.subscriptionPaymentService.createPayOSLinkForSubscriptionInvoice(
       savedInvoice.id,
-      PaymentType.RENEWAL
+      PaymentSubscriptionType.RENEWAL
     );
     return {
       ...result,

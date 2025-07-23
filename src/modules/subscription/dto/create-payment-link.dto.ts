@@ -1,16 +1,16 @@
 import { IsString, IsOptional, IsEnum, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { PaymentType, PayerType } from '../../../constants/payment.enum';
+import { PaymentSubscriptionType } from '../../../constants/payment.enum';
 
 export class CreatePaymentLinkDto {
   @ApiProperty({ description: 'ID của plan', required: true })
   @IsString()
   planId: string;
 
-  @ApiProperty({ description: 'Loại thanh toán', required: false, enum: PaymentType, example: PaymentType.FULL_PAYMENT })
-  @IsEnum(PaymentType)
+  @ApiProperty({ description: 'Loại thanh toán', required: false, enum: PaymentSubscriptionType, example: PaymentSubscriptionType.FULL_PAYMENT })
+  @IsEnum(PaymentSubscriptionType)
   @IsOptional()
-  type?: PaymentType;
+  type?: PaymentSubscriptionType;
 
   // @ApiProperty({ description: 'Loại người thanh toán', required: false, enum: PayerType })
   // @IsEnum(PayerType)
