@@ -149,7 +149,10 @@ export class SubscriptionPaymentService {
       ? `subscription - Khách hàng`
       : `subscription - Nhà cung cấp`;
 
-    const orderCode = parseInt(savedPayment.id.replace(/-/g, '').substring(0, 16));
+    const idWithoutHyphens = savedPayment.id.replace(/-/g, '');
+    const hexString = idWithoutHyphens.slice(-13);
+    const orderCode = parseInt(hexString, 16);
+
     const amount = Number(invoice.payablePrice);
     const description = payerDescription.slice(0, 50); // PayOS cho phép tới 50 ký tự
     const cancelUrl = `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
@@ -162,6 +165,8 @@ export class SubscriptionPaymentService {
       cancelUrl,
       returnUrl
     };
+
+    console.log('DEBUG payosPayload:', payosPayload);
 
     // Gọi PayOS SDK để tạo link thanh toán
     let payosResult;
