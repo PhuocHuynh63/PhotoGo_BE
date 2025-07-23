@@ -1,13 +1,18 @@
-import { Controller, Get, Post, Put, Delete, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Query, Param, BadRequestException, Req, UseInterceptors } from '@nestjs/common';
 import { PointService } from './point.service';
-import { CreatePointDto, CreatePointTransactionDto } from './dto/create-point.dto';
+import { CreatePointDto, CreatePointTransactionDto, ChangePointsDto } from './dto/create-point.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
 import { Point } from './entities/point.entity';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { FindPointDto, FindMyTransactionsDto, FindMyPointHistoryDto } from './dto/find-point.dto';
 import { PointTransaction } from './entities/point-transaction.entity';
 import { CurrentUserId } from 'src/decorator/user.decorator';
+import { PointTransactionType } from 'src/constants/point.enum';
+import { Role } from '../roles/entities/role.entity';
+import { Roles } from 'src/decorator/role.decorator';
+import { Request } from 'express';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('Points')
 @Controller('points')
@@ -19,6 +24,7 @@ export class PointController {
   @ApiOperation({ summary: 'Tạo mới một điểm (Protected)' })
   @ApiResponse({ status: 201, description: 'Điểm đã được tạo thành công', type: Point })
   @ApiResponse({ status: 401, description: 'Không được phép' })
+  @ApiConsumes('multipart/form-data')
   @ResponseMessage('Tạo điểm thành công')
   async create(@Body() createPointDto: CreatePointDto): Promise<Point> {
     return this.pointService.create(createPointDto);
@@ -29,6 +35,7 @@ export class PointController {
   @ApiOperation({ summary: 'Lấy tất cả giao dịch điểm' })
   @ApiResponse({ status: 200, description: 'Danh sách tất cả giao dịch', type: [PointTransaction] })
   @ApiResponse({ status: 404, description: 'Không tìm thấy giao dịch' })
+  @ApiConsumes('multipart/form-data')
   @ResponseMessage('Lấy danh sách giao dịch thành công')
   async findAllTransactions(): Promise<PointTransaction[]> {
     return this.pointService.findAllTransactions();
@@ -43,9 +50,8 @@ export class PointController {
     return this.pointService.findTransactionsByPointId(pointId);
   }
 
-  @Public()
   @Get()
-  @ApiOperation({ summary: 'Lấy tất cả điểm với phân trang, tìm kiếm và sắp xếp (Public)' })
+  @ApiOperation({ summary: 'Lấy tất cả điểm với phân trang, tìm kiếm và sắp xếp' })
   @ApiResponse({
     status: 200,
     description: 'Danh sách điểm với phân trang, hỗ trợ tìm kiếm theo email/tên và sắp xếp theo balance, thời gian, email, tên',
@@ -181,6 +187,7 @@ export class PointController {
   @Post('transactions')
   @ApiOperation({ summary: 'Tạo mới một giao dịch điểm' })
   @ApiResponse({ status: 201, description: 'Giao dịch điểm đã được tạo thành công', type: PointTransaction })
+  @ApiConsumes('multipart/form-data')
   async createTransaction(@Body() createPointTransactionDto: CreatePointTransactionDto): Promise<PointTransaction> {
     return this.pointService.createTransaction(createPointTransactionDto);
   }
@@ -199,5 +206,47 @@ export class PointController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy điểm' })
   async remove(@Param('id') id: string): Promise<void> {
     return this.pointService.remove(id);
+  }
+
+  @Post('change')
+  @Roles({ id: 'R005' } as Role)
+  @ApiOperation({ summary: 'Thay đổi điểm cho user (Admin): type quyết định cộng/trừ' })
+  @ApiResponse({ status: 201, description: 'Thay đổi điểm thành công' })
+  @ApiConsumes('application/json', 'multipart/form-data')
+  @UseInterceptors(AnyFilesInterceptor()) // Đảm bảo body luôn được parse
+  async changePoints(@Body() dto: ChangePointsDto, @Req() req: Request) {
+    let data: any = dto;
+    if (!dto || Object.keys(dto).length === 0) {
+      data = req.body;
+    }
+    // Ép kiểu amount về number nếu là string
+    data.amount = Number(data.amount);
+
+    console.log('DTO nhận được (sau ép kiểu):', data);
+
+    if (!data.userId || isNaN(data.amount) || !data.type) {
+      throw new BadRequestException('Thiếu hoặc sai định dạng trường userId, amount, type');
+    }
+    if (data.amount <= 0) {
+      throw new BadRequestException('Số điểm phải lớn hơn 0');
+    }
+
+    if (data.type === PointTransactionType.ADMIN_DEDUCT_MANUAL) {
+      return this.pointService.deductPointsFromUser(
+        data.userId,
+        data.amount,
+        data.type,
+        data.description || 'Trừ điểm thủ công'
+      );
+    } else if (data.type === PointTransactionType.ADMIN_ADD_MANUAL) {
+      return this.pointService.addPointsToUser(
+        data.userId,
+        data.amount,
+        data.type,
+        data.description || 'Cộng điểm thủ công'
+      );
+    } else {
+      throw new BadRequestException('Type không hợp lệ, chỉ chấp nhận cộng/trừ điểm thủ công');
+    }
   }
 }
