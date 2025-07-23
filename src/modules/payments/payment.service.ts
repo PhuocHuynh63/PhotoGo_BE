@@ -354,17 +354,17 @@ export class PaymentService {
       throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${invoiceId}`);
     }
 
-    // Check if payment already exists
-    const existingPayment = await this.paymentRepository.findOne({
-      where: {
-        invoiceId,
-        type: paymentType,
-        status: PaymentStatus.PAID
-      }
-    });
-    if (existingPayment) {
-      throw new ConflictException(`Đã tồn tại thanh toán ${paymentType} cho hóa đơn này`);
-    }
+    // // Check if payment already exists
+    // const existingPayment = await this.paymentRepository.findOne({
+    //   where: {
+    //     invoiceId,
+    //     type: paymentType,
+    //     status: PaymentStatus.PAID
+    //   }
+    // });
+    // if (existingPayment) {
+    //   throw new ConflictException(`Đã tồn tại thanh toán ${paymentType} cho hóa đơn này`);
+    // }
 
     let amount = invoice.remainingAmount;
     if (amount <= 0) {
