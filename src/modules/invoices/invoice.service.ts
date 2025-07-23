@@ -154,7 +154,20 @@ export class InvoiceService {
     const remainingAmount = priceAfterDiscount - depositAmount;
 
     // Số tiền phải thanh toán ngay (payable) = Tiền cọc + Toàn bộ phí phát sinh (rushFee)
-    const payablePrice = depositAmount + rushFee;
+    let payablePrice = depositAmount + rushFee;
+    let subscriptionDiscount = 0;
+    const userId = booking.userId;
+    if (userId) {
+      // Kiểm tra user có subscription active không
+      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
+        where: { userId, status: SubscriptionStatus.ACTIVE },
+      });
+      if (activeSubscription) {
+        // Áp dụng giảm giá 10% trên tổng cuối cùng (sau tất cả)
+        subscriptionDiscount = Math.round(payablePrice * 0.1);
+        payablePrice = payablePrice - subscriptionDiscount;
+      }
+    }
 
     // --- BƯỚC 6: TẠO HÓA ĐƠN VỚI CÁC GIÁ TRỊ ĐÃ ĐỒNG BỘ ---
     const invoice = this.invoiceRepository.create({
@@ -162,11 +175,11 @@ export class InvoiceService {
       bookingId: booking.id,
       voucherId: voucher?.id || null,
       originalPrice: finalPrice,          // Giá dịch vụ cuối cùng (chưa giảm giá, chưa có phí)
-      discountAmount: discountAmount,       // Số tiền được giảm
-      discountedPrice: priceAfterDiscount,  // Giá dịch vụ sau khi giảm giá
+      discountAmount: discountAmount + subscriptionDiscount,       // Số tiền được giảm (gồm cả voucher và subscription)
+      discountedPrice: priceAfterDiscount,  // Giá dịch vụ sau khi giảm giá voucher (chưa tính subscription)
       taxAmount: taxAmount,               // Tiền thuế
       feeAmount: rushFee,                 // Phí phát sinh (rush fee)
-      payablePrice: payablePrice,           // Tổng tiền phải trả ngay (cọc + phí)
+      payablePrice: payablePrice,           // Tổng tiền phải trả ngay (cọc + phí - giảm subscription)
       depositAmount: depositAmount,         // Tiền cọc cho dịch vụ
       remainingAmount: remainingAmount,     // Tiền dịch vụ còn lại phải trả sau
       paidAmount: 0,

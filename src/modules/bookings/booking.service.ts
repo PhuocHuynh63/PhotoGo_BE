@@ -1630,6 +1630,7 @@ export class BookingService {
     remainingAmount: number,
     rushFee: number,
     totalPayable: number,
+    discountSubscription: number
   }> {
     // 1. Lấy thông tin cơ bản
     const serviceConcept = await this.serviceConceptRepository.findOne({
@@ -1713,8 +1714,20 @@ export class BookingService {
     // Tiền còn lại của DỊCH VỤ
     const remainingAmount = priceAfterDiscount - depositAmount;
 
+    // 5. Áp dụng giảm giá subscription (nếu có)
+    let discountSubscription = 0;
+    let totalPayableWithSubscription = Math.round(depositAmount);
+    if (userId) {
+      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
+        where: { userId, status: SubscriptionStatus.ACTIVE },
+      });
+      if (activeSubscription) {
+        discountSubscription = Math.round(totalPayableWithSubscription * 0.1);
+        totalPayableWithSubscription = totalPayableWithSubscription - discountSubscription;
+      }
+    }
 
-    // 5. Trả về kết quả
+    // 6. Trả về kết quả
     return {
       finalPrice: Math.round(finalPrice),
       discount: Math.round(discountAmount),
@@ -1722,7 +1735,8 @@ export class BookingService {
       priceAfterDiscount: Math.round(priceAfterDiscount),
       remainingAmount: Math.round(remainingAmount),
       rushFee: Math.round(rushFee),
-      totalPayable: Math.round(depositAmount)
+      totalPayable: totalPayableWithSubscription,
+      discountSubscription: discountSubscription
     };
   }
 
