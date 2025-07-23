@@ -1698,7 +1698,20 @@ export class BookingService {
     }
 
     // 4. Tính toán các giá trị thanh toán cuối cùng
-    const finalPrice = estimatedPrice + rushFee;
+    let finalPrice = estimatedPrice;
+    // 5. Áp dụng giảm giá subscription (nếu có)
+    let discountSubscription = 0;
+    if (userId) {
+      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
+        where: { userId, status: SubscriptionStatus.ACTIVE },
+      });
+      if (activeSubscription) {
+        discountSubscription = Math.round(finalPrice * 0.1);
+        finalPrice = finalPrice - discountSubscription;
+      }
+    }
+    // Sau khi giảm subscription, cộng rushFee
+    finalPrice = finalPrice + rushFee;
 
     // Giá sau khi giảm giá
     const priceAfterDiscount = finalPrice - discountAmount;
@@ -1714,19 +1727,6 @@ export class BookingService {
     // Tiền còn lại của DỊCH VỤ
     const remainingAmount = priceAfterDiscount - depositAmount;
 
-    // 5. Áp dụng giảm giá subscription (nếu có)
-    let discountSubscription = 0;
-    let totalPayableWithSubscription = Math.round(depositAmount);
-    if (userId) {
-      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
-        where: { userId, status: SubscriptionStatus.ACTIVE },
-      });
-      if (activeSubscription) {
-        discountSubscription = Math.round(totalPayableWithSubscription * 0.1);
-        totalPayableWithSubscription = totalPayableWithSubscription - discountSubscription;
-      }
-    }
-
     // 6. Trả về kết quả
     return {
       finalPrice: Math.round(finalPrice),
@@ -1735,7 +1735,7 @@ export class BookingService {
       priceAfterDiscount: Math.round(priceAfterDiscount),
       remainingAmount: Math.round(remainingAmount),
       rushFee: Math.round(rushFee),
-      totalPayable: totalPayableWithSubscription,
+      totalPayable: Math.round(depositAmount),
       discountSubscription: discountSubscription
     };
   }

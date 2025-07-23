@@ -65,14 +65,27 @@ export class InvoiceService {
     // ======================== LOGIC TÍNH TOÁN ĐỒNG BỘ ========================
 
     // --- BƯỚC 1: TÍNH GIÁ GỐC VÀ GIÁ CUỐI CÙNG CHO KHÁCH HÀNG (chưa gồm phí, chưa giảm giá) ---
-    const originPrice = Number(booking.serviceConcept.price); // Giá gốc từ DB
+    let originPrice = Number(booking.serviceConcept.price); // Giá gốc từ DB
     const COMMISSION_RATE = 0.30; // 30%
     const TAX_RATE = 0.05; // 5%
     const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
 
     // finalPrice là giá dịch vụ cuối cùng mà khách hàng thấy (đã gồm hoa hồng, thuế)
-    const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER);
+    let finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER);
     const taxAmount = Math.round(originPrice * TAX_RATE); // Giữ lại để lưu vào DB
+
+    // --- BƯỚC 1.5: ÁP DỤNG GIẢM GIÁ SUBSCRIPTION TRÊN finalPrice ---
+    let discountSubscription = 0;
+    const userId = booking.userId;
+    if (userId) {
+      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
+        where: { userId, status: SubscriptionStatus.ACTIVE },
+      });
+      if (activeSubscription) {
+        discountSubscription = Math.round(finalPrice * 0.1);
+        finalPrice = finalPrice - discountSubscription;
+      }
+    }
 
     // --- BƯỚC 2: TÍNH DISCOUNT (VOUCHER) TRÊN finalPrice ---
     let discountAmount = 0;
@@ -108,7 +121,7 @@ export class InvoiceService {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ để sử dụng voucher này`);
       }
 
-      // Tính toán chiết khấu trên finalPrice
+      // Tính toán chiết khấu trên finalPrice (sau subscription)
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
         const discountValue = Number(voucher.discount_value);
         discountAmount = Math.round((finalPrice * discountValue) / 100);
@@ -118,8 +131,6 @@ export class InvoiceService {
       } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
         discountAmount = Math.round(Number(voucher.discount_value));
       }
-
-      // Đảm bảo chiết khấu không lớn hơn giá trị đơn hàng
       if (discountAmount > finalPrice) {
         discountAmount = finalPrice;
       }
@@ -127,19 +138,16 @@ export class InvoiceService {
 
     // --- BƯỚC 3: TÍNH GIÁ SAU KHI GIẢM GIÁ ---
     let priceAfterDiscount = finalPrice - discountAmount;
-    // Nếu giá sau giảm < 0 thì discount = estimatedPrice (finalPrice)
     if (priceAfterDiscount < 0) {
       discountAmount = finalPrice;
       priceAfterDiscount = 0;
     }
 
     // --- BƯỚC 4: TÍNH PHÍ PHÁT SINH (RUSH FEE) DỰA TRÊN GIÁ TRỊ DỊCH VỤ GỐC (finalPrice) ---
-    // Đây là thay đổi quan trọng: base để tính rushFee là `finalPrice`, không phải một phần của nó.
     const bookingDate = booking.date ? new Date(booking.date) : null;
     const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, finalPrice);
 
     // --- BƯỚC 5: TÍNH TIỀN CỌC VÀ TIỀN PHẢI TRẢ ---
-    // Tiền cọc (deposit) được tính trên giá trị dịch vụ SAU KHI đã giảm giá.
     let depositAmount = 0;
     if (booking.depositType === BookingDepositType.PERCENTAGE) {
       if (booking.depositAmount < 30) {
@@ -150,40 +158,25 @@ export class InvoiceService {
       depositAmount = Math.round(booking.depositAmount || 0);
     }
 
-    // Tiền còn lại (remaining) là phần còn lại của giá dịch vụ sau khi trừ tiền cọc.
     const remainingAmount = priceAfterDiscount - depositAmount;
-
-    // Số tiền phải thanh toán ngay (payable) = Tiền cọc + Toàn bộ phí phát sinh (rushFee)
     let payablePrice = depositAmount + rushFee;
-    let subscriptionDiscount = 0;
-    const userId = booking.userId;
-    if (userId) {
-      // Kiểm tra user có subscription active không
-      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
-        where: { userId, status: SubscriptionStatus.ACTIVE },
-      });
-      if (activeSubscription) {
-        // Áp dụng giảm giá 10% trên tổng cuối cùng (sau tất cả)
-        subscriptionDiscount = Math.round(payablePrice * 0.1);
-        payablePrice = payablePrice - subscriptionDiscount;
-      }
-    }
 
     // --- BƯỚC 6: TẠO HÓA ĐƠN VỚI CÁC GIÁ TRỊ ĐÃ ĐỒNG BỘ ---
     const invoice = this.invoiceRepository.create({
       ...createInvoiceDto,
       bookingId: booking.id,
       voucherId: voucher?.id || null,
-      originalPrice: finalPrice,          // Giá dịch vụ cuối cùng (chưa giảm giá, chưa có phí)
-      discountAmount: discountAmount + subscriptionDiscount,       // Số tiền được giảm (gồm cả voucher và subscription)
-      discountedPrice: priceAfterDiscount,  // Giá dịch vụ sau khi giảm giá voucher (chưa tính subscription)
+      originalPrice: finalPrice,          // Giá dịch vụ cuối cùng (đã trừ subscription, chưa giảm giá voucher, chưa có phí)
+      discountAmount: discountAmount + discountSubscription,       // Số tiền được giảm (gồm cả voucher và subscription)
+      discountedPrice: priceAfterDiscount,  // Giá dịch vụ sau khi giảm giá voucher (đã trừ subscription)
       taxAmount: taxAmount,               // Tiền thuế
       feeAmount: rushFee,                 // Phí phát sinh (rush fee)
-      payablePrice: payablePrice,           // Tổng tiền phải trả ngay (cọc + phí - giảm subscription)
+      payablePrice: payablePrice,           // Tổng tiền phải trả ngay (cọc + phí)
       depositAmount: depositAmount,         // Tiền cọc cho dịch vụ
       remainingAmount: remainingAmount,     // Tiền dịch vụ còn lại phải trả sau
       paidAmount: 0,
       status: InvoiceStatus.PENDING,
+      // discountSubscription: discountSubscription // Nếu muốn lưu riêng
     });
 
     return this.invoiceRepository.save(invoice);
