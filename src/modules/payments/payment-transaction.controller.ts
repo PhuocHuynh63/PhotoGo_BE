@@ -39,7 +39,10 @@ export class PaymentTransactionController {
   ): Promise<any> {
     const result = await this.paymentTransactionService.findAll(findAllPaymentTransactionsDto);
     if (withStatistics === 'true') {
-      (result as any).revenueStatistics = await this.paymentTransactionService.getRevenueStatistics(year ? +year : undefined);
+      (result as any).revenueStatistics = await this.paymentTransactionService.getRevenueStatistics(
+        year ? +year : undefined,
+        findAllPaymentTransactionsDto.vendorId
+      );
     }
     return result;
   }
@@ -57,8 +60,8 @@ export class PaymentTransactionController {
       } 
     } 
   })
-  async getRevenueStatistics(@Query('year') year?: number) {
-    return this.paymentTransactionService.getRevenueStatistics(year ? +year : undefined);
+  async getRevenueStatistics(@Query('year') year?: number, @Query('vendorId') vendorId?: string) {
+    return this.paymentTransactionService.getRevenueStatistics(year ? +year : undefined, vendorId);
   }
 
   @Get(':id')

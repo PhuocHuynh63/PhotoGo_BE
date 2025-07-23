@@ -78,30 +78,63 @@ export class PaymentTransactionService {
     await this.paymentTransactionRepository.delete(id);
   }
 
-  async getRevenueStatistics(year?: number) {
+  async getRevenueStatistics(year?: number, vendorId?: string) {
     const now = new Date();
     const targetYear = year || now.getFullYear();
-    // Lấy tất cả transaction PAID trong năm
     const start = new Date(targetYear, 0, 1, 0, 0, 0, 0);
     const end = new Date(targetYear + 1, 0, 1, 0, 0, 0, 0);
-    const allPaid = await this.paymentTransactionRepository.find({
-      where: {
-        status: PaymentStatus.PAID,
-        createdAt: Between(start, end),
-      },
-    });
-    // Tổng doanh thu cả năm
+
+    const query = this.paymentTransactionRepository.createQueryBuilder('pt')
+      .leftJoinAndSelect('pt.payment', 'payment')
+      .leftJoinAndSelect('payment.invoice', 'invoice')
+      .leftJoinAndSelect('invoice.booking', 'booking')
+      .leftJoinAndSelect('booking.location', 'location')
+      .leftJoinAndSelect('location.vendor', 'vendor')
+      .where('pt.status = :status', { status: PaymentStatus.PAID })
+      .andWhere('pt.createdAt >= :start AND pt.createdAt < :end', { start, end });
+
+    if (vendorId) {
+      query.andWhere('vendor.id = :vendorId', { vendorId });
+    }
+
+    const allPaid = await query.getMany();
     const total = allPaid.reduce((sum, t) => sum + (t.amount || 0), 0);
-    // Doanh thu từng tháng
     const monthly: number[] = Array(12).fill(0);
     allPaid.forEach(t => {
-      const month = t.createdAt.getMonth(); // 0-11
+      const month = t.createdAt.getMonth();
       monthly[month] += t.amount || 0;
     });
+
+    let transactionsByVendor = undefined;
+    if (!vendorId) {
+      transactionsByVendor = {};
+      for (const t of allPaid) {
+        const vendor = t.payment?.invoice?.booking?.location?.vendor;
+        const vId = vendor?.id || 'unknown';
+        const vName = vendor?.name || 'Không xác định';
+        if (!transactionsByVendor[vId]) {
+          transactionsByVendor[vId] = { vendorName: vName, transactions: [] };
+        }
+        transactionsByVendor[vId].transactions.push({
+          id: t.id,
+          amount: t.amount,
+          paymentMethod: t.paymentMethod,
+          status: t.status,
+          type: t.type,
+          description: t.description,
+          transactionId: t.transactionId,
+          paymentId: t.paymentId,
+          vendorId: vId,
+          vendorName: vName,
+        });
+      }
+    }
+
     return {
       year: targetYear,
       total,
-      monthly, // [tháng 1, tháng 2, ..., tháng 12]
+      monthly,
+      ...(transactionsByVendor ? { transactionsByVendor } : {}),
     };
   }
 } 
