@@ -29,6 +29,7 @@ export class UserController {
 
   @Post('/create/user')
   @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ApiOperation({ summary: 'Tạo người dùng (Admin)' })
   @ApiConsumes('multipart/form-data')
   @ResponseMessage('Tạo người dùng thành công')
   @UseInterceptors(FileFieldsInterceptor([
@@ -119,6 +120,7 @@ export class UserController {
 
   @Public()
   @Get()
+  @ApiOperation({ summary: 'Lấy danh sách người dùng (Public)' })
   @ResponseMessage('Lấy danh sách người dùng thành công')
   async findAll(@Query() query: FindAllUserDto): Promise<{
     data: User[];
@@ -134,6 +136,7 @@ export class UserController {
 
   @Public()
   @Get(':id')
+  @ApiOperation({ summary: 'Lấy thông tin người dùng theo ID (Public)' })
   @ResponseMessage('Lấy thông tin người dùng thành công')
   async findOne(@Param('id') id: string): Promise<User> {
     return this.userService.findOne(id);
@@ -141,12 +144,14 @@ export class UserController {
 
   @Public()
   @Get('/email/:email')
+  @ApiOperation({ summary: 'Lấy thông tin người dùng theo email (Public)' })
   @ResponseMessage('Lấy thông tin người dùng theo email thành công')
   async findOneByEmail(@Param('email') email: string): Promise<User> {
     return this.userService.findOneByEmail(email);
   }
 
   @Put('/img/:id/')
+  @ApiOperation({ summary: 'Cập nhật ảnh người dùng' })
   @UseInterceptors(FileInterceptor('file'))
   @ResponseMessage('Cập nhật ảnh người dùng thành công')
   async updateImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File): Promise<User> {
@@ -154,18 +159,23 @@ export class UserController {
   }
 
   @Put(':id')
+  @ApiOperation({ summary: 'Cập nhật thông tin người dùng' })
   @ResponseMessage('Chỉnh sửa người dùng thành công')
   async update(@Param('id') id: string, @Body() update: UpdateUserDto): Promise<User> {
     return this.userService.update(id, update);
   }
 
   @Put('/admin/:id')
+  @ApiOperation({ summary: 'Cập nhật thông tin người dùng (Admin)' })
   @ResponseMessage('Chỉnh sửa người dùng thành công')
   async updateUserByAdmin(@Param('id') id: string, @Body() update: UpdateUserForAdminDto): Promise<User> {
     return this.userService.updateUserByAdmin(id, update);
   }
 
   @Delete(':id')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ApiOperation({ summary: 'Xóa người dùng theo ID' })
+  @ApiResponse({ status: 200, description: 'Xóa người dùng thành công' })
   @ResponseMessage('Xóa người dùng thành công')
   async remove(@Param('id') id: string): Promise<void> {
     return this.userService.remove(id);
@@ -173,6 +183,7 @@ export class UserController {
 
 
   @Get('/admin/count/:rank')
+  @ApiOperation({ summary: 'Đếm người dùng theo rank (Admin)' })
   @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ResponseMessage('Đếm người dùng theo rank thành công')
   async countUserByRank(@Param('rank') rank: string): Promise<number> {
@@ -181,6 +192,7 @@ export class UserController {
 
 
   @Get('/admin/ranks')
+  @ApiOperation({ summary: 'Lấy danh sách rank người dùng (Admin)' })
   @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ResponseMessage('Lấy danh sách rank người dùng thành công')
   async getAllRanks(): Promise<{ rank: string; count: number }[]> {
