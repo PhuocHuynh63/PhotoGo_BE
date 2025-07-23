@@ -58,7 +58,7 @@ export class AuthService {
       fullname: user.fullname,
       role: user.role,
       image: user.image,
-      subscription: subscription?.id,
+      subscriptionId: subscription?.id,
     };
 
     // Lấy cart của user
