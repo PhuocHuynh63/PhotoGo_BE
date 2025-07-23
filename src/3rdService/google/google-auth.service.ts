@@ -37,7 +37,6 @@ export class GoogleAuthService {
 
     // Tìm người dùng trong cơ sở dữ liệu thông qua UserService
     let existingUser = await this.userService.findOneEmail(googleAuthDto.email);
-    const subscription = await this.subscriptionService.findSubscriptionByUserId(existingUser.id, SubscriptionStatus.ACTIVE);
 
     if (!existingUser) {
       // Nếu không tồn tại, tạo mới
@@ -72,9 +71,17 @@ export class GoogleAuthService {
       email: existingUser.email,
       sub: existingUser.id,
       role: rolePayload,
-      subscriptionId: subscription?.id,
     });
 
-    return { user: existingUser, access_token_jwt: accessToken };
+    return {
+      user: {
+        id: existingUser.id,
+        email: existingUser.email,
+        fullname: existingUser.fullName,
+        image: existingUser.avatarUrl,
+        role: existingUser.role,
+        subscriptionId: existingUser.subscription?.id,
+      }, access_token_jwt: accessToken
+    };
   }
 }
