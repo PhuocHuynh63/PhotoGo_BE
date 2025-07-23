@@ -422,13 +422,13 @@ export class SubscriptionService {
           updatedAt: sub.updatedAt,
         },
         plan: sub.plan,
-        history,
+        historyDetails: history,
       });
     }
     // Phân trang
     const pageNum = Math.max(1, historyDto.current || 1);
     const pageSizeNum = Math.max(1, historyDto.pageSize || 10);
-    const totalRecords = result.length;
+    const totalRecords = result.reduce((acc, curr) => acc + curr.historyDetails.length, 0);
     const totalPage = Math.ceil(totalRecords / pageSizeNum);
     const paged = result.slice((pageNum - 1) * pageSizeNum, pageNum * pageSizeNum);
     return {
