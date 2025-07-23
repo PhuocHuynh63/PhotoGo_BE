@@ -700,8 +700,8 @@ export class PaymentService {
     const paymentAmount = Math.round(Number(payment.amount));
     invoice.paidAmount += paymentAmount;
     if (payment.type === PaymentType.DEPOSIT) {
-      // Nếu thanh toán đặt cọc 100% thì status là PAID, còn lại là PARTIALLY_PAID
-      if (paymentAmount == 100) {
+      // Nếu thanh toán đặt cọc bằng giá trị đơn hàng thì status là PAID, còn lại là PARTIALLY_PAID
+      if (paymentAmount == invoice.payablePrice) {
         invoice.status = InvoiceStatus.PAID;
       } else {
         invoice.status = InvoiceStatus.PARTIALLY_PAID;
@@ -800,10 +800,26 @@ export class PaymentService {
         }
       }
     } else if (payment.type === PaymentType.REMAINING) {
-      // Chỉ cập nhật trạng thái hóa đơn và booking, không xử lý điểm, voucher, slot, mail
+      // Cập nhật trạng thái hóa đơn và booking
       invoice.status = InvoiceStatus.PAID;
       await this.invoiceRepo.save(invoice);
-      await this.updateBookingStatus(booking, payment.type);
+      // Cập nhật trạng thái thanh toán
+      payment.status = PaymentStatus.PAID;
+      await this.paymentRepository.save(payment);
+      // Cập nhật trạng thái booking
+      await this.updateBookingStatusRemainingAmount(booking, payment.type);
+      // Cập nhật điểm
+      await this.updatePointRemainingAmount(booking, payment.type);
+      // Gửi mail hóa đơn cho user
+      if (invoice.booking?.email) {
+        const issuedAtVN = new Date(invoice.issuedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        await this.mailService.sendMail(
+          invoice.booking?.email,
+          'Hóa đơn thanh toán của bạn',
+          'invoice',
+          { invoice: { ...invoice, issuedAt: issuedAtVN } }
+        );
+      }
     }
 
     return {
@@ -1017,4 +1033,45 @@ export class PaymentService {
     }
   }
   //#endregion handleBookingStatusUpdate
+
+  //#region updateBookingStatusRemainingAmount
+  private async updateBookingStatusRemainingAmount(booking: Booking, paymentType: PaymentType): Promise<void> {
+    if (paymentType === PaymentType.REMAINING) {
+      booking.status = BookingStatus.COMPLETED;
+      await this.bookingRepository.save(booking);
+      // Create booking history
+      const history = this.bookingHistoryRepository.create({
+        booking: booking,
+        status: BookingStatus.COMPLETED,
+      });
+      await this.bookingHistoryRepository.save(history);
+    }
+  }
+  //#endregion updateBookingStatusRemainingAmount
+
+  //#region updatePointRemainingAmount
+  private async updatePointRemainingAmount(booking: Booking, paymentType: PaymentType): Promise<void> {
+    if (paymentType === PaymentType.REMAINING) {
+      let userPoint = booking?.user?.points?.[0];
+      const userId = booking?.user?.id || booking.userId;
+      const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
+      if (!userPoint && userId) {
+        userPoint = await this.pointService.findMyPoints(userId);
+      }
+      if (userPoint && booking.serviceConcept?.price) {
+        // Điểm = (giá trị dịch vụ / 1000000) * multiplier, làm tròn xuống
+        const earnedPoint = Math.floor((booking.serviceConcept.price / 1000000) * userMultiplier);
+        userPoint.balance += earnedPoint;
+        await this.pointRepository.save(userPoint);
+        const pointTransaction = this.pointTransactionRepository.create({
+          point: userPoint,
+          amount: earnedPoint,
+          type: PointTransactionType.EARN,
+          description: `Thanh toán đủ số tiền còn lại`,
+        });
+        await this.pointTransactionRepository.save(pointTransaction);
+      }
+    }
+  }
+  //#endregion updatePointRemainingAmount
 }
