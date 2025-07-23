@@ -726,5 +726,15 @@ export class VoucherService {
     }
     return voucher;
   }
+
+  /**
+   * Tìm campaignVoucher hợp lệ theo voucherId
+   */
+  async findCampaignVoucherByVoucherId(voucherId: string): Promise<CampaignVoucher | null> {
+    return this.campaignVoucherRepository.findOne({
+      where: { voucherId, isAvailable: true },
+      relations: ['campaign'],
+    });
+  }
   //#endregion VoucherUser Campaign Operations
 }

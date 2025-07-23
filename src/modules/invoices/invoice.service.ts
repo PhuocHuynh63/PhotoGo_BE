@@ -84,10 +84,16 @@ export class InvoiceService {
       }
 
       // (Toàn bộ logic kiểm tra voucher của bạn ở đây là chính xác)
-      const voucherUser = await this.voucherUserRepository.findOne({
+      let voucherUser = await this.voucherUserRepository.findOne({
         where: { user_id: booking.userId, voucher_id: voucherId, status: VoucherUserStatusEnum.AVAILABLE },
       });
+      // Bổ sung kiểm tra campaignVoucher nếu không có voucherUser
+      let campaignVoucher = null;
       if (!voucherUser) {
+        // Sử dụng hàm public thay vì truy cập trực tiếp repository
+        campaignVoucher = await this.voucherService.findCampaignVoucherByVoucherId(voucher.id);
+      }
+      if (!voucherUser && !campaignVoucher) {
         throw new BadRequestException('Bạn không có quyền sử dụng voucher này hoặc voucher đã được sử dụng');
       }
 
@@ -120,7 +126,12 @@ export class InvoiceService {
     }
 
     // --- BƯỚC 3: TÍNH GIÁ SAU KHI GIẢM GIÁ ---
-    const priceAfterDiscount = finalPrice - discountAmount;
+    let priceAfterDiscount = finalPrice - discountAmount;
+    // Nếu giá sau giảm < 0 thì discount = estimatedPrice (finalPrice)
+    if (priceAfterDiscount < 0) {
+      discountAmount = finalPrice;
+      priceAfterDiscount = 0;
+    }
 
     // --- BƯỚC 4: TÍNH PHÍ PHÁT SINH (RUSH FEE) DỰA TRÊN GIÁ TRỊ DỊCH VỤ GỐC (finalPrice) ---
     // Đây là thay đổi quan trọng: base để tính rushFee là `finalPrice`, không phải một phần của nó.
