@@ -99,10 +99,13 @@ export class PaymentTransactionService {
 
     const allPaid = await query.getMany();
     const total = allPaid.reduce((sum, t) => sum + (t.amount || 0), 0);
-    const monthly: number[] = Array(12).fill(0);
+    const monthly: Record<string, number> = {};
+    for (let i = 0; i < 12; i++) {
+      monthly[`Tháng ${i + 1}`] = 0;
+    }
     allPaid.forEach(t => {
-      const month = t.createdAt.getMonth();
-      monthly[month] += t.amount || 0;
+      const month = t.createdAt.getMonth(); // 0-11
+      monthly[`Tháng ${month + 1}`] += t.amount || 0;
     });
 
     let transactionsByVendor = undefined;

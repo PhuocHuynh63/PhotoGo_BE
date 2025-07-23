@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsUUID, IsString } from 'class-validator';
+import { IsOptional, IsEnum, IsUUID, IsString, IsBoolean, IsNumber } from 'class-validator';
 import { PaymentStatus, PaymentType } from '../../../constants/payment.enum';
 import { PaginationDto } from '../../subscription/dto/find-subscription.dto';
 import { ApiProperty } from '@nestjs/swagger';
@@ -33,4 +33,13 @@ export class FindAllPaymentTransactionsDto extends PaginationDto {
   @IsEnum(PaymentType)
   @ApiProperty({ description: 'Loại thanh toán', required: false, enum: PaymentType, example: PaymentType.DEPOSIT })
   type?: PaymentType;
+
+  @IsBoolean()
+  @ApiProperty({ description: 'Có thống kê doanh thu không', required: true, example: true })
+  withStatistics: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ description: 'Năm', required: false, example: 2024 })
+  year?: number;
 }
