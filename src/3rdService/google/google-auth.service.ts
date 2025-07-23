@@ -7,6 +7,8 @@ import { Role } from '../../modules/roles/entities/role.entity';
 import { RoleService } from 'src/modules/roles/role.service';
 import { UserStatus } from 'src/constants/user.enum';
 import { Logger } from '@nestjs/common';
+import { SubscriptionStatus } from 'src/constants/subscription.enum';
+import { SubscriptionService } from 'src/modules/subscription/subscription.service';
 
 @Injectable()
 export class GoogleAuthService {
@@ -17,6 +19,7 @@ export class GoogleAuthService {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly userService: UserService,
+    private readonly subscriptionService: SubscriptionService,
   ) {
     this.client = new OAuth2Client(
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
@@ -34,6 +37,7 @@ export class GoogleAuthService {
 
     // Tìm người dùng trong cơ sở dữ liệu thông qua UserService
     let existingUser = await this.userService.findOneEmail(googleAuthDto.email);
+    const subscription = await this.subscriptionService.findSubscriptionByUserId(existingUser.id, SubscriptionStatus.ACTIVE);
 
     if (!existingUser) {
       // Nếu không tồn tại, tạo mới
@@ -68,6 +72,7 @@ export class GoogleAuthService {
       email: existingUser.email,
       sub: existingUser.id,
       role: rolePayload,
+      subscription: subscription?.id,
     });
 
     return { user: existingUser, access_token_jwt: accessToken };

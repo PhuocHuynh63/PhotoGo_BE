@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServicePackage } from './entities/service-package.entity';
 import { ServicePackageService } from './service-package.service';
@@ -24,7 +24,7 @@ import { Commission } from '../commission/entities/commission.entity';
       Commission,
     ]),
     UploadModule,
-    AuthModule,
+    forwardRef(() => AuthModule),
     GeminiModule,
   ],
   providers: [ServicePackageService],

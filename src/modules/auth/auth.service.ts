@@ -12,6 +12,8 @@ import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 import { CampaignService } from 'src/modules/campaign/campaign.service';
 import { NotificationService } from 'src/modules/notifications/notification.service';
 import { PointService } from 'src/modules/points/point.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionStatus } from 'src/constants/subscription.enum';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -25,6 +27,7 @@ export class AuthService {
     private readonly campaignService: CampaignService,
     private readonly notificationService: NotificationService,
     private readonly pointService: PointService,
+    private readonly subscriptionService: SubscriptionService,
   ) { }
 
   //#region Validate User
@@ -47,7 +50,16 @@ export class AuthService {
 
   //#region Login
   async login(user: any) {
-    const payload = { email: user.email, sub: user.id, fullname: user.fullname, role: user.role, image: user.image };
+    const subscription = await this.subscriptionService.findSubscriptionByUserId(user.id, SubscriptionStatus.ACTIVE);
+
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      fullname: user.fullname,
+      role: user.role,
+      image: user.image,
+      subscription: subscription?.id,
+    };
 
     // Lấy cart của user
     const cart = await this.cartService.findCartByUserId(user.id);
@@ -71,6 +83,7 @@ export class AuthService {
         role: user.role,
         cartId: cart?.id || null, // Thêm cartId vào đây
         wishlistId: wishlist?.id || null, // Thêm wishlistId vào đây
+        subscription: subscription?.id || null,
       },
       access_token: this.jwtService.sign(payload, {
         expiresIn: '365d', // 1 year

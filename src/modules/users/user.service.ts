@@ -424,7 +424,7 @@ export class UserService {
 
   //#region findOneByEmail
   async findOneEmail(email: string): Promise<User | undefined> {
-    const user = await this.userRepository.findOne({ where: { email }, relations: ['role'] });
+    const user = await this.userRepository.findOne({ where: { email }, relations: ['role', 'subscription'] });
     return user;
   }
   //#endregion findOneByEmail

@@ -463,4 +463,12 @@ export class SubscriptionService {
       },
     };
   }
+
+  async findSubscriptionByUserId(userId: string, status: SubscriptionStatus): Promise<Subscription> {
+    const subscription = await this.subscriptionRepository.findOne({
+      where: { userId, status },
+      relations: ['plan'],
+    });
+    return subscription;
+  }
 } 

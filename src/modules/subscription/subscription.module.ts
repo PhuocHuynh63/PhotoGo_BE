@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
@@ -38,15 +38,14 @@ import { User } from '../users/entities/user.entity';
     BullQueueModule.forRoot(),
     PayosModule,
     MailModule,
-    UserModule,
-    VendorModule,
-    NotificationModule,
+    forwardRef(() => UserModule),
+    forwardRef(() => VendorModule),
+    forwardRef(() => NotificationModule),
   ],
   controllers: [SubscriptionController, SubscriptionPlanController, SubscriptionVendorController],
   providers: [
     SubscriptionService,
     SubscriptionPlanService,
-    SubscriptionHistoryService,
     SubscriptionPaymentService,
     SubscriptionVendorService,
     SubscriptionHistoryService,

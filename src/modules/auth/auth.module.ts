@@ -16,6 +16,7 @@ import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
 import { CampaignModule } from 'src/modules/campaign/campaign.module';
 import { NotificationModule } from 'src/modules/notifications/notification.module';
 import { PointModule } from 'src/modules/points/point.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { PointModule } from 'src/modules/points/point.module';
     MailModule,
     CartModule,
     WishlistModule,
+    forwardRef(() => SubscriptionModule),
     forwardRef(() => CampaignModule),
     forwardRef(() => NotificationModule),
     forwardRef(() => PointModule),
