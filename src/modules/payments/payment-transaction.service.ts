@@ -7,6 +7,7 @@ import { UpdatePaymentTransactionDto } from './dto/update-payment-transaction.dt
 import { FindAllPaymentTransactionsDto } from './dto/find-all-payments.dto';
 import { PaymentStatus } from '../../constants/payment.enum';
 import { Between, Raw } from 'typeorm';
+import { BookingStatus } from 'src/constants/booking.enum';
 
 @Injectable()
 export class PaymentTransactionService {
@@ -39,6 +40,9 @@ export class PaymentTransactionService {
       .leftJoinAndSelect('invoice.booking', 'booking')
       .leftJoinAndSelect('booking.location', 'location')
       .leftJoinAndSelect('location.vendor', 'vendor');
+
+    // Ẩn các booking đã hủy
+    query.andWhere('booking.status NOT IN (:...excludedStatus)', { excludedStatus: [BookingStatus.CANCELLED, BookingStatus.CANCELLED_TIMEOUT, BookingStatus.CANCELLED_VENDOR, BookingStatus.CANCELLED_USER] });
 
     if (findAllPaymentTransactionsDto.vendorId) {
       query.andWhere('vendor.id = :vendorId', { vendorId: findAllPaymentTransactionsDto.vendorId });
