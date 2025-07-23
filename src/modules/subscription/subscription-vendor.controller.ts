@@ -16,6 +16,23 @@ export class SubscriptionVendorController {
     return this.subscriptionVendorService.create(createSubscriptionVendorDto);
   }
 
+  @Post('upgrade')
+  @ApiOperation({ summary: 'Vendor nâng cấp lên gói subscription mới' })
+  async upgradeSubscription(
+    @Body() createSubscriptionVendorDto: CreateSubscriptionVendorDto
+  ): Promise<SubscriptionVendorResponseDto> {
+    // Kiểm tra điều kiện nâng cấp
+    const canJoin = await this.subscriptionVendorService.canVendorJoinPlan(
+      createSubscriptionVendorDto.vendorId,
+      createSubscriptionVendorDto.planId
+    );
+    if (!canJoin.canJoin) {
+      throw new Error(canJoin.reason || 'Không thể nâng cấp gói subscription');
+    }
+    // Nếu đủ điều kiện thì tạo mới
+    return this.subscriptionVendorService.create(createSubscriptionVendorDto);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách tất cả subscription vendors' })
   @ApiResponse({ status: 200, description: 'Thành công', type: [SubscriptionVendorResponseDto] })

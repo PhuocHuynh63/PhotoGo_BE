@@ -99,9 +99,22 @@ export class SubscriptionVendorService {
   }
 
   async canVendorJoinPlan(vendorId: string, planId: string): Promise<{ canJoin: boolean; reason?: string }> {
+    // Kiểm tra vendor còn gói active nào không (chưa hết hạn)
+    const now = new Date();
+    const activeSubscription = await this.subscriptionVendorRepository.createQueryBuilder('sv')
+      .where('sv.vendorId = :vendorId', { vendorId })
+      .andWhere('sv.isActive = :isActive', { isActive: true })
+      .andWhere('(sv.endedDate IS NULL OR sv.endedDate > :now)', { now })
+      .getOne();
+    if (activeSubscription) {
+      return {
+        canJoin: false,
+        reason: 'Vendor vẫn còn gói subscription đang hoạt động. Vui lòng chờ hết hạn trước khi nâng cấp hoặc đăng ký gói mới.'
+      };
+    }
+
     // Kiểm tra số lượng plan hiện tại
     const { count } = await this.getVendorSubscriptionPlansCount(vendorId);
-    
     if (count >= 2) {
       return {
         canJoin: false,
