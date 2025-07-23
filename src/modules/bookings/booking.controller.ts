@@ -146,6 +146,47 @@ export class BookingController {
     }
   }
 
+  //get code verification
+  @Get('code-verification')
+  @Public()
+  @ApiResponse({ status: 200, description: 'Lấy code verification thành công', type: String })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy code verification' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @ApiOperation({ summary: 'Lấy code verification' })
+  async getCodeVerification(@Query('code') code: string, @Query('userId') userId: string, @Query('vendorId') vendorId: string): Promise<{ message: string, code: string }> {
+    return await this.bookingService.getCodeVerification(code, userId, vendorId);
+  }
+
+  @Get('check-in-status')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách booking theo trạng thái check-in' })
+  @ApiResponse({ status: 200, description: 'Danh sách booking theo trạng thái check-in', type: [Booking] })
+  async getBookingsByCheckInStatus(
+    @Query('isCheckedIn') isCheckedIn: string,
+    @Query() paginationDto: PaginationDto
+  ): Promise<{  
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    try {
+      // Mặc định nếu không truyền thì lấy tất cả
+      let checkedIn: boolean | undefined = undefined;
+      if (isCheckedIn === 'true') checkedIn = true;
+      else if (isCheckedIn === 'false') checkedIn = false;
+      return await this.bookingService.findBookingsByCheckInStatus(checkedIn, paginationDto);
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Có lỗi xảy ra khi lấy danh sách booking theo trạng thái check-in',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get('user/:userId')
   @Public()
   @ApiResponse({

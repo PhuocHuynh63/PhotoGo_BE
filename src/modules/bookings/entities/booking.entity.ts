@@ -77,6 +77,12 @@ export class Booking {
   @Column({ type: 'enum', enum: BookingType, default: BookingType.SINGLE_DAY, name: 'booking_type' })
   bookingType: BookingType;
 
+  @Column({ type: 'boolean', default: false, name: 'is_checked_in' })
+  isCheckedIn: boolean;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'check_in_time' })
+  checkInTime: Date;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 

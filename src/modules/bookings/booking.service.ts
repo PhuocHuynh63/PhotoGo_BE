@@ -2209,4 +2209,99 @@ export class BookingService {
   }
   //#endregion vendorCancelBooking
 
+  async getCodeVerification(
+    code: string,
+    userId: string,
+    vendorId: string // vendor thực hiện quét code
+  ): Promise<{ message: string, code: string, bookingInfo?: any }> {
+    // 1. Tìm booking theo code và userId
+    const booking = await this.bookingRepository.findOne({
+      where: { code, userId },
+      relations: ['serviceConcept', 'serviceConcept.servicePackage', 'location']
+    });
+    if (!booking) {
+      throw new NotFoundException(`Người dùng không có booking với code ${code}`);
+    }
+
+    // 2. Kiểm tra trạng thái booking
+    const validStatuses = [BookingStatus.PAID, BookingStatus.CONFIRMED, BookingStatus.PENDING];
+    if (!validStatuses.includes(booking.status)) {
+      throw new BadRequestException(`Booking không ở trạng thái hợp lệ để xác nhận: ${booking.status}`);
+    }
+
+    // 3. Kiểm tra ngày sử dụng
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const bookingDate = new Date(booking.date);
+    bookingDate.setHours(0, 0, 0, 0);
+    if (bookingDate.getTime() !== today.getTime()) {
+      throw new BadRequestException('Chỉ có thể xác nhận vào đúng ngày booking');
+    }
+
+    // 4. Kiểm tra vendor
+    if (booking.serviceConcept.servicePackage.vendor.id !== vendorId) {
+      throw new BadRequestException('Bạn không có quyền xác nhận booking này');
+    }
+
+    // 5. Kiểm tra đã quét code chưa (giả sử có trường isCheckedIn)
+    if (booking.isCheckedIn) {
+      throw new BadRequestException('Booking này đã được xác nhận check-in trước đó');
+    }
+
+    // 6. Đánh dấu đã check-in và lưu lịch sử
+    booking.isCheckedIn = true;
+    booking.checkInTime = new Date();
+    booking.status = BookingStatus.PROGRESSING;
+    await this.bookingRepository.save(booking);
+
+    // (Có thể lưu lịch sử vào bảng riêng nếu muốn)
+
+    // 7. Trả về thông tin booking cho vendor xác nhận lại với khách
+    return {
+      message: 'Xác nhận check-in thành công',
+      code: booking.code,
+      bookingInfo: {
+        fullName: booking.fullName,
+        phone: booking.phone,
+        service: booking.serviceConcept.name,
+        date: booking.date,
+        time: booking.time,
+        location: booking.location.vendor.name,
+        status: booking.status
+      }
+    };
+  }
+
+  async findBookingsByCheckInStatus(isCheckedIn: boolean | undefined, paginationDto: PaginationDto): Promise<{
+    data: Booking[];
+    pagination: {
+      current: number;
+      pageSize: number;
+      totalPage: number;
+      totalItem: number;
+    };
+  }> {
+    const { current = 1, pageSize = 10 } = paginationDto;
+    const skip = (current - 1) * pageSize;
+    let where: any = {};
+    if (typeof isCheckedIn === 'boolean') {
+      where.isCheckedIn = isCheckedIn;
+    }
+    const [bookings, total] = await this.bookingRepository.findAndCount({
+      where,
+      relations: ['user', 'serviceConcept', 'serviceConcept.servicePackage', 'histories', 'invoices', 'disputes', 'schedules'],
+      skip,
+      take: pageSize,
+      order: { created_at: 'DESC' }
+    });
+    return {
+      data: bookings.map(booking => this.formatBookingDates(booking)),
+      pagination: {
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total
+      }
+    };
+  }
 }
