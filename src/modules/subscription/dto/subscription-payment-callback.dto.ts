@@ -6,7 +6,7 @@ import { PayerType } from 'src/constants/payment.enum';
 export class SubscriptionPaymentCallbackDto {
 
   @ApiProperty({ description: 'ID thanh toán subscription', required: true })
-  @IsString()
+  @IsUUID()
   subscriptionPaymentId: string;
 
   @ApiProperty({ description: 'ID người dùng', required: false })

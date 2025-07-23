@@ -21,6 +21,7 @@ import { Album } from '../album/entities/album.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTransactionController } from './payment-transaction.controller';
+import { PointModule } from '../points/point.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PaymentTransactionController } from './payment-transaction.controller';
     forwardRef(() => BookingModule),
     forwardRef(() => RefundModule),
     LocationAvailabilityModule,
+    PointModule, // Thêm dòng này để inject PointService
   ],
   controllers: [PaymentController, PaymentTransactionController],
   providers: [PaymentService, PaymentTransactionService],

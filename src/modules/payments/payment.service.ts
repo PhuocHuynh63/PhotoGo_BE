@@ -28,6 +28,7 @@ import { LocationWorkingDate } from '../locations/entities/location-workingdate.
 import { Album } from '../album/entities/album.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
 import { CreatePaymentTransactionDto } from './dto/create-payment-transaction.dto';
+import { PointService } from '../points/point.service';
 
 @Injectable()
 export class PaymentService {
@@ -61,6 +62,7 @@ export class PaymentService {
     private readonly albumRepository: Repository<Album>,
     @InjectRepository(PaymentTransaction)
     private readonly paymentTransactionRepository: Repository<PaymentTransaction>,
+    private readonly pointService: PointService, // Inject PointService
   ) { }
 
   // Helper function to format date to DD/MM/YYYY
@@ -634,24 +636,10 @@ export class PaymentService {
     let points = booking?.user?.points;
     const userId = booking?.user?.id;
     const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
-    // Nếu chưa có point record cho user thì tạo mới
+    // Nếu chưa có point record cho user thì tạo mới (dùng logic chuẩn của PointService)
     if ((!points || points.length === 0) && userId) {
-      // Kiểm tra lại trong DB để tránh race condition
-      let newPoint = await this.pointRepository.findOne({ where: { user: { id: userId } } });
-      if (!newPoint) {
-        newPoint = this.pointRepository.create({ user: booking.user, balance: 0 });
-        try {
-          await this.pointRepository.save(newPoint);
-        } catch (err) {
-          // Nếu bị duplicate, lấy lại bản ghi đã tồn tại
-          if (err.code === '23505') { // Postgres unique violation
-            newPoint = await this.pointRepository.findOne({ where: { user: { id: userId } } });
-          } else {
-            throw err;
-          }
-        }
-      }
-      points = [newPoint];
+      const userPoint = await this.pointService.findMyPoints(userId);
+      points = [userPoint];
     }
     if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
       // Tính phần trăm đặt cọc
