@@ -37,7 +37,7 @@ export class User {
   rank: string;
 
   @Column({
-    name: 'multiplier',type: 'numeric',
+    name: 'multiplier', type: 'numeric',
     precision: 5,
     scale: 2,
     default: 1.0,

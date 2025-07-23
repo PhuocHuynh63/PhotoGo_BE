@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UploadedFile, UseInterceptors, Query, Res } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UploadedFile, UseInterceptors, Query, Res, Patch } from '@nestjs/common';
 import { UserService } from './user.service';
 
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, UpdateUserStatusDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { Public, ResponseMessage } from 'src/decorator/custom';
-import { ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConsumes, ApiProperty } from '@nestjs/swagger';
 import { UpdateUserForAdminDto } from './dto/admin/update-user-admin.dto';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
@@ -15,8 +15,12 @@ import { CreateAuthDto, CreateAuthForAdminDto } from '../auth/dto/create-auth.dt
 import { RolesGuard } from '../auth/passport/roles.guard';
 import { UseGuards } from '@nestjs/common';
 import { Roles } from 'src/decorator/role.decorator';
-import { UserRoles, UserRolesId } from 'src/constants/user.enum';
+import { UserStatus, UserRolesId, UserRoles } from 'src/constants/user.enum';
 import { Role } from '../roles/entities/role.entity';
+import { BadRequestException } from '@nestjs/common';
+import { IsEnum } from 'class-validator';
+
+
 @Controller('users')
 @UseGuards(RolesGuard)
 @ApiBearerAuth('access-token')
@@ -167,18 +171,29 @@ export class UserController {
     return this.userService.remove(id);
   }
 
-  @Public()
+
   @Get('/admin/count/:rank')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ResponseMessage('Đếm người dùng theo rank thành công')
   async countUserByRank(@Param('rank') rank: string): Promise<number> {
     return this.userService.countUserByRank(rank);
   }
 
-  @Public()
+
   @Get('/admin/ranks')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ResponseMessage('Lấy danh sách rank người dùng thành công')
   async getAllRanks(): Promise<{ rank: string; count: number }[]> {
     return this.userService.getAllRank();
+  }
+
+  @Patch(':id/status')
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ApiOperation({ summary: 'Cập nhật trạng thái tài khoản user' })
+  @ApiResponse({ status: 200, description: 'Cập nhật trạng thái tài khoản user thành công' })
+  @ApiResponse({ status: 400, description: 'Trạng thái không hợp lệ' })
+  async updateUserStatus(@Param('id') id: string, @Body() body: UpdateUserStatusDto) {
+    return this.userService.updateStatus(id, body.status);
   }
 
 }

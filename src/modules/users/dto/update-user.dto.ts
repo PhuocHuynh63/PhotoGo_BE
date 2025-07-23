@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, Length } from 'class-validator';
+import { UserStatus } from 'src/constants/user.enum';
 
 export class UpdateUserDto {
     @IsOptional()
@@ -65,4 +66,14 @@ export class UpdateUserDto {
     })
     multiplier?: number;
 
+}
+
+export class UpdateUserStatusDto {
+    @ApiProperty({
+        enum: UserStatus,
+        description: 'Trạng thái tài khoản',
+        example: UserStatus.SUSPENDED,
+    })
+    @IsEnum(UserStatus, { message: 'Trạng thái không hợp lệ. Chỉ chấp nhận: ' + Object.values(UserStatus).join(', ') })
+    status: UserStatus;
 }

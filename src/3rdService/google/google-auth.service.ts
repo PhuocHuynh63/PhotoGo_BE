@@ -50,6 +50,11 @@ export class GoogleAuthService {
       existingUser = await this.userService.create(createAuthDto);
     }
 
+    // Kiểm tra trạng thái tài khoản
+    if (existingUser.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Tài khoản của bạn đã bị tạm ngưng hoặc không hoạt động. Vui lòng liên hệ quản trị viên.');
+    }
+
     // TODO: Add notification after fixing dependency injection
     this.logger.log(`Google login successful for user ${existingUser.id}`);
 
