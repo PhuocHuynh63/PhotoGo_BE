@@ -166,8 +166,6 @@ export class SubscriptionPaymentService {
       returnUrl
     };
 
-    console.log('DEBUG payosPayload:', payosPayload);
-
     // Gọi PayOS SDK để tạo link thanh toán
     let payosResult;
     try {
