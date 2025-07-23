@@ -733,10 +733,11 @@ export class PaymentService {
         points = [userPoint];
       }
       if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
-        // Tính phần trăm đặt cọc
-        const depositPercent = booking.depositAmount;
         points.forEach(async (point) => {
-          let earnedPoint = payment.amount / 1000000;
+          // Tính điểm chuẩn: earnedPoint = payment.amount / 1000 * multiplier, làm tròn xuống
+          let earnedPoint = Math.floor((payment.amount / 1000) * userMultiplier);
+          // Tính phần trăm đặt cọc nếu cần
+          const depositPercent = booking.depositAmount;
           // Nếu là đặt cọc dạng phần trăm và từ 30 đến <70% thì trừ 5 điểm
           if (
             booking.depositType === BookingDepositType.PERCENTAGE &&
@@ -744,14 +745,11 @@ export class PaymentService {
           ) {
             earnedPoint -= 5;
           }
-          // Áp dụng multiplier nếu có
-          earnedPoint = earnedPoint * userMultiplier;
-          // Nếu >= 70% hoặc không phải dạng phần trăm thì nhận full điểm
-          point.balance += Math.round(earnedPoint);
+          point.balance += earnedPoint;
           await this.pointRepository.save(point);
           const pointTransaction = this.pointTransactionRepository.create({
             point: point,
-            amount: Math.round(earnedPoint),
+            amount: earnedPoint,
             type: PointTransactionType.EARN,
             description: `Thanh toán đặt cọc`,
           });
@@ -809,7 +807,7 @@ export class PaymentService {
       // Cập nhật trạng thái booking
       await this.updateBookingStatusRemainingAmount(booking, payment.type);
       // Cập nhật điểm
-      await this.updatePointRemainingAmount(booking, payment.type);
+      await this.updatePointRemainingAmount(booking, payment.type, payment.amount);
       // Gửi mail hóa đơn cho user
       if (invoice.booking?.email) {
         const issuedAtVN = new Date(invoice.issuedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -1050,7 +1048,7 @@ export class PaymentService {
   //#endregion updateBookingStatusRemainingAmount
 
   //#region updatePointRemainingAmount
-  private async updatePointRemainingAmount(booking: Booking, paymentType: PaymentType): Promise<void> {
+  private async updatePointRemainingAmount(booking: Booking, paymentType: PaymentType, paymentAmount?: number): Promise<void> {
     if (paymentType === PaymentType.REMAINING) {
       let userPoint = booking?.user?.points?.[0];
       const userId = booking?.user?.id || booking.userId;
@@ -1058,9 +1056,10 @@ export class PaymentService {
       if (!userPoint && userId) {
         userPoint = await this.pointService.findMyPoints(userId);
       }
-      if (userPoint && booking.serviceConcept?.price) {
-        // Điểm = (giá trị dịch vụ / 1000000) * multiplier, làm tròn xuống
-        const earnedPoint = Math.floor((booking.serviceConcept.price / 1000000) * userMultiplier);
+      if (userPoint && (paymentAmount || booking.serviceConcept?.price)) {
+        // Điểm = payment.amount / 1000 * multiplier, làm tròn xuống
+        const amount = paymentAmount || booking.serviceConcept.price;
+        const earnedPoint = Math.floor((amount / 1000) * userMultiplier);
         userPoint.balance += earnedPoint;
         await this.pointRepository.save(userPoint);
         const pointTransaction = this.pointTransactionRepository.create({
