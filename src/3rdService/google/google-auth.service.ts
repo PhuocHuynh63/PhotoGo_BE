@@ -72,7 +72,7 @@ export class GoogleAuthService {
       email: existingUser.email,
       sub: existingUser.id,
       role: rolePayload,
-      subscription: subscription?.id,
+      subscriptionId: subscription?.id,
     });
 
     return { user: existingUser, access_token_jwt: accessToken };

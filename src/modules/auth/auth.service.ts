@@ -83,7 +83,7 @@ export class AuthService {
         role: user.role,
         cartId: cart?.id || null, // Thêm cartId vào đây
         wishlistId: wishlist?.id || null, // Thêm wishlistId vào đây
-        subscription: subscription?.id || null,
+        subscriptionId: subscription?.id || null,
       },
       access_token: this.jwtService.sign(payload, {
         expiresIn: '365d', // 1 year
