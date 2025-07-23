@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ConsoleLogger, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { LessThanOrEqual, Repository, DataSource } from 'typeorm';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { RoleService } from '../roles/role.service';
@@ -19,6 +19,7 @@ import { Queue } from 'bull';
 import { CartService } from 'src/modules/carts/cart.service';
 import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 import { CampaignService } from 'src/modules/campaign/campaign.service';
+import { InjectDataSource } from '@nestjs/typeorm';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -30,6 +31,7 @@ export class UserService {
     private readonly cartService: CartService,
     private readonly wishlistService: WishlistService,
     private readonly campaignService: CampaignService,
+    @InjectDataSource() private readonly dataSource: DataSource,
     private readonly bullQueueService: BullQueueService,
     @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
   ) { }
@@ -248,6 +250,32 @@ export class UserService {
   //#region remove
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
+
+    // Xóa cart liên quan
+    const cart = await this.cartService.findCartByUserId(user.id);
+    if (cart) {
+      await this.cartService.removeCart(cart.id);
+    }
+
+    // Xóa wishlist liên quan
+    const wishlist = await this.wishlistService.findWishlistByUserId(user.id);
+    if (wishlist) {
+      await this.wishlistService.deleteWishlist(wishlist.id);
+    }
+
+    // Xóa user khỏi các campaign (user_campaign)
+    if (this.campaignService && this.campaignService["userCampaignRepository"]) {
+      const userCampaignRepository = this.campaignService["userCampaignRepository"];
+      if (userCampaignRepository) {
+        await userCampaignRepository.delete({ userId: user.id });
+      }
+    }
+
+    // Xóa tất cả voucher_user liên quan
+    const voucherUserRepository = this.dataSource.getRepository('voucher_user');
+    await voucherUserRepository.delete({ user_id: user.id });
+
+    // Xóa user
     await this.userRepository.remove(user);
   }
   //#endregion remove
