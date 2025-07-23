@@ -28,20 +28,20 @@ import { randomBytes } from 'crypto';
 
 @Injectable()
 export class CampaignService {
-    private convertDateFormat(dateStr: string): string {
-        if (!dateStr) return null;
-        const [day, month, year] = dateStr.split('/');
-        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    }
+  private convertDateFormat(dateStr: string): string {
+    if (!dateStr) return null;
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
 
-    private formatDate(date: Date): string {
-        if (!date) return null;
-        const d = new Date(date);
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
-    }
+  private formatDate(date: Date): string {
+    if (!date) return null;
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
   constructor(
     @InjectRepository(Campaign)
     private campaignRepository: Repository<Campaign>,
@@ -63,39 +63,39 @@ export class CampaignService {
     private vendorRepository: Repository<Vendor>,
     private readonly mailService: MailService,
     @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
-  ) {}
+  ) { }
 
   // Campaign endpoints
-  async findAllCampaigns(findAllDto: FindAllDto): Promise<{ 
+  async findAllCampaigns(findAllDto: FindAllDto): Promise<{
     data: any[], // Đổi sang any để trả về đúng format UI
     pagination: {
       current: number,
       pageSize: number,
       totalPage: number,
       totalItem: number,
-    } 
+    }
   }> {
     const { name, status, startDate, endDate, current, pageSize, sortBy, sortDirection, showAll } = findAllDto;
-  
+
     // Validate dates
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
       throw new BadRequestException('startDate must be before endDate');
     }
-  
+
     // Create base query for counting total campaigns
     const countQuery = this.campaignRepository.createQueryBuilder('campaign');
-  
+
     // Create main query with joins
     const query = this.campaignRepository.createQueryBuilder('campaign')
       .leftJoinAndSelect('campaign.campaignVouchers', 'campaignVoucher')
       .leftJoinAndSelect('campaignVoucher.voucher', 'voucher')
       .leftJoinAndSelect('campaign.userCampaigns', 'userCampaign')
       .leftJoinAndSelect('userCampaign.user', 'user');
-  
+
     // Add sorting with validation
     const validSortDirections = ['ASC', 'DESC'];
     const defaultSortDirection = 'DESC';
-    
+
     // Validate and sanitize sortBy
     const sortFieldMap = {
       created_at: 'createdAt',
@@ -108,10 +108,10 @@ export class CampaignService {
       status: 'status',
     };
     const finalSortBy = sortFieldMap[sortBy] || 'createdAt';
-    const finalSortDirection = validSortDirections.includes(sortDirection?.toUpperCase()) 
-      ? sortDirection.toUpperCase() 
+    const finalSortDirection = validSortDirections.includes(sortDirection?.toUpperCase())
+      ? sortDirection.toUpperCase()
       : defaultSortDirection;
-  
+
     // Add conditions to both queries
     const addConditions = (q) => {
       if (name) {
@@ -131,18 +131,18 @@ export class CampaignService {
         q.andWhere('campaign.status = :activeStatus', { activeStatus: true });
       }
     };
-  
+
     addConditions(countQuery);
     addConditions(query);
-  
+
     // Add order by with correct column name
     query.addOrderBy(`campaign.${finalSortBy}`, finalSortDirection as 'ASC' | 'DESC');
-  
+
     const total = await countQuery.getCount();
     const skip = (current - 1) * pageSize;
-  
+
     query.skip(skip).take(pageSize);
-  
+
     const campaigns = await query.getMany();
 
     // Tính toán response đúng format UI
@@ -230,7 +230,7 @@ export class CampaignService {
   async findCampaignVouchers(
     campaignId: string,
     paginationDto: PaginationDto
-  ): Promise<{ 
+  ): Promise<{
     campaign: Partial<Campaign>,
     vouchers: Array<{
       voucherId: string;
@@ -262,10 +262,10 @@ export class CampaignService {
     // Add sorting
     if (paginationDto.sortBy && paginationDto.sortDirection) {
       const validSortDirections = ['ASC', 'DESC'];
-      const sortDirection = validSortDirections.includes(paginationDto.sortDirection.toUpperCase()) 
-        ? paginationDto.sortDirection.toUpperCase() 
+      const sortDirection = validSortDirections.includes(paginationDto.sortDirection.toUpperCase())
+        ? paginationDto.sortDirection.toUpperCase()
         : 'DESC';
-      
+
       query.orderBy(`campaignVoucher.${paginationDto.sortBy}`, sortDirection as 'ASC' | 'DESC');
     } else {
       // Default sorting by assignedAt DESC
@@ -321,7 +321,7 @@ export class CampaignService {
     if (!voucher) {
       throw new NotFoundException('Voucher không tồn tại');
     }
-    
+
     // Validate voucher type for campaign
     if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
       throw new BadRequestException('Voucher này không phải loại chiến dịch');
@@ -368,7 +368,7 @@ export class CampaignService {
         const existingVoucherUser = await this.voucherUserRepository.findOne({
           where: { user_id: userCampaign.userId, voucher_id: voucherId }
         });
-        
+
         if (!existingVoucherUser) {
           // Create voucher-user relationship with from = 'chiến dịch'
           const voucherUser = this.voucherUserRepository.create({
@@ -379,9 +379,9 @@ export class CampaignService {
             assigned_at: new Date(),
             used_at: null,
           });
-          
+
           await this.voucherUserRepository.save(voucherUser);
-          
+
           // Update voucher quantity
           voucher.quantity -= 1;
           await this.voucherRepository.save(voucher);
@@ -415,7 +415,7 @@ export class CampaignService {
           errors.push(`Voucher ${voucherId} không tồn tại`);
           continue;
         }
-        
+
         // Validate voucher type for campaign
         if (voucher.type !== VoucherTypePoint.CAMPAIGN) {
           errors.push(`Voucher ${voucherId} không phải loại chiến dịch`);
@@ -458,7 +458,7 @@ export class CampaignService {
             const existingVoucherUser = await this.voucherUserRepository.findOne({
               where: { user_id: userCampaign.userId, voucher_id: voucherId }
             });
-            
+
             if (!existingVoucherUser) {
               // Create voucher-user relationship with from = 'chiến dịch'
               const voucherUser = this.voucherUserRepository.create({
@@ -469,9 +469,9 @@ export class CampaignService {
                 assigned_at: new Date(),
                 used_at: null,
               });
-              
+
               await this.voucherUserRepository.save(voucherUser);
-              
+
               // Update voucher quantity
               // update voucher status to active
               voucher.status = VoucherStatusEnum.ACTIVE;
@@ -504,7 +504,7 @@ export class CampaignService {
   async findAllUserCampaigns(
     campaignId: string,
     paginationDto: PaginationDto
-  ): Promise<{ 
+  ): Promise<{
     campaign: Partial<Campaign>;
     userCampaigns: Array<{
       userId: string;
@@ -540,10 +540,10 @@ export class CampaignService {
     // Add sorting
     if (paginationDto.sortBy && paginationDto.sortDirection) {
       const validSortDirections = ['ASC', 'DESC'];
-      const sortDirection = validSortDirections.includes(paginationDto.sortDirection.toUpperCase()) 
-        ? paginationDto.sortDirection.toUpperCase() 
+      const sortDirection = validSortDirections.includes(paginationDto.sortDirection.toUpperCase())
+        ? paginationDto.sortDirection.toUpperCase()
         : 'DESC';
-      
+
       query.orderBy(`userCampaign.${paginationDto.sortBy}`, sortDirection as 'ASC' | 'DESC');
     } else {
       // Default sorting by joinedAt DESC
@@ -628,14 +628,14 @@ export class CampaignService {
 
     for (const campaignVoucher of campaignVouchers) {
       const voucher = campaignVoucher.voucher;
-      
+
       // Check if voucher is still available and not expired
       if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
         // Check if user already has this voucher
         const existingVoucherUser = await this.voucherUserRepository.findOne({
           where: { user_id: userId, voucher_id: voucher.id }
         });
-        
+
         if (!existingVoucherUser) {
           // Create voucher-user relationship with from = 'chiến dịch'
           const voucherUser = this.voucherUserRepository.create({
@@ -646,9 +646,9 @@ export class CampaignService {
             assigned_at: new Date(),
             used_at: null,
           });
-          
+
           await this.voucherUserRepository.save(voucherUser);
-          
+
           // Update voucher quantity
           voucher.quantity -= 1;
           await this.voucherRepository.save(voucher);
@@ -702,7 +702,7 @@ export class CampaignService {
 
     const existingUserIds = existingUsers.map(user => user.id);
     const nonExistentUserIds = userIds.filter(id => !existingUserIds.includes(id));
-    
+
     if (nonExistentUserIds.length > 0) {
       nonExistentUserIds.forEach(userId => {
         errors.push(`User ${userId} không tồn tại`);
@@ -739,21 +739,21 @@ export class CampaignService {
         });
 
         const savedUserCampaign = await this.userCampaignRepository.save(userCampaign);
-        
+
         if (savedUserCampaign) {
           successfulUsers.push(userId);
-          
+
           // Auto-assign vouchers from campaign to user
           for (const campaignVoucher of campaignVouchers) {
             const voucher = campaignVoucher.voucher;
-            
+
             // Check if voucher is still available and not expired
             if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
               // Check if user already has this voucher
               const existingVoucherUser = await this.voucherUserRepository.findOne({
                 where: { user_id: userId, voucher_id: voucher.id }
               });
-              
+
               if (!existingVoucherUser) {
                 // Create voucher-user relationship with from = 'chiến dịch'
                 const voucherUser = this.voucherUserRepository.create({
@@ -764,9 +764,9 @@ export class CampaignService {
                   assigned_at: new Date(),
                   used_at: null,
                 });
-                
+
                 await this.voucherUserRepository.save(voucherUser);
-                
+
                 // Update voucher quantity
                 voucher.quantity -= 1;
                 await this.voucherRepository.save(voucher);
@@ -799,14 +799,14 @@ export class CampaignService {
   }
 
   // Loyalty Campaign endpoints
-  async findAllLoyaltyCampaigns(findAllDto: FindAllDto): Promise<{ 
-    data: LoyaltyCampaign[], 
+  async findAllLoyaltyCampaigns(findAllDto: FindAllDto): Promise<{
+    data: LoyaltyCampaign[],
     pagination: {
       current: number,
       pageSize: number,
       totalPage: number,
       totalItem: number,
-    } 
+    }
   }> {
     const { name, status } = findAllDto;
     const query = this.loyaltyCampaignRepository.createQueryBuilder('loyaltyCampaign');
@@ -902,20 +902,20 @@ export class CampaignService {
       const now = new Date();
       const startDate = new Date(campaign.startDate);
       const endDate = new Date(campaign.endDate);
-      
+
       if (now < startDate) {
         throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" chưa bắt đầu`);
       }
-      
+
       if (now > endDate) {
         throw new BadRequestException(`Campaign "${CAMPAIGN_NAMES.WELCOME}" đã kết thúc`);
       }
 
       // 3. Tìm voucher "CHAOBANMOI" trong campaign
       const campaignVoucher = await manager.findOne(CampaignVoucher, {
-        where: { 
+        where: {
           campaignId: campaign.id,
-          isAvailable: true 
+          isAvailable: true
         },
         relations: ['voucher']
       });
@@ -987,7 +987,7 @@ export class CampaignService {
       };
     });
   }
-  
+
   // CRUD cho campaign-vendor
   async createCampaignVendor(campaignId: string, vendorId: string) {
     const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
@@ -1073,8 +1073,10 @@ export class CampaignService {
     const total = await queryBuilder.getCount();
     const skip = (current - 1) * pageSize;
     const data = await queryBuilder.skip(skip).take(pageSize).getMany();
-    return { data, 
-      pagination: { current, pageSize, totalPage: Math.ceil(total / pageSize), totalItem: total } };
+    return {
+      data,
+      pagination: { current, pageSize, totalPage: Math.ceil(total / pageSize), totalItem: total }
+    };
   }
 
   async inviteVendorToCampaign(inviteVendorDto: InviteVendorDto) {
@@ -1148,7 +1150,7 @@ export class CampaignService {
   }
 
   async getCampaignById(id: string) {
-    const campaign = await this.campaignRepository.findOne({ where: { id }});
+    const campaign = await this.campaignRepository.findOne({ where: { id } });
     if (!campaign) throw new NotFoundException('Campaign không tồn tại');
     return campaign;
   }
@@ -1156,14 +1158,14 @@ export class CampaignService {
   async removeVoucherOutOfCampaign(campaignId: string, voucherId: string) {
     const campaignVoucher = await this.campaignVoucherRepository.findOne({ where: { campaignId, voucherId } });
     if (!campaignVoucher) throw new NotFoundException('Campaign voucher không tồn tại');
-    
+
     // Sử dụng delete với điều kiện thay vì object
     const result = await this.campaignVoucherRepository.delete({ campaignId, voucherId });
-    
+
     if (result.affected === 0) {
       throw new NotFoundException('Campaign voucher không tồn tại');
     }
-    
+
     return { message: 'Xóa voucher khỏi campaign thành công' };
   }
 
@@ -1197,7 +1199,7 @@ export class CampaignService {
     return this.voucherRepository.createQueryBuilder('voucher')
       .leftJoin('campaign_voucher', 'cv', 'cv.voucherId = voucher.id')
       .where('voucher.type = :voucherType', { voucherType: VoucherTypePoint.CAMPAIGN })
-      .andWhere('voucher.status IN (:...status)', { status: [ VoucherStatusEnum.INACTIVE ] })
+      .andWhere('voucher.status IN (:...status)', { status: [VoucherStatusEnum.INACTIVE] })
       .andWhere('voucher.quantity > 0')
       .andWhere('cv.voucherId IS NULL') // Loại bỏ voucher đã có trong campaign
       .getMany();
@@ -1206,5 +1208,33 @@ export class CampaignService {
   async getAllCampaignsAndVouchersIn(): Promise<{ data: Campaign[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
     const [campaigns, total] = await this.campaignRepository.findAndCount({ where: { status: true }, relations: ['campaignVouchers', 'campaignVouchers.voucher'] });
     return { data: campaigns, pagination: { current: 1, pageSize: 10, totalPage: Math.ceil(total / 10), totalItem: total } };
+  }
+
+  // List campaigns that a user has joined
+  async findCampaignsByUserId(userId: string, paginationDto: PaginationDto) {
+    const { current = 1, pageSize = 10 } = paginationDto;
+    // Kiểm tra user tồn tại
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User không tồn tại');
+
+    // Lấy các userCampaign theo userId
+    const [userCampaigns, total] = await this.userCampaignRepository.findAndCount({
+      where: { userId, isAvailable: true },
+      relations: ['campaign'],
+      skip: (current - 1) * pageSize,
+      take: pageSize,
+      order: { joinedAt: 'DESC' },
+    });
+    // Lấy danh sách campaign từ userCampaigns
+    const data = userCampaigns.map(uc => uc.campaign);
+    return {
+      data,
+      pagination: {
+        current,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
+        totalItem: total,
+      }
+    };
   }
 } 
