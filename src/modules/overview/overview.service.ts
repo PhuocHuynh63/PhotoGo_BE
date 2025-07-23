@@ -16,6 +16,7 @@ import * as ExcelJS from 'exceljs';
 import { OverviewType, AdminStatisticsType } from 'src/constants/overview.enum';
 import { SubscriptionStatus, BillingCycle, PlanType } from '../../constants/subscription.enum';
 import { In, Between } from 'typeorm';
+import { VendorService } from '../vendors/vendor.service';
 
 @Injectable()
 export class OverviewService {
@@ -29,6 +30,7 @@ export class OverviewService {
     private readonly subscriptionPaymentService: SubscriptionPaymentService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly subscriptionVendorService: SubscriptionVendorService,
+    private readonly vendorService: VendorService,
   ) {}
 
   /**
@@ -121,7 +123,10 @@ export class OverviewService {
     if (query.type === AdminStatisticsType.USER_PACKAGE) {
       return this.getAdminUserSubscriptionStatistics(query);
     }
-    // TODO: Xử lý các loại khác (Gói Studio, Gói User, Thanh toán, Hoàn tiền)
+    if (query.type === AdminStatisticsType.PAYMENT) {
+      return this.getAdminVendorPaymentStatistics(query);
+    }
+    // TODO: Xử lý các loại khác (Hoàn tiền)
     return {
       message: 'Admin statistics endpoint - implementation pending',
       query,
@@ -1715,6 +1720,7 @@ export class OverviewService {
     const now = new Date();
     const currentYear = now.getFullYear();
     const monthlyCount = Array(12).fill(0);
+    const monthlyRevenue = Array(12).fill(0);
     const statusBreakdown: Record<string, { totalVendors: number }> = {};
     let totalRevenue = 0;
     let totalVendors = studioVendors.length;
@@ -1724,6 +1730,10 @@ export class OverviewService {
       const joinedDate = new Date(vendor.joinedDate);
       if (joinedDate.getFullYear() === currentYear) {
         monthlyCount[joinedDate.getMonth()]++;
+        const plan = studioPlans.find(p => p.id === vendor.planId);
+        if (plan) {
+          monthlyRevenue[joinedDate.getMonth()] += Number(plan.priceForMonth || 0);
+        }
       }
       // Tính breakdown theo trạng thái
       const status = vendor.isActive ? 'active' : 'inactive';
@@ -1740,47 +1750,29 @@ export class OverviewService {
     const totalVendorsFormatted = totalVendors.toLocaleString('en-US');
     const totalRevenueShort = totalRevenue >= 1_000_000 ? `${Math.round(totalRevenue / 1_000_000)} Tr đ` : `${totalRevenue.toLocaleString('en-US')} đ`;
 
-    // Chuẩn hóa monthly
-    const monthlyArr = monthlyCount.map((count, idx) => ({ month: idx + 1, newVendors: count }));
+    // Chuẩn hóa monthly với growthRateVendor và growthRateRevenue
+    const monthlyArr = monthlyCount.map((count, idx) => {
+      let growthRateVendor = 0;
+      let growthRateRevenue = 0;
+      if (idx > 0 && monthlyCount[idx - 1] > 0) {
+        growthRateVendor = Math.round(((count - monthlyCount[idx - 1]) / monthlyCount[idx - 1]) * 100);
+      } else if (idx > 0 && monthlyCount[idx - 1] === 0 && count > 0) {
+        growthRateVendor = 100;
+      } else {
+        growthRateVendor = 0;
+      }
+      if (idx > 0 && monthlyRevenue[idx - 1] > 0) {
+        growthRateRevenue = Math.round(((monthlyRevenue[idx] - monthlyRevenue[idx - 1]) / monthlyRevenue[idx - 1]) * 100);
+      } else if (idx > 0 && monthlyRevenue[idx - 1] === 0 && monthlyRevenue[idx] > 0) {
+        growthRateRevenue = 100;
+      } else {
+        growthRateRevenue = 0;
+      }
+      return { month: idx + 1, newVendors: count, revenue: monthlyRevenue[idx], growthRateVendor, growthRateRevenue };
+    });
     // Chuẩn hóa statusBreakdown
     const statusArr = Object.entries(statusBreakdown).map(([status, bd]) => ({ status, totalVendors: bd.totalVendors }));
 
-    // 4. Breakdown doanh thu theo tháng và trạng thái
-    const monthlyRevenue = Array(12).fill(0);
-    const monthlyGrowth = Array(12).fill(0);
-    const statusRevenue: Record<string, number> = {};
-    const statusRate: Record<string, number> = {};
-    let prevRevenue = 0;
-    for (const vendor of studioVendors) {
-      const plan = studioPlans.find(p => p.id === vendor.planId);
-      const revenue = plan ? Number(plan.priceForMonth || 0) : 0;
-      // Theo tháng
-      const joinedDate = new Date(vendor.joinedDate);
-      if (joinedDate.getFullYear() === currentYear) {
-        monthlyRevenue[joinedDate.getMonth()] += revenue;
-      }
-      // Theo trạng thái
-      const status = vendor.isActive ? 'active' : 'inactive';
-      if (!statusRevenue[status]) statusRevenue[status] = 0;
-      statusRevenue[status] += revenue;
-    }
-    // Tính growth rate theo tháng
-    for (let i = 0; i < 12; i++) {
-      if (i === 0) {
-        monthlyGrowth[i] = 0;
-      } else {
-        monthlyGrowth[i] = monthlyRevenue[i - 1] > 0 ? Math.round(((monthlyRevenue[i] - monthlyRevenue[i - 1]) / monthlyRevenue[i - 1]) * 100) : 0;
-      }
-    }
-    // Tính rate theo trạng thái
-    const totalRevenueAll = monthlyRevenue.reduce((a, b) => a + b, 0);
-    Object.keys(statusRevenue).forEach(status => {
-      statusRate[status] = totalRevenueAll > 0 ? Math.round((statusRevenue[status] / totalRevenueAll) * 100) : 0;
-    });
-    // // Chuẩn hóa monthly
-    // const monthlyArr = monthlyRevenue.map((revenue, idx) => ({ month: idx + 1, revenue: Math.round(revenue), growthRate: monthlyGrowth[idx] }));
-    // // Chuẩn hóa statusBreakdown
-    // const statusArr = Object.entries(statusBreakdown).map(([status, bd]) => ({ status, totalVendors: bd.totalVendors, revenue: Math.round(statusRevenue[status] || 0), rate: statusRate[status] || 0 }));
     return {
       summary: {
         totalVendors,
@@ -1794,15 +1786,161 @@ export class OverviewService {
   }
 
   private async getAdminUserSubscriptionStatistics(query: AdminOverviewDto) {
-    // TODO: Thống kê user đăng ký gói User
+    // 1. Lấy tất cả plan có planType === 'người dùng'
+    const planRes = await this.subscriptionPlanService.findAll({ planType: PlanType.USER, pageSize: 1000 });
+    const userPlans = planRes.data;
+    const userPlanIds = userPlans.map(p => p.id);
+
+    // 2. Lấy tất cả subscription có planId thuộc các plan này và có userId
+    const subscriptionsRes = await this.subscriptionService.findAll({ pageSize: 1000 });
+    const allSubscriptions = subscriptionsRes.data.filter(s => userPlanIds.includes(s.planId) && s.userId);
+
+    // 3. Lấy tổng số user trong hệ thống
+    const userService = this['userService'] || (this as any).userService;
+    let totalUsersAll = 0;
+    if (userService && typeof userService.findAll === 'function') {
+      const usersRes = await userService.findAll({ pageSize: 1_000_000 });
+      totalUsersAll = usersRes.pagination?.totalItem || usersRes.data?.length || 0;
+    }
+
+    // 4. Tính toán
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const monthlyCount = Array(12).fill(0);
+    const monthlyRevenue = Array(12).fill(0);
+    const statusBreakdown: Record<string, { totalUsers: number }> = {};
+    let totalRevenue = 0;
+    let totalUsers = 0;
+
+    for (const sub of allSubscriptions) {
+      // Tính theo tháng
+      const createdDate = new Date(sub.createdAt || sub.startDate);
+      if (createdDate.getFullYear() === currentYear) {
+        monthlyCount[createdDate.getMonth()]++;
+        // Doanh thu (giả sử lấy giá tháng đầu tiên của plan)
+        const plan = userPlans.find(p => p.id === sub.planId);
+        if (plan) {
+          monthlyRevenue[createdDate.getMonth()] += Number(plan.priceForMonth || 0);
+        }
+      }
+      // Breakdown theo trạng thái
+      const status = sub.status;
+      if (!statusBreakdown[status]) statusBreakdown[status] = { totalUsers: 0 };
+      statusBreakdown[status].totalUsers++;
+      // Tổng doanh thu
+      const plan = userPlans.find(p => p.id === sub.planId);
+      if (plan) {
+        totalRevenue += Number(plan.priceForMonth || 0);
+      }
+    }
+    totalUsers = allSubscriptions.length;
+
+    // Format
+    const totalUsersFormatted = totalUsers.toLocaleString('en-US');
+    const totalRevenueShort = totalRevenue >= 1_000_000 ? `${Math.round(totalRevenue / 1_000_000)} Tr đ` : `${totalRevenue.toLocaleString('en-US')} đ`;
+    const subscriptionRate = totalUsersAll > 0 ? Math.round((totalUsers / totalUsersAll) * 100) : 0;
+
+    // Chuẩn hóa monthly với growthRateUser và growthRateRevenue
+    const monthlyArr = monthlyCount.map((count, idx) => {
+      let growthRateUser = 0;
+      let growthRateRevenue = 0;
+      if (idx > 0 && monthlyCount[idx - 1] > 0) {
+        growthRateUser = Math.round(((count - monthlyCount[idx - 1]) / monthlyCount[idx - 1]) * 100);
+      } else if (idx > 0 && monthlyCount[idx - 1] === 0 && count > 0) {
+        growthRateUser = 100;
+      } else {
+        growthRateUser = 0;
+      }
+      if (idx > 0 && monthlyRevenue[idx - 1] > 0) {
+        growthRateRevenue = Math.round(((monthlyRevenue[idx] - monthlyRevenue[idx - 1]) / monthlyRevenue[idx - 1]) * 100);
+      } else if (idx > 0 && monthlyRevenue[idx - 1] === 0 && monthlyRevenue[idx] > 0) {
+        growthRateRevenue = 100;
+      } else {
+        growthRateRevenue = 0;
+      }
+      return { month: idx + 1, newUsers: count, revenue: monthlyRevenue[idx], growthRateUser, growthRateRevenue };
+    });
+    // Chuẩn hóa statusBreakdown
+    const statusArr = Object.entries(statusBreakdown).map(([status, bd]) => ({ status, totalUsers: bd.totalUsers }));
+
     return {
       summary: {
-        totalUsers: 0,
-        totalRevenue: 0,
-        subscriptionRate: 0,
+        totalUsers,
+        totalUsersFormatted,
+        totalRevenue: Math.round(totalRevenue),
+        totalRevenueShort,
+        subscriptionRate,
       },
-      monthly: [],
-      statusBreakdown: [],
+      monthly: monthlyArr,
+      statusBreakdown: statusArr,
+    };
+  }
+
+  private async getAdminVendorPaymentStatistics(query: AdminOverviewDto) {
+    // Thống kê số tiền cần thanh toán cho vendor theo tháng
+    // 1. Lấy năm cần thống kê
+    const year = query.year ? Number(query.year) : new Date().getFullYear();
+    const current = query.current ? Number(query.current) : 1;
+    const pageSize = query.pageSize ? Number(query.pageSize) : 10;
+    // 2. Lấy tất cả booking completed trong năm đó
+    const allBookingsRes = await this.bookingService['bookingRepository'].find({
+      where: {
+        status: BookingStatus.COMPLETED,
+        date: Between(new Date(year, 0, 1), new Date(year, 11, 31, 23, 59, 59, 999)),
+      },
+      relations: [
+        'location',
+        'location.vendor',
+        'serviceConcept',
+        'serviceConcept.servicePackage',
+      ],
+    });
+    // 3. Lấy tất cả vendor
+    const allVendorsRes = await this.vendorService.findAll({ pageSize: pageSize.toString() });
+    const allVendorsList = allVendorsRes.data;
+    // 4. Gom nhóm booking theo vendorId, theo tháng
+    const vendorBookingMap = new Map(); // vendorId -> { monthly: [12], total }
+    for (const booking of allBookingsRes) {
+      const vendor = booking.location?.vendor;
+      if (!vendor) continue;
+      const vendorId = vendor.id;
+      const month = new Date(booking.date).getMonth(); // 0-11
+      const originPrice = Number(booking.serviceConcept?.price || 0);
+      if (!vendorBookingMap.has(vendorId)) {
+        vendorBookingMap.set(vendorId, {
+          monthly: Array(12).fill(0),
+          total: 0,
+        });
+      }
+      const v = vendorBookingMap.get(vendorId);
+      v.monthly[month] += originPrice;
+      v.total += originPrice;
+    }
+    // 5. Merge tất cả vendor với dữ liệu booking
+    const allVendors = allVendorsList.map(vendor => {
+      const bookingData = vendorBookingMap.get(vendor.id) || { monthly: Array(12).fill(0), total: 0 };
+      return {
+        vendorId: vendor.id,
+        vendorName: vendor.name,
+        monthly: bookingData.monthly.map((amount, idx) => ({ month: (idx + 1).toString(), amount })),
+        total: Math.round(bookingData.total),
+      };
+    });
+    // 6. Phân trang
+    const totalItem = allVendors.length;
+    const totalPage = Math.ceil(totalItem / pageSize);
+    const start = (current - 1) * pageSize;
+    const end = start + pageSize;
+    const vendors = allVendors.slice(start, end);
+    return {
+      year,
+      vendors,
+      pagination: {
+        current,
+        pageSize,
+        totalPage,
+        totalItem,
+      },
     };
   }
 } 

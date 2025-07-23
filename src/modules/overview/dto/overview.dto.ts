@@ -80,6 +80,30 @@ export class AdminOverviewDto {
   @IsOptional()
   @IsEnum(AdminStatisticsType)
   type?: AdminStatisticsType;
+
+  @ApiProperty({
+    description: 'Năm cần thống kê (ví dụ: 2024)',
+    required: false,
+    example: 2024,
+  })
+  @IsOptional()
+  year?: number;
+
+  @ApiProperty({
+    description: 'Trang hiện tại (phân trang vendor)',
+    required: false,
+    example: 1,
+  })
+  @IsOptional()
+  current?: number;
+
+  @ApiProperty({
+    description: 'Số lượng vendor trên mỗi trang',
+    required: false,
+    example: 10,
+  })
+  @IsOptional()
+  pageSize?: number;
   // Add properties for admin-level statistics here
   // Example: global date range, filters, etc.
 } 
