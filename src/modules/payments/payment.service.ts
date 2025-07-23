@@ -289,7 +289,8 @@ export class PaymentService {
       buyerName,
       items: [
         {
-          name: serviceConcept?.name || 'Dịch vụ không xác định',
+          // name: serviceConcept?.name || 'Dịch vụ không xác định',
+          name: invoice.booking.user.fullName,
           quantity: 1,
           price: amount,
         },

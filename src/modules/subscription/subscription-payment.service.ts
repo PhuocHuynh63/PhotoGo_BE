@@ -115,6 +115,23 @@ export class SubscriptionPaymentService {
     });
     await this.subscriptionInvoiceRepository.save(invoice);
 
+    // Lấy lại invoice với đầy đủ quan hệ subscription và user
+    const invoiceWithRelations = await this.subscriptionInvoiceRepository.findOne({
+      where: { id: invoice.id },
+      relations: ['subscription', 'subscription.user'],
+    });
+    if (!invoiceWithRelations || !invoiceWithRelations.subscription) {
+      throw new BadRequestException('Không lấy được thông tin subscription cho invoice');
+    }
+
+    // Lấy tên item phù hợp với payerType
+    let itemName = 'Subscription';
+    if (payerType === PayerType.CUSTOMER) {
+      itemName = invoiceWithRelations.subscription.user?.fullName || 'Khách hàng';
+    } else if (payerType === PayerType.VENDOR) {
+      itemName = invoiceWithRelations.subscription.user?.fullName || 'Nhà cung cấp';
+    }
+
     // Tạo payment record
     const payment = this.subscriptionPaymentRepository.create({
       subscriptionInvoiceId: invoice.id,
@@ -163,7 +180,14 @@ export class SubscriptionPaymentService {
       amount,
       description,
       cancelUrl,
-      returnUrl
+      returnUrl,
+      items: [
+        {
+          name: itemName,
+          quantity: 1,
+          price: amount,
+        },
+      ],  
     };
 
     // Gọi PayOS SDK để tạo link thanh toán
