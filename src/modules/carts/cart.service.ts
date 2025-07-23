@@ -222,23 +222,11 @@ export class CartService {
           ...img,
           imageUrl: img.imageUrl
         }))
-      }
+      },
+      finalPrice: item.serviceConcept ? Math.floor(item.serviceConcept.price * 1.35) : null
     }));
     return {
       data: formattedItems,
-      pagination: {
-        current: 1,
-        pageSize: 10,
-        totalPage: Math.ceil(total / 10),
-        totalItem: total
-      }
-    };
-    if (!cart) {
-      throw new NotFoundException(`Không tìm thấy giỏ hàng cho người dùng với ID ${userId}`);
-    }
-
-    return {
-      data: cart.items,
       pagination: {
         current: 1,
         pageSize: 10,
