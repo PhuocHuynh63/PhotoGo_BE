@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumberString, IsUUID, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNumberString, IsUUID, IsDateString, Matches } from 'class-validator';
+import { PointTransactionType } from 'src/constants/point.enum';
 
 export class FindPointDto {
   @IsNumberString()
@@ -81,7 +82,7 @@ export class FindMyTransactionsDto {
     example: 'kiếm được',
     description: 'Loại giao dịch (kiếm được, đổi thưởng, hết hạn)',
     required: false,
-    enum: ['kiếm được', 'đổi thưởng', 'hết hạn'],
+    enum: PointTransactionType,
   })
   type?: string;
 
@@ -97,20 +98,22 @@ export class FindMyTransactionsDto {
 }
 
 export class FindMyPointHistoryDto extends FindMyTransactionsDto {
-  @IsDateString()
+  @IsString()
   @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Ngày phải đúng định dạng YYYY-MM-DD' })
   @ApiProperty({
-    example: '2024-01-01T00:00:00.000Z',
-    description: 'Ngày bắt đầu để lọc giao dịch',
+    example: '2024-06-01',
+    description: 'Ngày bắt đầu để lọc giao dịch (YYYY-MM-DD)',
     required: false,
   })
   startDate?: string;
 
-  @IsDateString()
+  @IsString()
   @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Ngày phải đúng định dạng YYYY-MM-DD' })
   @ApiProperty({
-    example: '2024-12-31T23:59:59.999Z',
-    description: 'Ngày kết thúc để lọc giao dịch',
+    example: '2025-07-21',
+    description: 'Ngày kết thúc để lọc giao dịch (YYYY-MM-DD)',
     required: false,
   })
   endDate?: string;
@@ -133,13 +136,4 @@ export class FindMyPointHistoryDto extends FindMyTransactionsDto {
   })
   maxAmount?: string;
 
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    example: 'positive',
-    description: 'Lọc theo hướng thay đổi điểm',
-    required: false,
-    enum: ['positive', 'negative', 'all'],
-  })
-  direction?: 'positive' | 'negative' | 'all';
 }

@@ -373,7 +373,7 @@ export class PointService {
 
     // Kiểm tra balance có đủ không
     if (userPoint.balance < amount) {
-      throw new BadRequestException(`Số điểm không đủ. Hiện tại: ${userPoint.balance}, cần: ${amount}`);
+      throw new BadRequestException(`Số điểm không đủ`);
     }
 
     // Cập nhật balance
@@ -478,15 +478,6 @@ export class PointService {
       queryBuilder.andWhere('transaction.created_at <= :endDate', {
         endDate: new Date(query.endDate)
       });
-    }
-
-    // Filter theo hướng thay đổi điểm
-    if (query.direction && query.direction !== 'all') {
-      if (query.direction === 'positive') {
-        queryBuilder.andWhere('transaction.amount > 0');
-      } else if (query.direction === 'negative') {
-        queryBuilder.andWhere('transaction.amount < 0');
-      }
     }
 
     // Filter theo khoảng số điểm (dựa trên giá trị tuyệt đối)
