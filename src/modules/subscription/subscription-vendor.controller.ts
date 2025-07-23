@@ -1,11 +1,13 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionVendorService } from './subscription-vendor.service';
 import { CreateSubscriptionVendorDto, UpdateSubscriptionVendorDto, SubscriptionVendorResponseDto } from './dto/subscription-vendor.dto';
 import { HistoryDto, PaginationDto } from '../subscription/dto/find-subscription.dto';
+import { Public } from 'src/decorator/custom';
 
 @ApiTags('subscription-vendors')
 @Controller('subscription-vendors')
+@ApiBearerAuth('access-token')
 export class SubscriptionVendorController {
   constructor(private readonly subscriptionVendorService: SubscriptionVendorService) {}
 
@@ -34,6 +36,7 @@ export class SubscriptionVendorController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách tất cả subscription vendors' })
   @ApiResponse({ status: 200, description: 'Thành công', type: [SubscriptionVendorResponseDto] })
   findAll(): Promise<SubscriptionVendorResponseDto[]> {
@@ -41,6 +44,7 @@ export class SubscriptionVendorController {
   }
 
   @Get('plan/:planId')
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách vendors theo subscription plan ID' })
   @ApiParam({ name: 'planId', description: 'ID của subscription plan' })
   @ApiResponse({ status: 200, description: 'Thành công', type: [SubscriptionVendorResponseDto] })
@@ -49,6 +53,7 @@ export class SubscriptionVendorController {
   }
 
   @Get('vendor/:vendorId')
+  @Public()
   @ApiOperation({ summary: 'Lấy danh sách subscriptions theo vendor ID' })
   @ApiParam({ name: 'vendorId', description: 'ID của vendor' })
   @ApiResponse({ status: 200, description: 'Thành công', type: [SubscriptionVendorResponseDto] })
@@ -56,7 +61,8 @@ export class SubscriptionVendorController {
     return this.subscriptionVendorService.findByVendorId(vendorId);
   }
 
-  @Get('vendor/:vendorId/plans-count')
+  @Get('vendor/:vendorId/plans-count')  
+  @Public()
   @ApiOperation({ summary: 'Lấy số lượng subscription plan mà vendor đang tham gia' })
   @ApiParam({ name: 'vendorId', description: 'ID của vendor' })
   @ApiResponse({ status: 200, description: 'Thành công' })
@@ -65,6 +71,7 @@ export class SubscriptionVendorController {
   }
 
   @Get('vendor/:vendorId/can-join/:planId')
+  @Public()
   @ApiOperation({ summary: 'Kiểm tra xem vendor có thể tham gia subscription plan không' })
   @ApiParam({ name: 'vendorId', description: 'ID của vendor' })
   @ApiParam({ name: 'planId', description: 'ID của subscription plan' })
@@ -74,6 +81,7 @@ export class SubscriptionVendorController {
   }
 
   @Get('history/:vendorId')
+  @Public()
   @ApiOperation({ summary: 'Lấy lịch sử subscription của vendor (group từng lần tham gia plan)' })
   @ApiParam({ name: 'vendorId', description: 'ID của vendor' })
   @ApiResponse({ status: 200, description: 'Thành công' })
@@ -89,6 +97,7 @@ export class SubscriptionVendorController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy thông tin subscription vendor theo ID' })
   @ApiParam({ name: 'id', description: 'ID của subscription vendor' })
   @ApiResponse({ status: 200, description: 'Thành công', type: SubscriptionVendorResponseDto })

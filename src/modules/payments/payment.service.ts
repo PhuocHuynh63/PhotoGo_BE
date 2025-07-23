@@ -636,8 +636,21 @@ export class PaymentService {
     const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
     // Nếu chưa có point record cho user thì tạo mới
     if ((!points || points.length === 0) && userId) {
-      const newPoint = this.pointRepository.create({ user: booking.user, balance: 0 });
-      await this.pointRepository.save(newPoint);
+      // Kiểm tra lại trong DB để tránh race condition
+      let newPoint = await this.pointRepository.findOne({ where: { user: { id: userId } } });
+      if (!newPoint) {
+        newPoint = this.pointRepository.create({ user: booking.user, balance: 0 });
+        try {
+          await this.pointRepository.save(newPoint);
+        } catch (err) {
+          // Nếu bị duplicate, lấy lại bản ghi đã tồn tại
+          if (err.code === '23505') { // Postgres unique violation
+            newPoint = await this.pointRepository.findOne({ where: { user: { id: userId } } });
+          } else {
+            throw err;
+          }
+        }
+      }
       points = [newPoint];
     }
     if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
