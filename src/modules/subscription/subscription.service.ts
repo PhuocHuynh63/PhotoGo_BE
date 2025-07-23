@@ -13,6 +13,7 @@ import { BullQueueService } from '../../3rdService/bull/bull-queue.service';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { SubscriptionReminderJobData } from './bull/subscription.processor';
+import { SubscriptionHistory } from './entities/subscription-history.entity';
 
 @Injectable()
 export class SubscriptionService {
@@ -378,4 +379,38 @@ export class SubscriptionService {
     }
   }
   //#endregion scheduleCleanupJob
+
+  /**
+   * Lấy lịch sử subscription của user, group theo từng subscription
+   * Nếu user chỉ có 1 subscription thì vẫn trả về dạng mảng 1 phần tử
+   */
+  async getGroupedSubscriptionHistoryByUserId(userId: string) {
+    // Lấy tất cả subscription của user (bao gồm cả plan)
+    const subscriptions = await this.subscriptionRepository.find({
+      where: { userId },
+      relations: ['plan'],
+      order: { createdAt: 'DESC' },
+    });
+    // Lấy lịch sử cho từng subscription
+    const result = [];
+    for (const sub of subscriptions) {
+      const history = await this.subscriptionHistoryService.findBySubscriptionId(sub.id);
+      result.push({
+        subscription: {
+          id: sub.id,
+          startDate: sub.startDate,
+          endDate: sub.endDate,
+          status: sub.status,
+          billingCycle: sub.billingCycle,
+          lastBilledAt: sub.lastBilledAt,
+          nextBillingAt: sub.nextBillingAt,
+          createdAt: sub.createdAt,
+          updatedAt: sub.updatedAt,
+        },
+        plan: sub.plan,
+        history,
+      });
+    }
+    return result;
+  }
 } 

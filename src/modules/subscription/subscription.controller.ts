@@ -125,6 +125,21 @@ export class SubscriptionController {
     };
   }
 
+  // get subscription history by user id
+  @Get('history/:userId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy lịch sử subscription theo user id (group theo từng subscription)' })
+  @ApiParam({ name: 'userId', description: 'ID của user' })
+  @ApiResponse({ status: 200, description: 'Thành công' })
+  async getSubscriptionHistoryByUserId(@Param('userId') userId: string) {
+    const grouped = await this.subscriptionService.getGroupedSubscriptionHistoryByUserId(userId);
+    return {
+      userId,
+      history: grouped,
+      totalRecords: grouped.length
+    };
+  }
+
   @Get('invoice/:invoiceId/payments')
   @ApiOperation({ summary: 'Lấy danh sách payments của invoice' })
   @ApiParam({ name: 'invoiceId', description: 'ID của invoice' })

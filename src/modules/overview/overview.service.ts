@@ -1932,9 +1932,12 @@ export class OverviewService {
     const start = (current - 1) * pageSize;
     const end = start + pageSize;
     const vendors = allVendors.slice(start, end);
+    // Tổng tất cả các total của vendor
+    const totalAmount = allVendors.reduce((sum, v) => sum + v.total, 0);
     return {
       year,
       vendors,
+      totalAmount,
       pagination: {
         current,
         pageSize,
