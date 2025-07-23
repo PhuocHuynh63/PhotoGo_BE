@@ -142,6 +142,16 @@ export class SubscriptionController {
     return this.subscriptionService.getGroupedSubscriptionHistoryByUserIdWithPagination(userId, query);
   }
 
+  // get paymentOsID by user id
+  @Get('payment/:userId/payos-id/:planId')
+  @Public()
+  @ApiOperation({ summary: 'Lấy payosId của payment theo user id' })
+  @ApiParam({ name: 'userId', description: 'ID của user' })
+  @ApiResponse({ status: 200, description: 'Thành công' })
+  async getPaymentPayosId(@Param('userId') userId: string, @Param('planId') planId: string) {
+    return this.subscriptionPaymentService.getPaymentPayosId(userId, planId);
+  }
+
   @Get('invoice/:invoiceId/payments')
   @ApiOperation({ summary: 'Lấy danh sách payments của invoice' })
   @ApiParam({ name: 'invoiceId', description: 'ID của invoice' })

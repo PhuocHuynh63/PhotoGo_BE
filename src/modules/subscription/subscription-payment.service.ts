@@ -625,5 +625,18 @@ export class SubscriptionPaymentService {
   }
   //#endregion getInvoicePayments
 
+  //#region getPaymentPayosId
+  async getPaymentPayosId(userId: string, planId: string) {
+    const payment = await this.subscriptionPaymentRepository.findOne({
+      where: { subscriptionInvoice: { subscription: { userId: userId, planId: planId } } },
+      relations: ['subscriptionInvoice', 'subscriptionInvoice.subscription'],
+    });
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    return payment.paymentOSId;
+  }
+  //#endregion getPaymentPayosId
+
 
 } 

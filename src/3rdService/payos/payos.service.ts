@@ -98,4 +98,21 @@ export class PayOSService {
       throw new Error(error?.response?.data?.message || 'Failed to process refund with PayOS');
     }
   }  
+
+  async getPaymentLinkById(paymentLinkId: string) {
+    try {
+      const res = await this.httpService.axiosRef.get(
+        `${this.baseUrl}/v2/payment-requests/${paymentLinkId}`,
+        {
+          headers: {
+            'x-client-id': this.clientId,
+            'x-api-key': this.apiKey,
+          },
+        },
+      );
+      return res.data?.data || res.data;
+    } catch (error) {
+      throw new Error(error?.response?.data?.message || 'Không lấy được thông tin payment link từ PayOS');
+    }
+  }
 }
