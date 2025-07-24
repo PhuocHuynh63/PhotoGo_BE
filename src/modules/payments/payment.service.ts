@@ -382,8 +382,8 @@ export class PaymentService {
       orderCode,
       amount,
       description,
-      returnUrl: `https://photogo.id.vn/payment/successful?paymentId=${orderCode}&status=success`,
-      cancelUrl: `https://photogo.id.vn/payment/error?paymentId=${orderCode}&status=error`,
+      returnUrl: `https://photogo.id.vn/payment/remaining/successful?paymentId=${orderCode}&status=success`,
+      cancelUrl: `https://photogo.id.vn/payment/remaining/error?paymentId=${orderCode}&status=error`,
       webhookUrl: this.configService.get<string>('PAYOS_WEBHOOK_URL'),
       buyerName,
       items: [
