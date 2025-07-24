@@ -649,10 +649,6 @@ export class CampaignService {
           });
 
           await this.voucherUserRepository.save(voucherUser);
-
-          // Update voucher quantity
-          voucher.quantity -= 1;
-          await this.voucherRepository.save(voucher);
         }
       }
     }
@@ -767,10 +763,6 @@ export class CampaignService {
                 });
 
                 await this.voucherUserRepository.save(voucherUser);
-
-                // Update voucher quantity
-                voucher.quantity -= 1;
-                await this.voucherRepository.save(voucher);
               }
             }
           }
