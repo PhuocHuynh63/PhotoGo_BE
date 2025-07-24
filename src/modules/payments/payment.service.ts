@@ -817,8 +817,17 @@ export class PaymentService {
       // Cập nhật trạng thái thanh toán
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
-      // Cập nhật trạng thái booking
-      await this.updateBookingStatusRemainingAmount(booking, payment.type);
+      //Tạo payment transaction record (success)
+      const paymentTransactionDto: CreatePaymentTransactionDto = {
+        paymentId: payment.id,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        status: PaymentStatus.PAID,
+        type: payment.type,
+        description: payment.description,
+        transactionId: payment.transactionId,
+      };
+      await this.paymentTransactionRepository.save(paymentTransactionDto);
       // Cập nhật điểm
       await this.updatePointRemainingAmount(booking, payment.type, payment.amount);
       // Gửi mail hóa đơn cho user
