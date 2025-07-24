@@ -384,6 +384,7 @@ export class CampaignService {
 
           // Update voucher quantity
           voucher.quantity -= 1;
+          voucher.status = VoucherStatusEnum.ACTIVE;
           await this.voucherRepository.save(voucher);
         }
       }
