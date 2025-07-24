@@ -499,9 +499,9 @@ export class VoucherService {
     });
     await this.voucherUserRepository.save(voucherUser);
 
-    // 6. Giảm số lượng voucher
-    voucher.quantity -= 1;
-    await this.voucherRepository.save(voucher);
+    // // 6. Giảm số lượng voucher
+    // voucher.quantity -= 1;
+    // await this.voucherRepository.save(voucher);
 
     // 7. Gửi thông báo đổi voucher thành công sau khi hoàn thành
     try {

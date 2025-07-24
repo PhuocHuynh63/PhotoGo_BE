@@ -2119,7 +2119,7 @@ export class VendorService {
       slug: row.slug,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      priority: row.priority ?? 0,
+      priority: row.priority ? row.priority : 0,
       isRemarkable: row.is_remarkable === true,
       averageRating: Number(parseFloat(row.avg_rating || 0).toFixed(1)),
       reviewCount: parseInt(row.review_count) || 0,

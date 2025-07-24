@@ -74,7 +74,7 @@ export class InvoiceService {
     let finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER);
     const taxAmount = Math.round(originPrice * TAX_RATE); // Giữ lại để lưu vào DB
 
-    // --- BƯỚC 1.5: ÁP DỤNG GIẢM GIÁ SUBSCRIPTION TRÊN finalPrice ---
+    // --- BƯỚC 1.5: ÁP DỤNG GIẢM GIÁ SUBSCRIPTION TRƯỚC TRÊN finalPrice ---
     let discountSubscription = 0;
     const userId = booking.userId;
     if (userId) {
@@ -83,11 +83,11 @@ export class InvoiceService {
       });
       if (activeSubscription) {
         discountSubscription = Math.round(finalPrice * 0.1);
-        finalPrice = finalPrice - discountSubscription;
       }
     }
+    const priceAfterSub = finalPrice - discountSubscription;
 
-    // --- BƯỚC 2: TÍNH DISCOUNT (VOUCHER) TRÊN finalPrice ---
+    // --- BƯỚC 2: TÍNH DISCOUNT (VOUCHER) TRÊN GIÁ ĐÃ TRỪ SUBSCRIPTION ---
     let discountAmount = 0;
     let voucher = null;
     if (voucherId) {
@@ -96,14 +96,11 @@ export class InvoiceService {
         throw new NotFoundException(`Voucher với ID ${voucherId} không tồn tại`);
       }
 
-      // (Toàn bộ logic kiểm tra voucher của bạn ở đây là chính xác)
       let voucherUser = await this.voucherUserRepository.findOne({
         where: { user_id: booking.userId, voucher_id: voucherId, status: VoucherUserStatusEnum.AVAILABLE },
       });
-      // Bổ sung kiểm tra campaignVoucher nếu không có voucherUser
       let campaignVoucher = null;
       if (!voucherUser) {
-        // Sử dụng hàm public thay vì truy cập trực tiếp repository
         campaignVoucher = await this.voucherService.findCampaignVoucherByVoucherId(voucher.id);
       }
       if (!voucherUser && !campaignVoucher) {
@@ -117,35 +114,35 @@ export class InvoiceService {
         throw new BadRequestException(`Voucher với ID ${voucherId} không còn hiệu lực`);
       }
 
-      if (finalPrice < voucher.minPrice) {
+      if (priceAfterSub < voucher.minPrice) {
         throw new BadRequestException(`Giá trị đơn hàng phải từ ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ để sử dụng voucher này`);
       }
 
-      // Tính toán chiết khấu trên finalPrice (sau subscription)
+      // Tính toán chiết khấu trên priceAfterSub (sau subscription)
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
         const discountValue = Number(voucher.discount_value);
-        discountAmount = Math.round((finalPrice * discountValue) / 100);
+        discountAmount = Math.round((priceAfterSub * discountValue) / 100);
         if (voucher.maxPrice && discountAmount > voucher.maxPrice) {
           discountAmount = voucher.maxPrice;
         }
       } else if (voucher.discount_type === VoucherTypeDiscount.FIXED) {
         discountAmount = Math.round(Number(voucher.discount_value));
       }
-      if (discountAmount > finalPrice) {
-        discountAmount = finalPrice;
+      if (discountAmount > priceAfterSub) {
+        discountAmount = priceAfterSub;
       }
     }
 
     // --- BƯỚC 3: TÍNH GIÁ SAU KHI GIẢM GIÁ ---
-    let priceAfterDiscount = finalPrice - discountAmount;
+    let priceAfterDiscount = priceAfterSub - discountAmount;
     if (priceAfterDiscount < 0) {
-      discountAmount = finalPrice;
+      discountAmount = priceAfterSub;
       priceAfterDiscount = 0;
     }
 
-    // --- BƯỚC 4: TÍNH PHÍ PHÁT SINH (RUSH FEE) DỰA TRÊN GIÁ TRỊ DỊCH VỤ GỐC (finalPrice) ---
+    // --- BƯỚC 4: TÍNH PHÍ PHÁT SINH (RUSH FEE) DỰA TRÊN GIÁ TRỊ DỊCH VỤ GỐC (priceAfterSub) ---
     const bookingDate = booking.date ? new Date(booking.date) : null;
-    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, finalPrice);
+    const rushFee = await this.bookingService.calculateRushFee(booking.userId, bookingDate, priceAfterSub);
 
     // --- BƯỚC 5: TÍNH TIỀN CỌC VÀ TIỀN PHẢI TRẢ ---
     let depositAmount = 0;
@@ -166,7 +163,7 @@ export class InvoiceService {
       ...createInvoiceDto,
       bookingId: booking.id,
       voucherId: voucher?.id || null,
-      originalPrice: finalPrice,          // Giá dịch vụ cuối cùng (đã trừ subscription, chưa giảm giá voucher, chưa có phí)
+      originalPrice: finalPrice,          // Giá dịch vụ cuối cùng (đã gồm hoa hồng, thuế)
       discountAmount: discountAmount + discountSubscription,       // Số tiền được giảm (gồm cả voucher và subscription)
       discountedPrice: priceAfterDiscount,  // Giá dịch vụ sau khi giảm giá voucher (đã trừ subscription)
       taxAmount: taxAmount,               // Tiền thuế
@@ -374,24 +371,31 @@ export class InvoiceService {
       const TAX_RATE = 0.05; // 5%
       const TOTAL_MULTIPLIER = 1 + COMMISSION_RATE + TAX_RATE; // 1.35
 
-      const finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
+      let finalPrice = Math.round(originPrice * TOTAL_MULTIPLIER); // Final price customer sees
       const commissionAmount = Math.round(originPrice * COMMISSION_RATE);
       const taxAmount = Math.round(originPrice * TAX_RATE);
 
-      // For invoice display: originalPrice = originPrice + commission (hidden from customer)
-      const recalculatedPrice = Math.round(originPrice + commissionAmount);
-      const recalculatedTaxAmount = taxAmount;
-      const recalculatedTotalAmount = finalPrice; // This is what customer sees
+      // --- Áp dụng subscription trước ---
+      let discountSubscription = 0;
+      if (invoice.booking.userId) {
+        const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
+          where: { userId: invoice.booking.userId, status: SubscriptionStatus.ACTIVE },
+        });
+        if (activeSubscription) {
+          discountSubscription = Math.round(finalPrice * 0.1);
+        }
+      }
+      const priceAfterSub = finalPrice - discountSubscription;
 
-      // Apply voucher discount if exists
+      // --- Áp dụng voucher trên giá đã trừ subscription ---
       let recalculatedDiscountAmount = 0;
       if (invoice.voucherId) {
         const voucher = await this.voucherService.findOneVoucher(invoice.voucherId);
         if (voucher) {
-          if (recalculatedTotalAmount >= voucher.minPrice) {
+          if (priceAfterSub >= voucher.minPrice) {
             if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
               const discountValue = Number(voucher.discount_value);
-              recalculatedDiscountAmount = Math.round((recalculatedTotalAmount * discountValue) / 100);
+              recalculatedDiscountAmount = Math.round((priceAfterSub * discountValue) / 100);
               if (voucher.maxPrice && recalculatedDiscountAmount > voucher.maxPrice) {
                 recalculatedDiscountAmount = voucher.maxPrice;
               }
@@ -401,34 +405,40 @@ export class InvoiceService {
                 recalculatedDiscountAmount = voucher.maxPrice;
               }
             }
+            if (recalculatedDiscountAmount > priceAfterSub) {
+              recalculatedDiscountAmount = priceAfterSub;
+            }
           }
         }
+      }
+      let priceAfterDiscount = priceAfterSub - recalculatedDiscountAmount;
+      if (priceAfterDiscount < 0) {
+        recalculatedDiscountAmount = priceAfterSub;
+        priceAfterDiscount = 0;
       }
       // Tính lại rushFee (feeAmount)
       let bookingDate: Date = null;
       if (invoice.booking.date) {
         bookingDate = new Date(invoice.booking.date);
       }
-      const rushFee = await this.bookingService.calculateRushFee(invoice.booking.userId, bookingDate, finalPrice);
+      const rushFee = await this.bookingService.calculateRushFee(invoice.booking.userId, bookingDate, priceAfterSub);
       // Calculate final amounts after discount + rushFee
-      const recalculatedDiscountedPrice = Math.round(recalculatedPrice - recalculatedDiscountAmount + rushFee);
-      const recalculatedDiscountedTotal = Math.round(recalculatedTotalAmount - recalculatedDiscountAmount + rushFee);
-      const recalculatedPayablePrice = Math.round(recalculatedDiscountedTotal);
+      const recalculatedPayablePrice = Math.round(priceAfterDiscount + rushFee);
       // Recalculate deposit and remaining amounts
       let recalculatedDepositAmount = 0;
       let recalculatedRemainingAmount = 0;
       if (invoice.booking.depositType === BookingDepositType.PERCENTAGE) {
-        recalculatedDepositAmount = Math.round(recalculatedPayablePrice * (invoice.booking.depositAmount / 100));
-        recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
+        recalculatedDepositAmount = Math.round(priceAfterDiscount * (invoice.booking.depositAmount / 100));
+        recalculatedRemainingAmount = priceAfterDiscount - recalculatedDepositAmount;
       } else {
         recalculatedDepositAmount = Math.round(invoice.booking.depositAmount || 0);
-        recalculatedRemainingAmount = recalculatedPayablePrice - recalculatedDepositAmount;
+        recalculatedRemainingAmount = priceAfterDiscount - recalculatedDepositAmount;
       }
       // Update invoice with recalculated values
-      invoice.originalPrice = recalculatedPrice;
-      invoice.discountAmount = recalculatedDiscountAmount;
-      invoice.discountedPrice = recalculatedDiscountedPrice;
-      invoice.taxAmount = recalculatedTaxAmount;
+      invoice.originalPrice = finalPrice;
+      invoice.discountAmount = recalculatedDiscountAmount + discountSubscription;
+      invoice.discountedPrice = priceAfterDiscount;
+      invoice.taxAmount = taxAmount;
       invoice.feeAmount = rushFee;
       invoice.payablePrice = recalculatedPayablePrice;
       invoice.depositAmount = recalculatedDepositAmount;

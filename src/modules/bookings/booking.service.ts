@@ -29,10 +29,11 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
 import { BillingCycle, SubscriptionStatus } from '../../constants/subscription.enum';
 import { CampaignVendor } from '../campaign/entities/campaign-vendor.entity';
-import { VoucherTypeDiscount } from '../../constants/voucher.enum';
+import { VoucherTypeDiscount, VoucherUserStatusEnum } from '../../constants/voucher.enum';
 import { AlbumStatus } from 'src/constants/album.enum';
 import { Album } from '../album/entities/album.entity';
 import { VendorAlbum } from '../album/entities/vendor-album.entity';
+import { VoucherTypePoint } from 'src/constants/voucher.enum';
 
 @Injectable()
 export class BookingService {
@@ -1654,9 +1655,20 @@ export class BookingService {
     }
     const rushFee = await this.calculateRushFee(userId, bookingDate, estimatedPrice);
 
-    let discountAmount = 0;
+    // 3. Tính giảm giá subscription trước
+    let discountSubscription = 0;
+    if (userId) {
+      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
+        where: { userId, status: SubscriptionStatus.ACTIVE },
+      });
+      if (activeSubscription) {
+        discountSubscription = Math.round(estimatedPrice * 0.1);
+      }
+    }
+    const priceAfterSub = estimatedPrice - discountSubscription;
 
-    // 3. Xử lý VOUCHER (nếu có)
+    // 4. Xử lý VOUCHER (nếu có) trên giá đã trừ subscription
+    let discountAmount = 0;
     if (voucherId) {
       const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
 
@@ -1665,25 +1677,29 @@ export class BookingService {
       }
 
       // --- (Toàn bộ phần code xác thực voucher của bạn nên đặt ở đây) ---
-      // Ví dụ kiểm tra ownership
-      const voucherUser = await this.voucherUserRepository.findOne({
-        where: { voucher_id: voucher.id, user_id: userId }
+      let voucherUser = null;
+      let campaignVoucher = null;
+
+      voucherUser = await this.voucherUserRepository.findOne({
+        where: { voucher_id: voucherId, user_id: userId, status: VoucherUserStatusEnum.AVAILABLE }
       });
-      const campaignVoucher = await this.campaignVoucherRepository.findOne({
-        where: { voucherId: voucher.id, isAvailable: true }
-      });
+
+      campaignVoucher = await this.campaignVoucherRepository.findOne({
+        where: { voucherId: voucherId, isAvailable: true }
+      }); 
+
       if (!voucherUser && !campaignVoucher) {
         throw new NotFoundException('Voucher không hợp lệ hoặc không thuộc về bạn.');
       }
       // ---
 
-      if (estimatedPrice < voucher.minPrice) {
+      if (priceAfterSub < voucher.minPrice) {
         throw new BadRequestException(`Đơn hàng tối thiểu để áp dụng voucher là ${voucher.minPrice.toLocaleString('vi-VN')} VNĐ`);
       }
 
       // Tính toán chiết khấu
       if (voucher.discount_type === VoucherTypeDiscount.PERCENTAGE) {
-        discountAmount = estimatedPrice * (Number(voucher.discount_value) / 100);
+        discountAmount = priceAfterSub * (Number(voucher.discount_value) / 100);
       } else { // FIXED
         discountAmount = Number(voucher.discount_value);
       }
@@ -1694,34 +1710,15 @@ export class BookingService {
       }
     }
 
-    // 4. Tính toán các giá trị thanh toán cuối cùng
-    let finalPrice = estimatedPrice;
-    // 5. Áp dụng giảm giá subscription (nếu có)
-    let discountSubscription = 0;
-    if (userId) {
-      const activeSubscription = await this.subscriptionService['subscriptionRepository'].findOne({
-        where: { userId, status: SubscriptionStatus.ACTIVE },
-      });
-      if (activeSubscription) {
-        discountSubscription = Math.round(finalPrice * 0.1);
-        finalPrice = finalPrice - discountSubscription;
-      }
-    }
-    // Sau khi giảm subscription, cộng rushFee
-    finalPrice = finalPrice + rushFee;
-
-    // Giá sau khi giảm giá
-    const priceAfterDiscount = finalPrice - discountAmount;
-
-    // Đảm bảo giá không bị âm, nếu có thì chiết khấu bằng giá gốc
+    // 5. Tính toán các giá trị thanh toán cuối cùng
+    let finalPrice = priceAfterSub + rushFee;
+    let priceAfterDiscount = finalPrice - discountAmount;
+    // Đảm bảo giá không bị âm, nếu có thì chiết khấu bằng giá cuối cùng
     if (priceAfterDiscount < 0) {
-      discountAmount = estimatedPrice;
+      discountAmount = finalPrice;
+      priceAfterDiscount = 0;
     }
-
-    // Tiền cọc tính trên giá SAU KHI giảm
     const depositAmount = priceAfterDiscount * (depositPercentage / 100);
-
-    // Tiền còn lại của DỊCH VỤ
     const remainingAmount = priceAfterDiscount - depositAmount;
 
     // 6. Trả về kết quả

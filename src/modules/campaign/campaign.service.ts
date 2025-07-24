@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not } from 'typeorm';
 import { Campaign } from './entities/campaign.entity';
 import { CampaignVoucher } from './entities/campaign-voucher.entity';
 import { UserCampaign } from './entities/user-campaign.entity';
@@ -1206,7 +1206,10 @@ export class CampaignService {
   }
 
   async getAllCampaignsAndVouchersIn(): Promise<{ data: Campaign[], pagination: { current: number, pageSize: number, totalPage: number, totalItem: number } }> {
-    const [campaigns, total] = await this.campaignRepository.findAndCount({ where: { status: true }, relations: ['campaignVouchers', 'campaignVouchers.voucher'] });
+    const [campaigns, total] = await this.campaignRepository.findAndCount({ where: { 
+      status: true,
+      name: Not(CAMPAIGN_NAMES.WELCOME)
+    }, relations: ['campaignVouchers', 'campaignVouchers.voucher'] });
     return { data: campaigns, pagination: { current: 1, pageSize: 10, totalPage: Math.ceil(total / 10), totalItem: total } };
   }
 
