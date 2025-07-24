@@ -1650,7 +1650,7 @@ export class BookingService {
 
     const originPrice = Number(serviceConcept.price);
     const estimatedPrice = this.calculateFinalPrice(originPrice);
-    const { depositAmount: depositPercentage, voucherId, date: bookingDateStr } = getDiscountAmountDto;
+    const { depositAmount: depositPercentage, voucherId, date: bookingDateStr, schedules } = getDiscountAmountDto;
 
     if (!depositPercentage || depositPercentage < 30 || depositPercentage > 100) {
       throw new BadRequestException('Tỷ lệ đặt cọc phải từ 30% đến 100%');
@@ -1658,7 +1658,9 @@ export class BookingService {
 
     // 2. Tính RUSH FEE một lần duy nhất và đúng cách (dựa trên giá gốc)
     let bookingDate: Date = null;
-    if (bookingDateStr) {
+    if (schedules && schedules.length > 0) {
+      bookingDate = new Date(this.convertDateFormat(schedules[0].date));
+    } else if (bookingDateStr) {
       bookingDate = new Date(this.convertDateFormat(bookingDateStr));
     }
     const rushFee = await this.calculateRushFee(userId, bookingDate, estimatedPrice);
