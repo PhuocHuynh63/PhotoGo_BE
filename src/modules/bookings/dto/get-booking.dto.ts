@@ -38,7 +38,8 @@ export class GetDiscountAmountDto {
     @Type(() => ScheduleItemDto)
     schedules?: ScheduleItemDto[];
 
-    @ApiProperty({ description: 'Ngày booking (DD/MM/YYYY)', example: '21/07/2024', required: true })
-    @IsString()
-    date: string;
+    @ApiProperty({ description: 'Ngày booking (DD/MM/YYYY)', example: '21/07/2024', required: false })
+    @IsOptional()
+    @IsString() 
+    date?: string;
 }
