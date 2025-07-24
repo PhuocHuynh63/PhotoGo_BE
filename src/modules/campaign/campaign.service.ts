@@ -382,8 +382,6 @@ export class CampaignService {
 
           await this.voucherUserRepository.save(voucherUser);
 
-          // Update voucher quantity
-          voucher.quantity -= 1;
           voucher.status = VoucherStatusEnum.ACTIVE;
           await this.voucherRepository.save(voucher);
         }
@@ -473,10 +471,8 @@ export class CampaignService {
 
               await this.voucherUserRepository.save(voucherUser);
 
-              // Update voucher quantity
               // update voucher status to active
               voucher.status = VoucherStatusEnum.ACTIVE;
-              voucher.quantity -= 1;
               await this.voucherRepository.save(voucher);
             }
           }
