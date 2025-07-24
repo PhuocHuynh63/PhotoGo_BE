@@ -1478,7 +1478,7 @@ export class ServicePackageService {
           AND (sc.status = 'hoạt động' OR sc.status IS NULL)
         GROUP BY sp.id
       )
-      SELECT sp.id
+      SELECT sp.id, spp.min_price, spp.max_price
       FROM service_package sp
       LEFT JOIN service_concept sc ON sc.service_package_id = sp.id
       LEFT JOIN service_concept_service_type sct ON sct.service_concept_id = sc.id
@@ -1489,7 +1489,16 @@ export class ServicePackageService {
     if (filterConditions.length > 0) {
       idQuery += ` AND ${filterConditions.join(' AND ')}`;
     }
-    idQuery += `${havingClause}`;
+    // Tách HAVING khỏi havingClause
+    let havingOnly = '';
+    if (havingClause.includes('HAVING')) {
+      havingOnly = havingClause.replace(/^.*HAVING/, 'HAVING');
+    }
+    // Luôn GROUP BY sp.id, spp.min_price, spp.max_price
+    idQuery += ` GROUP BY sp.id, spp.min_price, spp.max_price`;
+    if (havingOnly) {
+      idQuery += ` ${havingOnly}`;
+    }
     // Add sorting
     switch (params.sortBy) {
       case 'price':
@@ -1601,8 +1610,9 @@ export class ServicePackageService {
           status: row.status,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
-          minPrice: row.min_price ? this.getFinalPrice(Number(parseFloat(row.min_price).toFixed(2))) : null,
-          maxPrice: row.max_price ? this.getFinalPrice(Number(parseFloat(row.max_price).toFixed(2))) : null,
+          // Chỉ convert sang final price đúng 1 lần
+          minPrice: row.min_price !== null && row.min_price !== undefined ? this.getFinalPrice(Number(row.min_price)) : null,
+          maxPrice: row.max_price !== null && row.max_price !== undefined ? this.getFinalPrice(Number(row.max_price)) : null,
           vendor: {
             id: row.vendor_id,
             name: row.vendor_name,
@@ -1624,7 +1634,8 @@ export class ServicePackageService {
             id: row.service_concept_id,
             name: row.service_concept_name,
             description: row.service_concept_description,
-            price: this.getFinalPrice(Number(parseFloat(row.service_concept_price).toFixed(2))),
+            // Chỉ convert sang final price đúng 1 lần
+            price: row.service_concept_price !== null && row.service_concept_price !== undefined ? this.getFinalPrice(Number(row.service_concept_price)) : null,
             duration: row.service_concept_duration,
             images: Array.isArray(row.service_concept_image_url) ? row.service_concept_image_url : [],
             serviceTypes: new Map<string, any>()
@@ -1663,10 +1674,8 @@ export class ServicePackageService {
           ...pkg.vendor,
           locations: Array.from(pkg.vendor.locations.values()),
         },
-        serviceConcepts: Array.from(pkg.serviceConcepts.values()).map((concept: any) => ({
-          ...concept,
-          price: this.getFinalPrice(concept.price)
-        }))
+        // Không convert lại price lần nữa!
+        serviceConcepts: Array.from(pkg.serviceConcepts.values())
       }));
 
     // 5. Get total count
