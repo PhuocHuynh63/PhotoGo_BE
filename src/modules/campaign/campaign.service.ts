@@ -356,36 +356,10 @@ export class CampaignService {
     campaign.status = true;
     await this.campaignRepository.save(campaign);
 
-    // Auto-assign voucher to all existing users in campaign
-    const existingUserCampaigns = await this.userCampaignRepository.find({
-      where: { campaignId, isAvailable: true },
-    });
-
-    for (const userCampaign of existingUserCampaigns) {
-      // Check if voucher is still available and not expired
-      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.INACTIVE) {
-        // Check if user already has this voucher
-        const existingVoucherUser = await this.voucherUserRepository.findOne({
-          where: { user_id: userCampaign.userId, voucher_id: voucherId }
-        });
-
-        if (!existingVoucherUser) {
-          // Create voucher-user relationship with from = 'chiến dịch'
-          const voucherUser = this.voucherUserRepository.create({
-            user_id: userCampaign.userId,
-            voucher_id: voucherId,
-            status: VoucherUserStatusEnum.AVAILABLE,
-            from: VoucherUserFromEnum.CAMPAIGN,
-            assigned_at: new Date(),
-            used_at: null,
-          });
-
-          await this.voucherUserRepository.save(voucherUser);
-
-          voucher.status = VoucherStatusEnum.ACTIVE;
-          await this.voucherRepository.save(voucher);
-        }
-      }
+    // Nếu voucher đang INACTIVE thì chuyển sang ACTIVE
+    if (voucher.status === VoucherStatusEnum.INACTIVE) {
+      voucher.status = VoucherStatusEnum.ACTIVE;
+      await this.voucherRepository.save(voucher);
     }
 
     return savedCampaignVoucher;
