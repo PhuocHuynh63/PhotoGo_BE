@@ -566,8 +566,15 @@ export class PaymentService {
       if (invoice.voucherId) {
         try {
           await this.voucherService.updateVoucherUsage(invoice.voucherId);
+
+          const voucher = await this.voucherRepository.findOne({
+            where: { id: invoice.voucherId },
+          });
+          if (voucher) {
+            await this.voucherService.useVoucher(voucher.id, booking.userId);
+          }
         } catch (error) {
-          console.error('Error updating voucher usage:', error);
+          console.error('Error updating/using voucher:', error);
         }
       }
 
@@ -653,6 +660,13 @@ export class PaymentService {
     const invoice = payment.invoice;
     const booking = invoice.booking;
 
+    // Thêm log chi tiết để debug
+    console.log('handlePaymentSuccess - paymentId:', paymentId);
+    console.log('  payment.type:', payment.type);
+    console.log('  payment.status:', payment.status);
+    console.log('  invoiceId:', invoice?.id);
+    console.log('  bookingId:', booking?.id);
+
     // Check if slot is still available before processing payment
     const isSlotAvailable = await this.bookingService['isSlotStillAvailable'](booking.id);
     if (!isSlotAvailable) {
@@ -724,37 +738,36 @@ export class PaymentService {
       }
 
       // handle point
-      let points = booking?.user?.points;
+      let userPoint = booking?.user?.points?.[0];
       const userId = booking?.user?.id;
       const userMultiplier = typeof booking?.user?.multiplier === 'number' ? Number(booking.user.multiplier) : 1.0;
       // Nếu chưa có point record cho user thì tạo mới (dùng logic chuẩn của PointService)
-      if ((!points || points.length === 0) && userId) {
-        const userPoint = await this.pointService.findMyPoints(userId);
-        points = [userPoint];
+      if (!userPoint && userId) {
+        userPoint = await this.pointService.findMyPoints(userId);
       }
-      if (points && invoice && typeof invoice.payablePrice === 'number' && typeof payment.amount === 'number') {
-        points.forEach(async (point) => {
-          // Tính điểm chuẩn: earnedPoint = payment.amount / 1000 * multiplier, làm tròn xuống
-          let earnedPoint = Math.floor((payment.amount / 1000) * userMultiplier);
-          // Tính phần trăm đặt cọc nếu cần
-          const depositPercent = booking.depositAmount;
-          // Nếu là đặt cọc dạng phần trăm và từ 30 đến <70% thì trừ 5 điểm
-          if (
-            booking.depositType === BookingDepositType.PERCENTAGE &&
-            depositPercent >= 30 && depositPercent < 70
-          ) {
-            earnedPoint -= 5;
-          }
-          point.balance += earnedPoint;
-          await this.pointRepository.save(point);
-          const pointTransaction = this.pointTransactionRepository.create({
-            point: point,
-            amount: earnedPoint,
-            type: PointTransactionType.EARN,
-            description: `Thanh toán đặt cọc`,
-          });
-          await this.pointTransactionRepository.save(pointTransaction);
+      const payablePrice = Number(invoice.payablePrice);
+      const amount = Number(payment.amount);
+      if (userPoint && !isNaN(payablePrice) && !isNaN(amount)) {
+        // Tính điểm chuẩn: earnedPoint = amount / 1000 * multiplier, làm tròn xuống
+        let earnedPoint = Math.floor((amount / 1000) * userMultiplier);
+        // Tính phần trăm đặt cọc nếu cần
+        const depositPercent = booking.depositAmount;
+        // Nếu là đặt cọc dạng phần trăm và từ 30 đến <70% thì trừ 5 điểm
+        if (
+          booking.depositType === BookingDepositType.PERCENTAGE &&
+          depositPercent >= 30 && depositPercent < 70
+        ) {
+          earnedPoint -= 5;
+        }
+        userPoint.balance += earnedPoint;
+        await this.pointRepository.save(userPoint);
+        const pointTransaction = this.pointTransactionRepository.create({
+          point: userPoint,
+          amount: earnedPoint,
+          type: PointTransactionType.EARN,
+          description: `Thanh toán đặt cọc`,
         });
+        await this.pointTransactionRepository.save(pointTransaction);
       }
 
       // Send invoice to user's email if payment handled successfully
@@ -773,16 +786,16 @@ export class PaymentService {
       if (invoice.voucherId) {
         try {
           await this.voucherService.updateVoucherUsage(invoice.voucherId);
-        } catch (error) {
-          console.error('Error updating voucher usage:', error);
-        }
-      }
 
-      const voucher = await this.voucherRepository.findOne({
-        where: { id: invoice.voucherId },
-      });
-      if (voucher) {
-        await this.voucherService.useVoucher(voucher.id, booking.userId);
+          const voucher = await this.voucherRepository.findOne({
+            where: { id: invoice.voucherId },
+          });
+          if (voucher) {
+            await this.voucherService.useVoucher(voucher.id, booking.userId);
+          }
+        } catch (error) {
+          console.error('lỗi khi sử dụng voucher:', error);
+        }
       }
 
       // Block the slot since payment is successful (for single day booking)
