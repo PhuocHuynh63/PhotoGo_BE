@@ -817,7 +817,7 @@ export class PaymentService {
         id: invoice.id,
         status: InvoiceStatus.PAID,
         remainingAmount: 0,
-        paidAmount: invoice.paidAmount + invoice.remainingAmount,
+        paidAmount: invoice.paidAmount,
         updatedAt: new Date(),
       }
       await this.invoiceRepo.save(invoiceUpdate);

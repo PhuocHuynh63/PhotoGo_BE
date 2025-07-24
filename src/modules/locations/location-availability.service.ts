@@ -115,7 +115,7 @@ export class LocationAvailabilityService {
         .innerJoin('slotTimes.locationSlotTimeWorkingDates', 'slotTimeWorkingDates')
         .where('slotTimeWorkingDates.id = :slotTimeWorkingDateId', { slotTimeWorkingDateId: slotTimeWorkingDate.id })
         .andWhere('booking.status IN (:...statuses)', { 
-          statuses: [BookingStatus.PAID, BookingStatus.PENDING] 
+          statuses: [BookingStatus.COMPLETED, BookingStatus.PENDING, BookingStatus.PAID, BookingStatus.CONFIRMED, BookingStatus.PROGRESSING] 
         })
         .andWhere('booking.date = :bookingDate', { bookingDate: slotTimeWorkingDate.workingDate.date })
         .getRawMany();

@@ -155,6 +155,14 @@ export class LocationAvailabilityController {
     }
   }
 
+  //test lock slot booking
+  @Post('test-lock-slot-booking')
+  @ApiOperation({ summary: 'Test lock slot booking' })
+  @ApiResponse({ status: 200, description: 'Test lock slot booking' })
+  async testLockSlotBooking(@Body() body: { date: string, time: string, locationId: string }): Promise<boolean> {
+    return await this.locationAvailabilityService.lockSlotForBooking(body.date = '26/07/2025', body.time = '12:00', body.locationId = '13f89bc4-66eb-480e-8618-53013f4b5594');
+  }
+
   @Get('location/:locationId/multi-day')
   @Public()
   @ApiOperation({ summary: 'Lấy thời gian làm việc cho multi-day booking theo ID vị trí' })
