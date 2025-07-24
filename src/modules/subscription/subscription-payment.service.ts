@@ -172,8 +172,10 @@ export class SubscriptionPaymentService {
 
     const amount = Number(invoice.payablePrice);
     const description = payerDescription.slice(0, 50); // PayOS cho phép tới 50 ký tự
-    const cancelUrl = `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
-    const returnUrl = `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
+    // const cancelUrl = `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
+    const cancelUrl = `http://localhost:8080/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
+    // const returnUrl = `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
+    const returnUrl = `http://localhost:8080/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
 
     const payosPayload = {
       orderCode,
@@ -447,7 +449,6 @@ export class SubscriptionPaymentService {
               lastBilledAt: toISOStringSafe(subscription.lastBilledAt),
               nextBillingAt: toISOStringSafe(subscription.nextBillingAt),
 
-
               // Thông tin thanh toán
               paymentId: payment.id,
               invoiceId: invoice.id,
@@ -457,7 +458,6 @@ export class SubscriptionPaymentService {
               payerType: payment.payerType,
               transactionId: payment.transactionId,
               paymentOSId: payment.paymentOSId,
-
 
               // Metadata khác
               timestamp: new Date().toISOString(),
@@ -496,11 +496,9 @@ export class SubscriptionPaymentService {
       // Schedule renewal reminder if nextBillingAt is set and user exists
       if (subscription.nextBillingAt && subscription.userId && subscription.status === SubscriptionStatus.ACTIVE) {
         try {
-          // Use private method to schedule reminder
           await this.scheduleRenewalReminderForSubscription(subscription);
         } catch (error) {
           this.logger.error(`Lỗi khi schedule renewal reminder sau payment: ${error.message}`, error.stack);
-          // Don't throw error to avoid affecting payment flow
         }
       }
 
@@ -579,10 +577,10 @@ export class SubscriptionPaymentService {
     try {
       if (this.subscriptionService) {
         await this.subscriptionService.scheduleRenewalReminder(subscription);
-        this.logger.log(`Đã schedule renewal reminder cho subscription ${subscription.id} sau payment`);
+        console.log(`Đã schedule renewal reminder cho subscription ${subscription.id} sau payment`);
       }
     } catch (error) {
-      this.logger.error(`Lỗi khi schedule renewal reminder cho subscription ${subscription.id}: ${error.message}`);
+      console.error(`Lỗi khi schedule renewal reminder cho subscription ${subscription.id}: ${error.message}`);
       throw error;
     }
   }

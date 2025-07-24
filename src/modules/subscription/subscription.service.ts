@@ -330,6 +330,7 @@ export class SubscriptionService {
     } catch (error) {
       this.logger.error(`Lỗi khi schedule renewal reminder cho subscription ${subscription.id}: ${error.message}`, error.stack);
     }
+    
   }
   //#endregion scheduleRenewalReminder
 
