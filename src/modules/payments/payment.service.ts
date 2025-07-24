@@ -814,6 +814,7 @@ export class PaymentService {
       // Cập nhật trạng thái hóa đơn và booking
       // update invoice với 1 số fields
       const invoiceUpdate = {
+        id: invoice.id,
         status: InvoiceStatus.PAID,
         remainingAmount: 0,
         paidAmount: invoice.paidAmount + Number(payment.amount),
