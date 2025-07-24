@@ -633,7 +633,7 @@ export class UserService {
     // 1. Bookings
     const allBookings = await this.bookingService['bookingRepository'].find({
       where: { userId },
-      relations: ['invoices', 'invoices.payments'],
+      relations: ['invoices', 'invoices.payments', 'invoices.booking.user.subscription'],
     });
     const totalBookings = allBookings.length;
     const completedBookings = allBookings.filter(b => b.status === BookingStatus.COMPLETED).length;

@@ -157,6 +157,8 @@ export class SubscriptionService {
     const queryBuilder = this.subscriptionRepository.createQueryBuilder('subscription');
     queryBuilder.leftJoinAndSelect('subscription.user', 'user');
     queryBuilder.leftJoinAndSelect('subscription.plan', 'plan');
+    queryBuilder.leftJoinAndSelect('subscription.invoices', 'invoices');
+    queryBuilder.leftJoinAndSelect('invoices.payments', 'payments');
 
     if (findSubscriptionDto.userId) {
       queryBuilder.andWhere('subscription.userId = :userId', { userId: findSubscriptionDto.userId });
