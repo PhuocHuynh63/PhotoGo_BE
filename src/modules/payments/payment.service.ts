@@ -274,7 +274,7 @@ export class PaymentService {
     const serviceConcept = invoice.booking?.serviceConcept;
     const timestamp = Date.now();
     const orderCode = parseInt(`${timestamp}${paymentType === PaymentType.DEPOSIT ? '1' : '2'}`);
-    const description = `PG#${orderCode}`;
+    const description = `${invoice.booking.user.fullName}`;
 
     const now = Math.floor(Date.now() / 1000);
     const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
@@ -374,7 +374,7 @@ export class PaymentService {
     const buyerName = invoice.booking?.user?.fullName || 'Khách hàng PhotoGo';
     const timestamp = Date.now();
     const orderCode = parseInt(`${timestamp}2`); // 2 cho remaining
-    const description = `PG#${orderCode}`;
+    const description = `${invoice.booking.user.fullName}`;
     const now = Math.floor(Date.now() / 1000);
     const expiredAt = now + 15 * 60; // 15 phút kể từ bây giờ
 
@@ -1086,4 +1086,31 @@ export class PaymentService {
     }
   }
   //#endregion updatePointRemainingAmount
+
+  //handle PaymentRemainingSuccessful
+  async handlePaymentRemainingSuccessful(paymentId: string, callbackData: PaymentCallbackDto) {
+    const { status, code, id, orderCode } = callbackData;
+    const payment = await this.paymentRepository.findOne({
+      where: { transactionId: paymentId },
+    });
+    if (!payment) {
+      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${paymentId}`);
+    }
+    if (payment.status === PaymentStatus.PAID) {
+      throw new BadRequestException('Thanh toán đã thành công');
+    }
+    payment.status = PaymentStatus.PAID;
+    await this.paymentRepository.save(payment);
+    //history
+    const history = this.paymentTransactionRepository.create({
+      payment: payment,
+      status: PaymentStatus.PAID,
+    });
+    await this.paymentTransactionRepository.save(history);
+    return {
+      success: true,
+      message: 'Thanh toán thành công'
+    };
+  }
+  //#endregion handle PaymentRemainingSuccessful
 }
