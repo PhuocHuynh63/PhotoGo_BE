@@ -113,6 +113,15 @@ export class CreateAuthForAdminDto {
   @IsOptional()
   @IsString()
   @ApiProperty({
+    example: '0987654321',
+    description: 'Số điện thoại của người dùng',
+    required: false,
+  })
+  phoneNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
     example: 'local',
     enum: ['local', 'facebook', 'google'],
     description: 'Phương thức xác thực (local, google, facebook, ...)',
