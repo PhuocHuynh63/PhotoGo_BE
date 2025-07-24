@@ -1612,7 +1612,11 @@ export class BookingService {
     if (hasMembership) {
       return 0;
     } else {
-      return Math.round(serviceBasePrice * 0.05);
+      if (diffDays < 3) {
+        return Math.round(serviceBasePrice * 0.05);
+      } else {
+        return 0; 
+      }
     }
   }
 
