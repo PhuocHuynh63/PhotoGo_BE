@@ -294,11 +294,6 @@ export class VoucherService {
     const pageSize = query.pageSize ? Number(query.pageSize) : 10;
     const skip = (currentPage - 1) * pageSize;
 
-    // LOG: Thông tin đầu vào
-    console.log('findAllVoucherUser - userId:', userId);
-    console.log('findAllVoucherUser - query.status:', query.status);
-    console.log('findAllVoucherUser - query.from:', query.from);
-
     const queryBuilder = this.voucherUserRepository.createQueryBuilder('voucherUser')
       .leftJoinAndSelect('voucherUser.user', 'user')
       .leftJoinAndSelect('voucherUser.voucher', 'voucher')
@@ -357,24 +352,32 @@ export class VoucherService {
     // Phân trang
     queryBuilder.skip(skip).take(pageSize);
 
-    // LOG: SQL query thực tế
-    const [sql, params] = queryBuilder.getQueryAndParameters();
-    console.log('findAllVoucherUser - SQL:', sql);
-    console.log('findAllVoucherUser - Params:', params);
-
     // Thực hiện query
     const [voucherUsers, totalItem] = await queryBuilder.getManyAndCount();
     const totalPage = Math.ceil(totalItem / pageSize);
 
     // Thêm trạng thái is_valid cho từng voucher
     const currentDate = new Date();
-    const data = voucherUsers.map(vu => ({
-      ...vu,
-      is_valid:
-        currentDate >= new Date(vu.voucher.start_date) &&
-        currentDate <= new Date(vu.voucher.end_date) &&
-        vu.status === VoucherUserStatusEnum.AVAILABLE
-    }));
+    const data = voucherUsers.map(vu => {
+      // Đảm bảo start_date và end_date là kiểu Date để so sánh
+      const startDateObj = typeof vu.voucher.start_date === 'string' ? new Date(vu.voucher.start_date) : vu.voucher.start_date;
+      const endDateObj = typeof vu.voucher.end_date === 'string' ? new Date(vu.voucher.end_date) : vu.voucher.end_date;
+      // Set time về 00:00:00 cho tất cả các ngày
+      const currentDateZero = new Date(currentDate);
+      currentDateZero.setHours(0, 0, 0, 0);
+      const startDateZero = new Date(startDateObj);
+      startDateZero.setHours(0, 0, 0, 0);
+      const endDateZero = new Date(endDateObj);
+      endDateZero.setHours(0, 0, 0, 0);
+      const isValid =
+        currentDateZero >= startDateZero &&
+        currentDateZero <= endDateZero &&
+        vu.status === VoucherUserStatusEnum.AVAILABLE;
+      return {
+        ...vu,
+        is_valid: isValid
+      };
+    });
 
     return {
       data,
