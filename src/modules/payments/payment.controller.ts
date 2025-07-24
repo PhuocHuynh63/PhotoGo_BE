@@ -183,6 +183,17 @@ export class PaymentController {
     }
   }
 
+  //handle PaymentRemainingSuccessful
+  @Put('/remaining/successful')
+  @Public()
+  @ApiOperation({ summary: 'Xử lý callback khi thanh toán remaining thành công' })
+  @ApiResponse({ status: 200, description: 'Xử lý callback thành công' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  async handlePaymentRemainingSuccessful(@Query('paymentId') paymentId: string, @Body() callbackData: PaymentCallbackDto) {
+    return await this.paymentService.handlePaymentRemainingSuccessful(paymentId, callbackData);
+  }
+  //#endregion handle PaymentRemainingSuccessful
+
   @Put('successful')
   @Public()
   @ApiOperation({ summary: 'Xử lý callback khi thanh toán thành công' })
