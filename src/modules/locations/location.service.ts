@@ -681,7 +681,7 @@ export class LocationService {
         userId: booking.userId,
         alreadyPaid: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].paidAmount : 0,
         remain: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].remainingAmount : 0,
-        total: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].payablePrice : 0
+        total: booking.invoices && booking.invoices.length > 0 ? booking.invoices[0].originalPrice : 0
       };
       if (booking.time) {
         // booking 1 ngày
