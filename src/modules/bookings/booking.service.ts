@@ -1601,18 +1601,22 @@ export class BookingService {
    * Tính phí phát sinh (rush fee) dựa trên membership và số ngày đặt trước
    */
   public async calculateRushFee(userId: string, bookingDate: Date, serviceBasePrice: number): Promise<number> {
+    // Lấy ngày hôm nay lúc 0h00
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    let diffDays = 0;
-    if (bookingDate) {
-      diffDays = Math.ceil((bookingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    }
+
+    // Lấy ngày booking (giả sử bookingDate là một đối tượng Date)
+    const bookingDateInput = bookingDate; // bookingDateInput là string hoặc Date
+    bookingDateInput.setHours(0, 0, 0, 0);
+
+    // So sánh số ngày
+    const diffDays = Math.ceil((bookingDateInput.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
     const hasMembership = await this.hasActiveMembership(userId);
     if (hasMembership) {
       return 0;
     } else {
-      if (diffDays < 3) {
+      if (diffDays <= 3) {
         return Math.round(serviceBasePrice * 0.05);
       } else {
         return 0; 
