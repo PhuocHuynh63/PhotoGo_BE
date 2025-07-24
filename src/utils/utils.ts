@@ -1,4 +1,5 @@
 import * as bcrypt from 'bcryptjs';
+import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
 
 export async function hashPasswordHelper(password: string): Promise<string> {
     const salt = await bcrypt.genSalt(10);
@@ -48,4 +49,29 @@ export function maskEmail(email: string): string {
     if (localPart.length <= 2) return email;
     const masked = localPart[0] + '#'.repeat(localPart.length - 2) + localPart[localPart.length - 1];
     return `${masked}@${domain}`;
+}
+
+export function IsTodayOrFutureDate(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'isTodayOrFutureDate',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          if (!value) return false;
+          const inputDate = new Date(value);
+          const now = new Date();
+          // Đặt giờ phút giây về 0 để so sánh chỉ ngày
+          inputDate.setHours(0,0,0,0);
+          now.setHours(0,0,0,0);
+          return inputDate >= now;
+        },
+        defaultMessage(args: ValidationArguments) {
+          return `${args.property} phải là ngày hôm nay hoặc ngày trong tương lai.`;
+        },
+      },
+    });
+  };
 }

@@ -2,6 +2,7 @@ import { ApiProperty, ApiResponse } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, Length, IsNumber, IsDateString, IsOptional, IsEnum } from 'class-validator';
 import { assign } from 'nodemailer/lib/shared';
 import { VoucherUserStatusEnum, VoucherTypeDiscount, VoucherStatusEnum, VoucherTypePoint, VoucherUserFromEnum } from 'src/constants/voucher.enum';
+import { IsTodayOrFutureDate } from 'src/utils/utils';
 
 export class CreateVoucherDto {
   @IsString()

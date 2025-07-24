@@ -163,15 +163,15 @@ export class SubscriptionPaymentService {
 
     // Tạo description dựa trên payerType
     const payerDescription = payerType === PayerType.CUSTOMER
-      ? `subscription - Khách hàng - ${invoiceWithRelations.subscription.user.fullName}`
-      : `subscription - Nhà cung cấp - ${invoiceWithRelations.subscription.user.fullName}`;
+      ? `Khách hàng - ${invoiceWithRelations.subscription.user.fullName}`
+      : `Nhà cung cấp - ${invoiceWithRelations.subscription.user.fullName}`;
 
     const idWithoutHyphens = savedPayment.id.replace(/-/g, '');
     const hexString = idWithoutHyphens.slice(-13);
     const orderCode = parseInt(hexString, 16);
 
     const amount = Number(invoice.payablePrice);
-    const description = payerDescription.slice(0, 50); // PayOS cho phép tới 50 ký tự
+    const description = payerDescription.slice(0, 25); // PayOS cho phép tới 50 ký tự
     const cancelUrl = `https://photogo.id.vn/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
     // const cancelUrl = `http://localhost:8080/payment/error?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
     const returnUrl = `https://photogo.id.vn/payment/successful?subscriptionPaymentId=${savedPayment.id}&payerType=${payerType}`;
