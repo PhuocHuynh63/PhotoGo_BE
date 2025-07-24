@@ -711,11 +711,11 @@ export class PaymentService {
     );
 
     // Update invoice status and paid amount
+    let depositAmount = Number(invoice.booking.depositAmount);
     const paymentAmount = Math.round(Number(payment.amount));
     invoice.paidAmount += paymentAmount;
     if (payment.type === PaymentType.DEPOSIT) {
-      // Nếu thanh toán đặt cọc bằng giá trị đơn hàng thì status là PAID, còn lại là PARTIALLY_PAID
-      if (paymentAmount == invoice.payablePrice) {
+      if (depositAmount == 100) {
         invoice.status = InvoiceStatus.PAID;
       } else {
         invoice.status = InvoiceStatus.PARTIALLY_PAID;
@@ -1086,31 +1086,4 @@ export class PaymentService {
     }
   }
   //#endregion updatePointRemainingAmount
-
-  //handle PaymentRemainingSuccessful
-  async handlePaymentRemainingSuccessful(paymentId: string, callbackData: PaymentCallbackDto) {
-    const { status, code, id, orderCode } = callbackData;
-    const payment = await this.paymentRepository.findOne({
-      where: { transactionId: paymentId },
-    });
-    if (!payment) {
-      throw new NotFoundException(`Không tìm thấy thanh toán với ID ${paymentId}`);
-    }
-    if (payment.status === PaymentStatus.PAID) {
-      throw new BadRequestException('Thanh toán đã thành công');
-    }
-    payment.status = PaymentStatus.PAID;
-    await this.paymentRepository.save(payment);
-    //history
-    const history = this.paymentTransactionRepository.create({
-      payment: payment,
-      status: PaymentStatus.PAID,
-    });
-    await this.paymentTransactionRepository.save(history);
-    return {
-      success: true,
-      message: 'Thanh toán thành công'
-    };
-  }
-  //#endregion handle PaymentRemainingSuccessful
 }
