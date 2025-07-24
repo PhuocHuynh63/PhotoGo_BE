@@ -24,8 +24,7 @@ export class GoogleAuthController {
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
     const user = req.user;
 
-    console.log('req', req.headers);
-    const { access_token_jwt } = await this.googleAuthService.loginOrSignup(user);
+    const { user: userData, access_token_jwt } = await this.googleAuthService.loginOrSignup(user);
 
     // Kiểm tra xem yêu cầu đến từ ứng dụng di động hay không
     const isMobileApp = req.headers['x-requested-with'] === 'com.mycorp.myapp';
@@ -41,8 +40,8 @@ export class GoogleAuthController {
       // Chuyển hướng đến trang HomePage kèm theo dữ liệu
       // const redirectUrl = `https://billiards-score-app.vercel.app/HomePage?user=${encodeURIComponent(JSON.stringify(user))}&token=${access_token_jwt}`;
       // const redirectUrl = `http://localhost:3000?user=${encodeURIComponent(JSON.stringify(user))}&token=${access_token_jwt}`;
-      // const redirectUrl = `http://localhost:3000/auth/login/google?user=${encodeURIComponent(JSON.stringify(user))}&token=${access_token_jwt}`;
-      const redirectUrl = `https://photogo.id.vn/auth/login/google?user=${encodeURIComponent(JSON.stringify(user))}&token=${access_token_jwt}`;
+      // const redirectUrl = `http://localhost:3000/auth/login/google?user=${encodeURIComponent(JSON.stringify(userData))}&token=${access_token_jwt}`;
+      const redirectUrl = `https://photogo.id.vn/auth/login/google?user=${encodeURIComponent(JSON.stringify(userData))}&token=${access_token_jwt}`;
       return res.redirect(redirectUrl);
     }
   }
