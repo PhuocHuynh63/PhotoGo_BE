@@ -135,11 +135,10 @@ export class UserController {
   }
 
   @Public()
-  @Get(':id')
-  @ApiOperation({ summary: 'Lấy thông tin người dùng theo ID (Public)' })
-  @ResponseMessage('Lấy thông tin người dùng thành công')
-  async findOne(@Param('id') id: string): Promise<User> {
-    return this.userService.findOne(id);
+  @Get('statistics/:userId')
+  @ApiOperation({ summary: 'Thống kê tổng quan cho user (tổng booking, tổng tiền, tổng subscription, điểm, voucher...)' })
+  async getUserStatistics(@Param('userId') userId: string) {
+    return this.userService.getUserStatistics(userId);
   }
 
   @Public()
@@ -149,6 +148,31 @@ export class UserController {
   async findOneByEmail(@Param('email') email: string): Promise<User> {
     return this.userService.findOneByEmail(email);
   }
+
+  @Get('/admin/count/:rank')
+  @ApiOperation({ summary: 'Đếm người dùng theo rank (Admin)' })
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ResponseMessage('Đếm người dùng theo rank thành công')
+  async countUserByRank(@Param('rank') rank: string): Promise<number> {
+    return this.userService.countUserByRank(rank);
+  }
+
+
+  @Get('/admin/ranks')
+  @ApiOperation({ summary: 'Lấy danh sách rank người dùng (Admin)' })
+  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
+  @ResponseMessage('Lấy danh sách rank người dùng thành công')
+  async getAllRanks(): Promise<{ rank: string; count: number }[]> {
+    return this.userService.getAllRank();
+  }
+
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: 'Lấy thông tin người dùng theo ID (Public)' })
+  @ResponseMessage('Lấy thông tin người dùng thành công')
+  async findOne(@Param('id') id: string): Promise<User> {
+    return this.userService.findOne(id);
+  }  
 
   @Put('/img/:id/')
   @ApiOperation({ summary: 'Cập nhật ảnh người dùng' })
@@ -181,24 +205,6 @@ export class UserController {
     return this.userService.remove(id);
   }
 
-
-  @Get('/admin/count/:rank')
-  @ApiOperation({ summary: 'Đếm người dùng theo rank (Admin)' })
-  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
-  @ResponseMessage('Đếm người dùng theo rank thành công')
-  async countUserByRank(@Param('rank') rank: string): Promise<number> {
-    return this.userService.countUserByRank(rank);
-  }
-
-
-  @Get('/admin/ranks')
-  @ApiOperation({ summary: 'Lấy danh sách rank người dùng (Admin)' })
-  @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
-  @ResponseMessage('Lấy danh sách rank người dùng thành công')
-  async getAllRanks(): Promise<{ rank: string; count: number }[]> {
-    return this.userService.getAllRank();
-  }
-
   @Patch(':id/status')
   @Roles({ id: UserRolesId.ADMIN, name: UserRoles.ADMIN } as Role)
   @ApiOperation({ summary: 'Cập nhật trạng thái tài khoản user' })
@@ -208,12 +214,7 @@ export class UserController {
     return this.userService.updateStatus(id, body.status);
   }
 
-  @Public()
-  @Get('statistics/:userId')
-  @ApiOperation({ summary: 'Thống kê tổng quan cho user (tổng booking, tổng tiền, tổng subscription, điểm, voucher...)' })
-  async getUserStatistics(@Param('userId') userId: string) {
-    return this.userService.getUserStatistics(userId);
-  }
+
 
 }
 
