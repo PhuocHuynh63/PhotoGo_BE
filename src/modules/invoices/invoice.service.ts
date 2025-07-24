@@ -224,7 +224,7 @@ export class InvoiceService {
       totalItem: number;
     };
   }> {
-    const { current = 1, pageSize = 10, sortBy = InvoiceSortField.ISSUED_AT, sortDirection = SortDirection.DESC, status, term, invoiceStatus } = paginationDto;
+    const { current = 1, pageSize = 10, sortBy = InvoiceSortField.ISSUED_AT, sortDirection = SortDirection.DESC, status, term } = paginationDto;
     const currentPage = Number(current);
     const pageSizeNum = Number(pageSize);
     const skip = (currentPage - 1) * pageSizeNum;
@@ -241,11 +241,6 @@ export class InvoiceService {
     // Add booking status filter if provided
     if (status) {
       queryBuilder.andWhere('booking.status = :status', { status });
-    }
-
-    // Add invoice status filter if provided
-    if (invoiceStatus) {
-      queryBuilder.andWhere('invoice.status = :invoiceStatus', { invoiceStatus });
     }
 
     // Add term filter for service concept name if provided

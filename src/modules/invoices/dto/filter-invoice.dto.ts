@@ -65,17 +65,6 @@ export class FilterInvoiceByUserIdDto extends PaginationInvoiceDto {
   })
   status?: BookingStatus;
 
-  //filter by invoice status
-  @IsEnum(InvoiceStatus)
-  @IsOptional()
-  @ApiProperty({
-    description: 'Trạng thái hóa đơn',
-    enum: InvoiceStatus,
-    example: InvoiceStatus.PARTIALLY_PAID,
-    required: false,
-  })
-  invoiceStatus?: InvoiceStatus;
-
   @IsString()
   @IsOptional()
   @ApiProperty({

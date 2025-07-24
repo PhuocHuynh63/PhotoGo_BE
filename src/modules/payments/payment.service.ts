@@ -812,23 +812,14 @@ export class PaymentService {
       }
     } else if (payment.type === PaymentType.REMAINING) {
       // Cập nhật trạng thái hóa đơn và booking
-      // Tạo invoice mới với đủ fields
-      const newInvoice = this.invoiceRepo.create({
-        booking: booking,
-        originalPrice: invoice.originalPrice,
-        discountAmount: 0,
-        discountedPrice: 0,
-        taxAmount: 0,
-        feeAmount: 0,
-        payablePrice: invoice.remainingAmount,
-        depositAmount: 0,
-        remainingAmount: 0,
-        paidAmount: invoice.remainingAmount,
-        issuedAt: new Date(),
-        updatedAt: new Date(),
+      // update invoice với 1 số fields
+      const invoiceUpdate = {
         status: InvoiceStatus.PAID,
-      });
-      await this.invoiceRepo.save(newInvoice);
+        remainingAmount: 0,
+        paidAmount: invoice.paidAmount + Number(payment.amount),
+        updatedAt: new Date(),
+      }
+      await this.invoiceRepo.save(invoiceUpdate);
       // Cập nhật trạng thái thanh toán
       payment.status = PaymentStatus.PAID;
       await this.paymentRepository.save(payment);
