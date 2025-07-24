@@ -208,5 +208,12 @@ export class UserController {
     return this.userService.updateStatus(id, body.status);
   }
 
+  @Public()
+  @Get('statistics/:userId')
+  @ApiOperation({ summary: 'Thống kê tổng quan cho user (tổng booking, tổng tiền, tổng subscription, điểm, voucher...)' })
+  async getUserStatistics(@Param('userId') userId: string) {
+    return this.userService.getUserStatistics(userId);
+  }
+
 }
 

@@ -48,6 +48,7 @@ export class SubscriptionPaymentService {
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly vendorService: VendorService,
     private readonly subscriptionVendorService: SubscriptionVendorService, // Inject service

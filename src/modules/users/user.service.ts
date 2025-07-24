@@ -20,6 +20,12 @@ import { CartService } from 'src/modules/carts/cart.service';
 import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 import { CampaignService } from 'src/modules/campaign/campaign.service';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { BookingService } from '../bookings/booking.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { PointService } from '../points/point.service';
+import { VoucherService } from '../vouchers/voucher.service';
+import { BookingStatus } from 'src/constants/booking.enum';
+import { forwardRef, Inject } from '@nestjs/common';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -34,6 +40,11 @@ export class UserService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly bullQueueService: BullQueueService,
     @InjectQueue('user-deletion') private readonly deletionQueue: Queue,
+    // Inject for statistics
+    private readonly bookingService: BookingService,
+    @Inject(forwardRef(() => SubscriptionService)) private readonly subscriptionService: SubscriptionService,
+    private readonly pointService: PointService,
+    private readonly voucherService: VoucherService,
   ) { }
 
   // #region createUserForAdmin
@@ -614,5 +625,94 @@ export class UserService {
     }
   }
   //#endregion assignWelcomeCampaign
+
+  // #region User Statistics
+  async getUserStatistics(userId: string): Promise<any> {
+    // 1. Bookings
+    const allBookings = await this.bookingService['bookingRepository'].find({
+      where: { userId },
+      relations: ['invoices'],
+    });
+    const totalBookings = allBookings.length;
+    const completedBookings = allBookings.filter(b => b.status === BookingStatus.COMPLETED).length;
+    const cancelledBookings = allBookings.filter(b => [
+      BookingStatus.CANCELLED,
+      BookingStatus.CANCELLED_TIMEOUT,
+      BookingStatus.CANCELLED_USER,
+      BookingStatus.CANCELLED_VENDOR
+    ].includes(b.status)).length;
+    const pendingBookings = allBookings.filter(b => b.status === BookingStatus.PENDING).length;
+
+    // 2. Payments (for bookings)
+    let totalPaidAmount = 0;
+    let totalPaidCompletedBookings = 0;
+    for (const booking of allBookings) {
+      if (booking.invoices && booking.invoices.length > 0) {
+        for (const invoice of booking.invoices) {
+          if (invoice.payments && invoice.payments.length > 0) {
+            for (const payment of invoice.payments) {
+              if (payment.status === 'đã hoàn thành') {
+                totalPaidAmount += Number(payment.amount);
+                if (booking.status === BookingStatus.COMPLETED) {
+                  totalPaidCompletedBookings += Number(payment.amount);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Subscriptions
+    const subscriptionsRes = await this.subscriptionService.findAll({ userId, current: 1, pageSize: 100 });
+    const totalSubscriptions = subscriptionsRes.data.length;
+    let totalPaidSubscription = 0;
+    for (const sub of subscriptionsRes.data) {
+      if (sub.invoices && sub.invoices.length > 0) {
+        for (const invoice of sub.invoices) {
+          if (invoice.payments && invoice.payments.length > 0) {
+            for (const payment of invoice.payments) {
+              if (payment.status === 'đã hoàn thành') {
+                totalPaidSubscription += Number(payment.amount);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Points
+    const pointStats = await this.pointService.findMyPointHistory(userId, { current: '1', pageSize: '1' });
+    const { currentBalance, totalEarned, totalRedeemed, totalExpired } = pointStats.statistics;
+
+    // 5. Vouchers
+    const voucherStats = await this.voucherService.findAllVoucherUser(userId, { current: '1', pageSize: '100' });
+    const totalVouchers = voucherStats.data.length;
+    const usedVouchers = voucherStats.data.filter(v => v.status === 'used' || v.status === 'USED').length;
+    const availableVouchers = voucherStats.data.filter(v => v.is_valid).length;
+
+    return {
+      totalBookings,
+      completedBookings,
+      cancelledBookings,
+      pendingBookings,
+      totalPaidAmount,
+      totalPaidCompletedBookings,
+      totalSubscriptions,
+      totalPaidSubscription,
+      points: {
+        currentBalance,
+        totalEarned,
+        totalRedeemed,
+        totalExpired,
+      },
+      vouchers: {
+        totalVouchers,
+        usedVouchers,
+        availableVouchers,
+      },
+    };
+  }
+  // #endregion User Statistics
 
 }
