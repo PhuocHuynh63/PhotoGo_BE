@@ -1669,6 +1669,9 @@ export class VendorService {
     let paramIndex = 1;
     const baseParams: any[] = [];
 
+    // Determine if we need to handle priority filtering in memory
+    const filterPriority = params.minPriority !== undefined || params.maxPriority !== undefined;
+
     // Base query for admin vendor filtering
     let baseQuery = `
       WITH vendor_stats AS (
@@ -1768,8 +1771,8 @@ export class VendorService {
         ${params.maxOrders !== undefined ? `AND vo.order_count <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0)}` : ''}
         ${params.minRating !== undefined ? `AND vs.avg_rating >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0)}` : ''}
         ${params.maxRating !== undefined ? `AND vs.avg_rating <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0)}` : ''}
-        ${params.minPriority !== undefined ? `AND vsa.priority = true` : ''}
-        ${params.maxPriority !== undefined ? `AND vsa.priority = true` : ''}
+        ${filterPriority ? '' : (params.minPriority !== undefined ? `AND vsa.priority = true` : '')}
+        ${filterPriority ? '' : (params.maxPriority !== undefined ? `AND vsa.priority = true` : '')}
         ${params.joinDateFrom ? `AND DATE(v.created_at) >= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0)}` : ''}
         ${params.joinDateTo ? `AND DATE(v.created_at) <= $${paramIndex + (params.name ? 1 : 0) + (params.contact ? 1 : 0) + (params.status ? 1 : 0) + (params.category ? 1 : 0) + (params.minBranches !== undefined ? 1 : 0) + (params.maxBranches !== undefined ? 1 : 0) + (params.minPackages !== undefined ? 1 : 0) + (params.maxPackages !== undefined ? 1 : 0) + (params.minOrders !== undefined ? 1 : 0) + (params.maxOrders !== undefined ? 1 : 0) + (params.minRating !== undefined ? 1 : 0) + (params.maxRating !== undefined ? 1 : 0) + (params.minPriority !== undefined ? 1 : 0) + (params.maxPriority !== undefined ? 1 : 0) + (params.joinDateFrom ? 1 : 0)}` : ''}
       )
@@ -1869,12 +1872,12 @@ export class VendorService {
       paramIndex++;
     }
 
-    if (params.minPriority !== undefined) {
+    if (!filterPriority && params.minPriority !== undefined) {
       baseParams.push(params.minPriority);
       paramIndex++;
     }
 
-    if (params.maxPriority !== undefined) {
+    if (!filterPriority && params.maxPriority !== undefined) {
       baseParams.push(params.maxPriority);
       paramIndex++;
     }
@@ -1922,11 +1925,14 @@ export class VendorService {
         sortField = 'v.created_at';
     }
 
-    baseQuery += ` ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
-
-    // Add pagination
-    baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    baseParams.push(pageSize, skip);
+    // Only add LIMIT/OFFSET if not filtering by priority
+    if (!filterPriority) {
+      baseQuery += ` ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
+      baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      baseParams.push(pageSize, skip);
+    } else {
+      baseQuery += ` ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
+    }
 
     // Get total count query
     let countQuery = `
@@ -2054,30 +2060,6 @@ export class VendorService {
       countParamIndex++;
     }
 
-    if (params.minPriority !== undefined) {
-      countQuery += ` AND EXISTS (
-        SELECT 1 FROM subscription_vendor sv2 
-        JOIN subscription_plan sp ON sp.id = sv2.plan_id 
-        WHERE sv2.vendor_id = v.id 
-        AND sv2.is_active = true
-        AND sp.price_for_month = (
-          SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
-        )
-      )`;
-    }
-
-    if (params.maxPriority !== undefined) {
-      countQuery += ` AND EXISTS (
-        SELECT 1 FROM subscription_vendor sv2 
-        JOIN subscription_plan sp ON sp.id = sv2.plan_id 
-        WHERE sv2.vendor_id = v.id 
-        AND sv2.is_active = true
-        AND sp.price_for_month = (
-          SELECT MAX(price_for_month) FROM subscription_plan WHERE is_active = true
-        )
-      )`;
-    }
-
     if (params.joinDateFrom) {
       countQuery += ` AND DATE(v.created_at) >= $${countParamIndex}`;
       countParams.push(params.joinDateFrom);
@@ -2091,10 +2073,18 @@ export class VendorService {
     }
 
     // Execute queries
-    const [vendorData, totalItem] = await Promise.all([
-      this.dataSource.query(baseQuery, baseParams),
-      this.dataSource.query(countQuery, countParams),
-    ]);
+    let vendorData: any[] = [];
+    let totalItem: any[] = [];
+    if (!filterPriority) {
+      [vendorData, totalItem] = await Promise.all([
+        this.dataSource.query(baseQuery, baseParams),
+        this.dataSource.query(countQuery, countParams),
+      ]);
+    } else {
+      // Nếu filter priority, bỏ LIMIT/OFFSET, lấy hết vendorData
+      vendorData = await this.dataSource.query(baseQuery, baseParams);
+      totalItem = await this.dataSource.query(countQuery, countParams);
+    }
 
     if (vendorData.length === 0) {
       return {
@@ -2222,20 +2212,33 @@ export class VendorService {
     // Cập nhật priority vào DB cho tất cả vendor
     await Promise.all(priorityDatas.map(p => this.vendorRepository.update(p.vendorId, { priority: p.priority })));
 
-    // Lọc theo minPriority/maxPriority trên priority vừa tính toán
-    if (params.minPriority !== undefined) {
-      vendors = vendors.filter(v => v.priority >= params.minPriority);
-    }
-    if (params.maxPriority !== undefined) {
-      vendors = vendors.filter(v => v.priority <= params.maxPriority);
-    }
-
-    // Sort lại nếu sortBy là 'priority'
-    if (params.sortBy === 'priority') {
-      vendors.sort((a, b) => {
-        if (sortDirection === 'ASC') return a.priority - b.priority;
-        return b.priority - a.priority;
-      });
+    // Nếu filterPriority, filter theo minPriority/maxPriority ở đây, rồi phân trang
+    if (filterPriority) {
+      if (params.minPriority !== undefined) {
+        vendors = vendors.filter(v => v.priority >= params.minPriority);
+      }
+      if (params.maxPriority !== undefined) {
+        vendors = vendors.filter(v => v.priority <= params.maxPriority);
+      }
+      // Sort lại nếu sortBy là 'priority'
+      if (params.sortBy === 'priority') {
+        vendors.sort((a, b) => {
+          if (sortDirection === 'ASC') return a.priority - b.priority;
+          return b.priority - a.priority;
+        });
+      }
+      const totalItemCount = vendors.length;
+      const totalPage = Math.ceil(totalItemCount / pageSize);
+      const pagedVendors = vendors.slice(skip, skip + pageSize);
+      return {
+        data: pagedVendors,
+        pagination: {
+          current: currentPage,
+          pageSize,
+          totalPage,
+          totalItem: totalItemCount,
+        },
+      };
     }
 
     const totalPage = Math.ceil(vendors.length / pageSize);
@@ -2246,8 +2249,8 @@ export class VendorService {
       pagination: {
         current: currentPage,
         pageSize,
-        totalPage,
-        totalItem: vendors.length,
+        totalPage: Math.ceil(Number(totalItem[0].count) / pageSize),
+        totalItem: Number(totalItem[0].count),
       },
     };
   }
