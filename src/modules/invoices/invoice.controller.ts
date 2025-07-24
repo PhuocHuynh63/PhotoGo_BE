@@ -117,6 +117,7 @@ export class InvoiceController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Lấy hóa đơn theo ID' })
   @ApiResponse({ status: 200, description: 'Hóa đơn được tìm thấy', type: CreateInvoiceDto })
   @ApiResponse({ status: 400, description: 'ID không hợp lệ' })

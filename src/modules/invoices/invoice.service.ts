@@ -284,7 +284,7 @@ export class InvoiceService {
     };
   }
 
-  async findOne(id: string): Promise<Invoice> {
+  async findOne(id: string): Promise<Invoice & { isReview: boolean }> {
     if (!id) {
       throw new BadRequestException('ID hóa đơn không được để trống');
     }
@@ -297,7 +297,11 @@ export class InvoiceService {
     if (!invoice) {
       throw new NotFoundException(`Hóa đơn với ID ${id} không tồn tại`);
     }
-    return invoice;
+    const hasReview = await this.reviewService.hasReviewForBooking(invoice.bookingId);
+    return {
+      ...invoice,
+      isReview: !hasReview, // isReview = false if has review, true otherwise
+    };
   }
 
   async updateInvoice(id: string, updateInvoiceDto: Partial<UpdateInvoiceDto>): Promise<Invoice> {
