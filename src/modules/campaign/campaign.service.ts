@@ -362,6 +362,33 @@ export class CampaignService {
       await this.voucherRepository.save(voucher);
     }
 
+    // Auto-assign voucher cho user đã tham gia campaign trước đó
+    const joinedUsers = await this.userCampaignRepository.find({
+      where: { campaignId, isAvailable: true },
+    });
+    for (const userCampaign of joinedUsers) {
+      try {
+        // Check nếu user đã có voucher này chưa
+        const existingVoucherUser = await this.voucherUserRepository.findOne({
+          where: { user_id: userCampaign.userId, voucher_id: voucherId }
+        });
+        if (!existingVoucherUser) {
+          const voucherUser = this.voucherUserRepository.create({
+            user_id: userCampaign.userId,
+            voucher_id: voucherId,
+            status: VoucherUserStatusEnum.AVAILABLE,
+            from: VoucherUserFromEnum.CAMPAIGN,
+            assigned_at: new Date(),
+            used_at: null,
+          });
+          await this.voucherUserRepository.save(voucherUser);
+        }
+      } catch (e) {
+        // Nếu có lỗi thì skip, không throw
+        continue;
+      }
+    }
+
     return savedCampaignVoucher;
   }
 

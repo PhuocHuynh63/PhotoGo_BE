@@ -425,6 +425,12 @@ export class VoucherService {
     if (result.affected === 0) {
       throw new NotFoundException(`Bản ghi voucher-user với voucher_id ${voucherId} và user_id ${userId} không tồn tại`);
     }
+    const voucher = await this.voucherRepository.findOne({ where: { id: voucherId } });
+    if (voucher) {
+      voucher.quantity += 1;
+      voucher.status = VoucherStatusEnum.INACTIVE;
+      await this.voucherRepository.save(voucher);
+    }
   }
 
   // Add new method to update voucher usage
