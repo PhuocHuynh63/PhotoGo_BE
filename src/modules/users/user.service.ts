@@ -733,4 +733,10 @@ export class UserService {
       count: Number(item.count),
     }));
   }
+
+  // Đảm bảo user luôn có cart và wishlist (dùng cho Google login)
+  public async createCartAndWishlistIfNotExist(userId: string): Promise<void> {
+    await this.cartService.createCart(userId);
+    await this.wishlistService.createWishlist(userId);
+  }
 }

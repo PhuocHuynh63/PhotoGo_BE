@@ -53,6 +53,11 @@ export class GoogleAuthService {
       existingUser = await this.userService.create(createAuthDto);
     }
 
+    // Đảm bảo user luôn có cart và wishlist
+    if (existingUser && existingUser.id) {
+      await this.userService.createCartAndWishlistIfNotExist(existingUser.id);
+    }
+
     // Kiểm tra trạng thái tài khoản
     if (existingUser.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('Tài khoản của bạn đã bị tạm ngưng hoặc không hoạt động. Vui lòng liên hệ quản trị viên.');
