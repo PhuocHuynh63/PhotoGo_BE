@@ -26,6 +26,8 @@ import { PointService } from '../points/point.service';
 import { VoucherService } from '../vouchers/voucher.service';
 import { BookingStatus } from 'src/constants/booking.enum';
 import { forwardRef, Inject } from '@nestjs/common';
+import { PaymentStatus } from 'src/constants/payment.enum';
+import { VoucherUserStatusEnum } from 'src/constants/voucher.enum';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
@@ -631,7 +633,7 @@ export class UserService {
     // 1. Bookings
     const allBookings = await this.bookingService['bookingRepository'].find({
       where: { userId },
-      relations: ['invoices'],
+      relations: ['invoices', 'invoices.payments'],
     });
     const totalBookings = allBookings.length;
     const completedBookings = allBookings.filter(b => b.status === BookingStatus.COMPLETED).length;
@@ -651,10 +653,10 @@ export class UserService {
         for (const invoice of booking.invoices) {
           if (invoice.payments && invoice.payments.length > 0) {
             for (const payment of invoice.payments) {
-              if (payment.status === 'đã hoàn thành') {
+              if (payment.status === PaymentStatus.PAID) {
                 totalPaidAmount += Number(payment.amount);
                 if (booking.status === BookingStatus.COMPLETED) {
-                  totalPaidCompletedBookings += Number(payment.amount);
+                  totalPaidCompletedBookings += 1;
                 }
               }
             }
@@ -672,7 +674,7 @@ export class UserService {
         for (const invoice of sub.invoices) {
           if (invoice.payments && invoice.payments.length > 0) {
             for (const payment of invoice.payments) {
-              if (payment.status === 'đã hoàn thành') {
+              if (payment.status === PaymentStatus.PAID) {
                 totalPaidSubscription += Number(payment.amount);
               }
             }
@@ -688,8 +690,8 @@ export class UserService {
     // 5. Vouchers
     const voucherStats = await this.voucherService.findAllVoucherUser(userId, { current: '1', pageSize: '100' });
     const totalVouchers = voucherStats.data.length;
-    const usedVouchers = voucherStats.data.filter(v => v.status === 'used' || v.status === 'USED').length;
-    const availableVouchers = voucherStats.data.filter(v => v.is_valid).length;
+    const usedVouchers = voucherStats.data.filter(v => v.status === VoucherUserStatusEnum.USED).length;
+    const availableVouchers = voucherStats.data.filter(v => v.status === VoucherUserStatusEnum.AVAILABLE).length;
 
     return {
       totalBookings,
@@ -715,4 +717,18 @@ export class UserService {
   }
   // #endregion User Statistics
 
+  // Lấy phân phối user theo role cho dashboard
+  async getAllRoleDistribution(): Promise<{ role: string; count: number }[]> {
+    const roleCounts = await this.userRepository
+      .createQueryBuilder('user')
+      .leftJoin('user.role', 'role')
+      .select('role.name', 'role')
+      .addSelect('COUNT(user.id)', 'count')
+      .groupBy('role.name')
+      .getRawMany();
+    return roleCounts.map((item) => ({
+      role: item.role,
+      count: Number(item.count),
+    }));
+  }
 }

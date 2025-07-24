@@ -32,4 +32,10 @@ export class OverviewController {
   async getAdminStatistics(@Query() query: AdminOverviewDto) {
     return this.overviewService.getAdminStatistics(query);
   }
+
+  @Get('system-dashboard')
+  @Public()
+  async getSystemDashboard() {
+    return this.overviewService.getSystemDashboard();
+  }
 } 

@@ -7,6 +7,7 @@ import { BookingModule } from '../bookings/booking.module';
 import { CommissionModule } from '../commission/commission.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { VendorModule } from '../vendors/vendor.module';
+import { UserModule } from '../users/user.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { VendorModule } from '../vendors/vendor.module';
     CommissionModule,
     SubscriptionModule,
     VendorModule,
+    UserModule,
   ],
   controllers: [OverviewController],
   providers: [OverviewService],

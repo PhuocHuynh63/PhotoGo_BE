@@ -17,6 +17,7 @@ import { OverviewType, AdminStatisticsType } from 'src/constants/overview.enum';
 import { SubscriptionStatus, BillingCycle, PlanType } from '../../constants/subscription.enum';
 import { In, Between } from 'typeorm';
 import { VendorService } from '../vendors/vendor.service';
+import { UserService } from '../users/user.service';
 
 @Injectable()
 export class OverviewService {
@@ -31,6 +32,7 @@ export class OverviewService {
     private readonly subscriptionHistoryService: SubscriptionHistoryService,
     private readonly subscriptionVendorService: SubscriptionVendorService,
     private readonly vendorService: VendorService,
+    private readonly userService: UserService,
   ) {}
 
   /**
@@ -73,6 +75,70 @@ export class OverviewService {
     if (year.length !== 4 || month.length !== 2 || day.length !== 2) return '';
     
     return `${day}/${month}/${year}`;
+  }
+
+  async getSystemDashboard() {
+    // Tổng số user
+    const usersRes = await this.userService.findAll({ pageSize: '1' });
+    const totalUsers = usersRes?.pagination?.totalItem || 0;
+
+    // Tổng số vendor
+    const vendorsRes = await this.vendorService.findAll({ pageSize: '1' });
+    const totalVendors = vendorsRes.pagination?.totalItem || 0;
+
+    // Tổng số booking
+    const bookingsRes = await this.bookingService.findAll({ pageSize: 1 });
+    const totalBookings = bookingsRes.pagination?.totalItem || 0;
+
+    // Tổng doanh thu
+    const paymentsRes = await this.paymentsService.findAll({ pageSize: 1000 });
+    const totalRevenue = paymentsRes.data?.filter(p => p.status === 'đã hoàn thành').reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+
+    // Phân phối user theo role
+    const userRoleDistribution = await this.userService.getAllRoleDistribution?.() || [];
+
+    // Tăng trưởng user theo tháng
+    const allUsers = await this.userService.findAll({ pageSize: '10000' });
+    const userMonthlyArr = Array(12).fill(0);
+    if (allUsers?.data) {
+      allUsers.data.forEach(u => {
+        const d = new Date(u.createdAt);
+        if (!isNaN(d.getTime())) userMonthlyArr[d.getMonth()]++;
+      });
+    }
+    const userMonthly = userMonthlyArr.map((value, idx) => ({ month: `Tháng ${idx + 1}`, value }));
+    // Tăng trưởng booking theo tháng
+    const allBookings = await this.bookingService.findAll({ pageSize: 10000 });
+    const bookingMonthlyArr = Array(12).fill(0);
+    if (allBookings?.data) {
+      allBookings.data.forEach(b => {
+        const d = new Date(b.created_at);
+        if (!isNaN(d.getTime())) bookingMonthlyArr[d.getMonth()]++;
+      });
+    }
+    const bookingMonthly = bookingMonthlyArr.map((value, idx) => ({ month: `Tháng ${idx + 1}`, value }));
+    // Tăng trưởng revenue theo tháng
+    const revenueMonthlyArr = Array(12).fill(0);
+    if (paymentsRes?.data) {
+      paymentsRes.data.filter(p => p.status === 'đã hoàn thành').forEach(p => {
+        const d = new Date(p.createdAt);
+        if (!isNaN(d.getTime())) revenueMonthlyArr[d.getMonth()] += Number(p.amount);
+      });
+    }
+    const revenueMonthly = revenueMonthlyArr.map((value, idx) => ({ month: `Tháng ${idx + 1}`, value }));
+
+    return {
+      totalUsers: totalUsers.toString(),
+      totalVendors: totalVendors.toString(),
+      totalBookings: totalBookings.toString(),
+      totalRevenue: totalRevenue.toString(),
+      userRoleDistribution,
+      monthly: {
+        users: userMonthly,
+        bookings: bookingMonthly,
+        revenue: revenueMonthly,
+      },
+    };
   }
 
       async getStatistics(query: OverviewDto) {
