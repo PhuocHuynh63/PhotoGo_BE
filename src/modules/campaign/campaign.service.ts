@@ -363,7 +363,7 @@ export class CampaignService {
 
     for (const userCampaign of existingUserCampaigns) {
       // Check if voucher is still available and not expired
-      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.ACTIVE) {
+      if (voucher.quantity > 0 && voucher.status === VoucherStatusEnum.INACTIVE) {
         // Check if user already has this voucher
         const existingVoucherUser = await this.voucherUserRepository.findOne({
           where: { user_id: userCampaign.userId, voucher_id: voucherId }

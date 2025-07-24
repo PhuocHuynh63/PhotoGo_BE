@@ -669,19 +669,24 @@ export class UserService {
     const subscriptionsRes = await this.subscriptionService.findAll({ userId, current: 1, pageSize: 100 });
     const totalSubscriptions = subscriptionsRes.data.length;
     let totalPaidSubscription = 0;
+    let latestPaidPayment: { amount: number; createdAt: Date } | null = null;
     for (const sub of subscriptionsRes.data) {
       if (sub.invoices && sub.invoices.length > 0) {
         for (const invoice of sub.invoices) {
           if (invoice.payments && invoice.payments.length > 0) {
             for (const payment of invoice.payments) {
               if (payment.status === PaymentStatus.PAID) {
-                totalPaidSubscription += Number(payment.amount);
+                const createdAt = new Date(payment.createdAt);
+                if (!latestPaidPayment || createdAt > latestPaidPayment.createdAt) {
+                  latestPaidPayment = { amount: Number(payment.amount), createdAt };
+                }
               }
             }
           }
         }
       }
     }
+    totalPaidSubscription = latestPaidPayment ? latestPaidPayment.amount : 0;
 
     // 4. Points
     const pointStats = await this.pointService.findMyPointHistory(userId, { current: '1', pageSize: '1' });
