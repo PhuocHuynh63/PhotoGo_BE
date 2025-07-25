@@ -6,6 +6,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from 'src/modules/users/user.module';
 import { SubscriptionModule } from 'src/modules/subscription/subscription.module';
+import { CartModule } from 'src/modules/carts/cart.module';
+import { WishlistModule } from 'src/modules/wishlists/wishlist.module';
 
 @Module({
     imports: [
@@ -19,6 +21,8 @@ import { SubscriptionModule } from 'src/modules/subscription/subscription.module
         }),
         forwardRef(() => UserModule),
         forwardRef(() => SubscriptionModule),
+        forwardRef(() => CartModule),
+        forwardRef(() => WishlistModule),
     ],
     providers: [GoogleAuthService, GoogleStrategy],
     controllers: [GoogleAuthController],

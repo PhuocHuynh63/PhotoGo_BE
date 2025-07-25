@@ -9,6 +9,8 @@ import { UserStatus } from 'src/constants/user.enum';
 import { Logger } from '@nestjs/common';
 import { SubscriptionStatus } from 'src/constants/subscription.enum';
 import { SubscriptionService } from 'src/modules/subscription/subscription.service';
+import { CartService } from 'src/modules/carts/cart.service';
+import { WishlistService } from 'src/modules/wishlists/wishlist.service';
 
 @Injectable()
 export class GoogleAuthService {
@@ -20,6 +22,8 @@ export class GoogleAuthService {
     private readonly jwtService: JwtService,
     private readonly userService: UserService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly cartService: CartService,
+    private readonly wishlistService: WishlistService,
   ) {
     this.client = new OAuth2Client(
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
@@ -53,6 +57,11 @@ export class GoogleAuthService {
       existingUser = await this.userService.create(createAuthDto);
     }
 
+
+    const cart = await this.cartService.findCartByUserId(existingUser.id);
+    const wishlist = await this.wishlistService.findWishlistByUserId(existingUser.id);
+
+
     // Kiểm tra trạng thái tài khoản
     if (existingUser.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('Tài khoản của bạn đã bị tạm ngưng hoặc không hoạt động. Vui lòng liên hệ quản trị viên.');
@@ -79,7 +88,9 @@ export class GoogleAuthService {
         email: existingUser.email,
         fullname: existingUser.fullName,
         image: existingUser.avatarUrl,
-        role: existingUser.role,
+        role: rolePayload,
+        cartId: cart?.id || null,
+        wishlistId: wishlist?.id || null,
         subscriptionId: existingUser.subscription?.id,
       }, access_token_jwt: accessToken
     };
