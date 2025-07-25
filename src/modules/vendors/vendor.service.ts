@@ -433,9 +433,10 @@ export class VendorService {
       + coopBonus
       + volBonus
       - Math.round(cancelRate * 10);
-    this.logger.log(`[PRIORITY] vendorId=${id} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${priority}`);
-    await this.vendorRepository.update(id, { priority });
-    response.priority = priority;
+    const roundedPriority = Math.round(priority);
+    this.logger.log(`[PRIORITY] vendorId=${id} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${roundedPriority}`);
+    await this.vendorRepository.update(id, { priority: roundedPriority });
+    response.priority = roundedPriority;
 
     // Get isRemarkable status
     // this.logger.log(`[isRemarkable] Checking for vendorId=${id}`);
@@ -1557,8 +1558,9 @@ export class VendorService {
         + coopBonus
         + volBonus
         - Math.round(cancelRate * 10);
-      this.logger.log(`[PRIORITY] vendorId=${vendorId} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${priority}`);
-      return { vendorId, priority };
+      const roundedPriority = Math.round(priority);
+      this.logger.log(`[PRIORITY] vendorId=${vendorId} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${roundedPriority}`);
+      return { vendorId, priority: roundedPriority };
     }));
     const priorityMap = new Map(priorityDatas.map(p => [p.vendorId, p.priority]));
     // Gán priority cho từng vendor
@@ -2201,8 +2203,9 @@ export class VendorService {
         + coopBonus
         + volBonus
         - Math.round(cancelRate * 10);
-      this.logger.log(`[PRIORITY][Admin] vendorId=${vendorId} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${priority}`);
-      return { vendorId, priority };
+      const roundedPriority = Math.round(priority);
+      this.logger.log(`[PRIORITY][Admin] vendorId=${vendorId} | totalBookings=${totalBookings} | cancelledBookings=${cancelledBookings} | reviewCount=${reviewCount} | avgRating=${avgRating} | subBonus=${subBonus} | coopBonus=${coopBonus} | volBonus=${volBonus} | cancelRate=${cancelRate} | priority=${roundedPriority}`);
+      return { vendorId, priority: roundedPriority };
     }));
     const priorityMap = new Map(priorityDatas.map(p => [p.vendorId, p.priority]));
     // Gán priority cho từng vendor

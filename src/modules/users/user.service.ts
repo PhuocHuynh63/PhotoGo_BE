@@ -147,6 +147,9 @@ export class UserService {
       // Join welcome campaign for new user (even if inactive)
       await this.assignWelcomeCampaign(savedUser.id, 'Admin tạo user mới (chưa active)');
 
+      // create point for user
+      await this.pointService.findMyPoints(savedUser.id);
+
       return savedUser;
     } catch (error) {
       this.logger.error(`Lỗi khi tạo người dùng: ${error.message}`, error.stack);
