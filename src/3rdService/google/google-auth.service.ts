@@ -58,8 +58,8 @@ export class GoogleAuthService {
     }
 
 
-    const cart = await this.cartService.findCartByUserId(existingUser.id);
-    const wishlist = await this.wishlistService.findWishlistByUserId(existingUser.id);
+    // const cart = await this.cartService.findCartByUserId(existingUser.id);
+    // const wishlist = await this.wishlistService.findWishlistByUserId(existingUser.id);
 
 
     // Kiểm tra trạng thái tài khoản
@@ -89,8 +89,8 @@ export class GoogleAuthService {
         fullname: existingUser.fullName,
         image: existingUser.avatarUrl,
         role: existingUser.role,
-        cartId: cart?.id || null,
-        wishlistId: wishlist?.id || null,
+        // cartId: cart?.id || null,
+        // wishlistId: wishlist?.id || null,
         subscriptionId: existingUser.subscription?.id,
       }, access_token_jwt: accessToken
     };
