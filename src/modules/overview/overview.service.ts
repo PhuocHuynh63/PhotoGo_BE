@@ -334,6 +334,10 @@ export class OverviewService {
     const startDate = startDateString ? new Date(startDateString) : new Date(new Date().getFullYear(), 0, 1); // Start of year
     const endDate = endDateString ? new Date(endDateString) : new Date(new Date().getFullYear(), 11, 31); // Current date
 
+    // Constants for financial calculations
+    const commissionRate = 0.30; // 30% commission rate
+    const taxRate = 0.05; // 5% tax rate
+
     // Get all payments and invoices for the date range
     const paymentsResponse = await this.paymentsService.findAll({
       current: 1,
@@ -345,7 +349,7 @@ export class OverviewService {
       pageSize: '1000', // Get all invoices
     });
 
-    // Get commission data
+    // Get commission data for the entire date range
     const commissions = await this.commissionService.getCommissionStatistics(startDate, endDate);
 
     const payments = paymentsResponse.data;
@@ -411,87 +415,81 @@ export class OverviewService {
       .filter(invoice => invoice.status === 'đã hủy')
       .reduce((sum, invoice) => sum + Number(invoice.payablePrice), 0);
 
-    // Calculate commission statistics
-    const totalCommissionAmount = commissions.reduce((sum, commission) => {
-      return sum + (commission.commissionAmount || 0);
-    }, 0);
+    // Calculate commission statistics based on actual revenue
+    const totalCommissionAmount = Math.round(totalRevenue * commissionRate);
 
-    const percentageCommissions = commissions.filter(commission => 
-      commission.commissionType === 'phần trăm'
-    ).reduce((sum, commission) => sum + (commission.commissionAmount || 0), 0);
-
-    const fixedCommissions = commissions.filter(commission => 
-      commission.commissionType === 'cố định'
-    ).reduce((sum, commission) => sum + (commission.commissionAmount || 0), 0);
+    // For now, assume all commissions are percentage-based (30%)
+    const percentageCommissions = totalCommissionAmount;
+    const fixedCommissions = 0;
 
     // Calculate monthly revenue for chart
     const monthlyRevenue = this.calculateMonthlyRevenue(filteredPayments, startDate, endDate);
 
-    // Calculate financial info for current month
-    const currentMonth = new Date();
-    const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const currentMonthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    // Calculate financial info based on the date range provided
+    // Use the end date of the range as "current month" for calculations
+    const rangeEndDate = new Date(endDate);
+    const rangeStartDate = new Date(startDate);
+    
+    // Calculate the previous period for comparison
+    const rangeDuration = rangeEndDate.getTime() - rangeStartDate.getTime();
+    const previousPeriodStart = new Date(rangeStartDate.getTime() - rangeDuration);
+    const previousPeriodEnd = new Date(rangeStartDate.getTime() - 1); // One day before range start
 
-    // Calculate last month for comparison
-    const lastMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-    const lastMonthStart = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
-    const lastMonthEnd = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
-
-    const currentMonthPayments = filteredPayments.filter(payment => 
-      payment.status === 'đã hoàn thành' &&
-      payment.createdAt >= currentMonthStart &&
-      payment.createdAt <= currentMonthEnd
+    // Get payments for the current period (the date range)
+    const currentPeriodPayments = filteredPayments.filter(payment => 
+      payment.status === 'đã hoàn thành'
     );
 
-    const lastMonthPayments = filteredPayments.filter(payment => 
-      payment.status === 'đã hoàn thành' &&
-      payment.createdAt >= lastMonthStart &&
-      payment.createdAt <= lastMonthEnd
-    );
-
-    const thisMonthRevenue = currentMonthPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-    const lastMonthRevenue = lastMonthPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-    
-    // Calculate profit based on actual commission data
-    // Profit = Revenue - Commission - Tax - Other costs
-    const taxRate = 0.05; // 5% tax
-    
-    // Use actual commission amount for current month
-    const currentMonthCommissions = commissions.filter(commission => {
-      const commissionDate = new Date(commission.created_at);
-      return commissionDate >= currentMonthStart && commissionDate <= currentMonthEnd;
+    // Get payments for the previous period
+    let previousPeriodPayments = payments.filter(payment => {
+      const paymentDate = new Date(payment.createdAt);
+      return payment.status === 'đã hoàn thành' &&
+             paymentDate >= previousPeriodStart &&
+             paymentDate <= previousPeriodEnd;
     });
+
+    // Apply the same filters for previous period
+    if (query.vendorId) {
+      previousPeriodPayments = previousPeriodPayments.filter(payment => {
+        return (
+          payment.invoice?.booking?.location?.vendor?.id === query.vendorId ||
+          payment.invoice?.booking?.serviceConcept?.servicePackage?.vendorId === query.vendorId
+        );
+      });
+    }
+    if (query.locationId) {
+      previousPeriodPayments = previousPeriodPayments.filter(payment => 
+        payment.invoice?.booking?.locationId === query.locationId
+      );
+    }
+
+    const thisPeriodRevenue = currentPeriodPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const previousPeriodRevenue = previousPeriodPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
     
-    const thisMonthCommissionAmount = currentMonthCommissions.reduce((sum, commission) => 
-      sum + (commission.commissionAmount || 0), 0
-    );
+    // Calculate profit based on actual commission data for the current period
     
-    const taxAmount = Math.round(thisMonthRevenue * taxRate);
+    // Calculate commission based on actual revenue (not from commission records)
+    const thisPeriodCommissionAmount = Math.round(thisPeriodRevenue * commissionRate);
+    
+    const taxAmount = Math.round(thisPeriodRevenue * taxRate);
     
     // Calculate profit (revenue - commission - tax)
-    const thisMonthProfit = thisMonthRevenue - thisMonthCommissionAmount - taxAmount;
+    const thisPeriodProfit = thisPeriodRevenue - thisPeriodCommissionAmount - taxAmount;
     
-    // Calculate last month profit for comparison
-    const lastMonthCommissions = commissions.filter(commission => {
-      const commissionDate = new Date(commission.created_at);
-      return commissionDate >= lastMonthStart && commissionDate <= lastMonthEnd;
-    });
-    
-    const lastMonthCommissionAmount = lastMonthCommissions.reduce((sum, commission) => 
-      sum + (commission.commissionAmount || 0), 0
-    );
-    const lastMonthTaxAmount = Math.round(lastMonthRevenue * taxRate);
-    const lastMonthProfit = lastMonthRevenue - lastMonthCommissionAmount - lastMonthTaxAmount;
+    // Calculate previous period profit for comparison
+    const previousPeriodCommissionAmount = Math.round(previousPeriodRevenue * commissionRate);
+    const previousPeriodTaxAmount = Math.round(previousPeriodRevenue * taxRate);
+    const previousPeriodProfit = previousPeriodRevenue - previousPeriodCommissionAmount - previousPeriodTaxAmount;
     
     // Calculate profit ratio as percentage
-    const profitRatio = thisMonthRevenue > 0 ? Math.round((thisMonthProfit / thisMonthRevenue) * 100) : 0;
+    const profitRatio = thisPeriodRevenue > 0 ? Math.round((thisPeriodProfit / thisPeriodRevenue) * 100) : 0;
     
     // Calculate growth percentages
-    const revenueGrowth = lastMonthRevenue > 0 ? 
-      Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 * 10) / 10 : 0;
+    const revenueGrowth = previousPeriodRevenue > 0 ? 
+      Math.round(((thisPeriodRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100 * 10) / 10 : 0;
     
-    const profitGrowth = lastMonthProfit > 0 ? 
-      Math.round(((thisMonthProfit - lastMonthProfit) / lastMonthProfit) * 100 * 10) / 10 : 0;
+    const profitGrowth = previousPeriodProfit > 0 ? 
+      Math.round(((thisPeriodProfit - previousPeriodProfit) / previousPeriodProfit) * 100 * 10) / 10 : 0;
 
     // Get recent transactions (last 5 successful payments)
     const recentTransactions = filteredPayments
@@ -526,7 +524,7 @@ export class OverviewService {
         totalCommissionAmount,
         percentageCommissions,
         fixedCommissions,
-        thisMonthCommissionAmount,
+        thisMonthCommissionAmount: thisPeriodCommissionAmount,
       },
       invoiceStatistics: {
         pendingInvoices,
@@ -535,8 +533,8 @@ export class OverviewService {
         cancelledInvoices,
       },
       financialInfo: {
-        thisMonthRevenue,
-        thisMonthProfit,
+        thisMonthRevenue: thisPeriodRevenue,
+        thisMonthProfit: thisPeriodProfit,
         profitRatio,
         taxRate: 5, // Fixed 5% tax rate
         revenueGrowth, // Tăng trưởng doanh thu so với tháng trước
@@ -555,11 +553,12 @@ export class OverviewService {
       const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
       
-      const monthPayments = payments.filter(payment => 
-        payment.status === 'đã hoàn thành' &&
-        payment.createdAt >= monthStart &&
-        payment.createdAt <= monthEnd
-      );
+      const monthPayments = payments.filter(payment => {
+        const paymentDate = new Date(payment.createdAt);
+        return payment.status === 'đã hoàn thành' &&
+               paymentDate >= monthStart &&
+               paymentDate <= monthEnd;
+      });
       
       const monthRevenue = monthPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
       
