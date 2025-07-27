@@ -1,4 +1,3 @@
-````markdown
 # Sơ đồ kiến trúc hệ thống PhotoGo Backend
 
 Đây là sơ đồ tổng quan về các module và sự phụ thuộc trong hệ thống backend của PhotoGo.
@@ -96,55 +95,37 @@ graph TB
     AppModule --> MailerModule
     AppModule --> ScheduleModule
     AppModule --> BullQueueModule
-
-    %% Authentication dependencies
     AppModule --> AuthModule
     AppModule --> GoogleAuthModule
     AppModule --> FacebookAuthModule
-
-    %% Business logic dependencies
     AppModule --> UserModule
     AppModule --> RoleModule
     AppModule --> BookingModule
     AppModule --> ServicePackageModule
     AppModule --> PaymentModule
     AppModule --> CampaignModule
-
-    %% Service dependencies
     BookingModule --> LocationModule
     BookingModule --> ServicePackageModule
     PaymentModule --> PayosModule
     PaymentModule --> InvoiceModule
     CampaignModule --> VoucherModule
     CampaignModule --> PointModule
-
-    %% User management dependencies
     UserModule --> RoleModule
     VendorModule --> UserModule
     TeamMemberModule --> UserModule
-
-    %% Social features dependencies
     ChatModule --> UserModule
     CommentModule --> UserModule
     ReviewModule --> UserModule
     AlbumModule --> UserModule
-
-    %% Support dependencies
     SupportTicketsModule --> UserModule
     NotificationModule --> UserModule
     WishlistModule --> UserModule
     CartModule --> UserModule
-
-    %% Analytics dependencies
     OverviewModule --> UserModule
     AttendanceModule --> UserModule
     AttendanceLogModule --> AttendanceModule
-
-    %% Third-party service dependencies
     GeminiModule --> UserModule
     GoongModule --> LocationModule
-
-    %% Core interceptors
     AppModule --> TransformInterceptor
     AppModule --> TimezoneInterceptor
     AppModule --> JwtAuthGuard
