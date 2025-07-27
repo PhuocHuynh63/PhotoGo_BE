@@ -348,9 +348,16 @@ export class AlbumService {
 
   /**
    * Kiểm tra payment status để quyết định có hiển thị drive link hay không
-   * Chỉ hiển thị khi payment type là "còn lại" hoặc đã thanh toán đầy đủ
+   * Hiển thị khi:
+   * 1. Payment type là "còn lại" hoặc đã thanh toán đầy đủ và status là "đã hoàn thành"
+   * 2. Hoặc khi depositAmount của booking là 100 (đã đặt cọc đầy đủ)
    */
   private checkPaymentStatusForDriveLink(booking: any): boolean {
+    // Kiểm tra nếu depositAmount là 100 thì hiển thị luôn
+    if (booking.depositAmount.toString() === '100.00') {
+      return true;
+    }
+
     if (!booking.invoices || booking.invoices.length === 0) {
       return false;
     }
