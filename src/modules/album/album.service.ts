@@ -11,6 +11,7 @@ import { CreateAlbumMultipartDto } from './dto/create-album-multipart.dto';
 import { UpdateAlbumMultipartDto } from './dto/update-album-multipart.dto';
 import { AlbumStatus } from 'src/constants/album.enum';
 import { AlbumFilterDto } from './dto/filter.dto';
+import { PaymentType, PaymentStatus } from 'src/constants/payment.enum';
 
 @Injectable()
 export class AlbumService {
@@ -318,11 +319,63 @@ export class AlbumService {
 
   async getAlbumsByBookingId(bookingId: string) {
     const where: any = { booking: { id: bookingId } };
+
     const res = await this.albumRepository.findOne({
       where,
-      relations: ['vendorAlbum', 'booking', 'booking.user'],
+      relations: [
+        'vendorAlbum',
+        'booking',
+        'booking.user',
+        'booking.invoices',
+        'booking.invoices.payments'
+      ],
     });
+
+    if (!res) {
+      return null;
+    }
+
+    // Kiểm tra payment status để quyết định có hiển thị drive link hay không
+    const shouldShowDriveLink = this.checkPaymentStatusForDriveLink(res.booking);
+
+    // Nếu không nên hiển thị drive link, ẩn nó đi
+    if (!shouldShowDriveLink) {
+      res.driveLink = null;
+    }
+
     return res;
+  }
+
+  /**
+   * Kiểm tra payment status để quyết định có hiển thị drive link hay không
+   * Chỉ hiển thị khi payment type là "còn lại" hoặc đã thanh toán đầy đủ
+   */
+  private checkPaymentStatusForDriveLink(booking: any): boolean {
+    if (!booking.invoices || booking.invoices.length === 0) {
+      return false;
+    }
+
+    // Kiểm tra tất cả invoices của booking
+    for (const invoice of booking.invoices) {
+      if (!invoice.payments || invoice.payments.length === 0) {
+        continue;
+      }
+
+      // Kiểm tra tất cả payments của invoice
+      for (const payment of invoice.payments) {
+        // Chỉ hiển thị drive link khi:
+        // 1. Payment type là "còn lại" (REMAINING) và status là "đã hoàn thành" (PAID)
+        // 2. Hoặc payment type là "thanh toán đầy đủ" (FULL_PAYMENT) và status là "đã hoàn thành" (PAID)
+        if (
+          (payment.type === PaymentType.REMAINING || payment.type === PaymentType.FULL_PAYMENT) &&
+          payment.status === PaymentStatus.PAID
+        ) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   // async getAlbumsByDate(date: string, query: AlbumPaginationDto = {}) {
