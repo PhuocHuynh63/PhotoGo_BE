@@ -1033,7 +1033,7 @@ export class VendorService {
     const sortDirection = params.sortDirection === 'asc' ? 'ASC' : 'DESC';
     let paramIndex = 1;
     const baseParams: any[] = [];
-  
+
     // Function to calculate distance using Haversine formula
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
       const R = 6371; // Radius of the earth in km
@@ -1045,7 +1045,7 @@ export class VendorService {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return R * c; // Distance in km
     };
-  
+
     // Base query for vendor filtering
     let baseQuery = `
       WITH vendor_stats AS (
@@ -1106,7 +1106,7 @@ export class VendorService {
         FROM vendors v
       ),
       filtered_vendors AS (
-        SELECT DISTINCT v.id
+        SELECT DISTINCT v.id, v.priority
         FROM vendors v
         LEFT JOIN locations l ON l.vendor_id = v.id
         LEFT JOIN category c ON c.id = v.category_id
@@ -1150,6 +1150,7 @@ export class VendorService {
         v.slug,
         v.created_at,
         v.updated_at,
+        v.priority,
         vs.avg_rating,
         vs.review_count,
         vp.min_price,
@@ -1186,7 +1187,7 @@ export class VendorService {
       LEFT JOIN vendor_campaigns vc ON vc.id = v.id
       LEFT JOIN category c ON c.id = v.category_id
     `;
-  
+
     // Add parameters in the correct order
     if (params.name) baseParams.push(`%${params.name}%`);
     if (params.location) baseParams.push(`%${params.location}%`);
@@ -1199,7 +1200,7 @@ export class VendorService {
       baseParams.push(params.userLatitude, params.userLongitude);
       if (params.maxDistance !== undefined) baseParams.push(params.maxDistance);
     }
-  
+
     // Add sorting
     switch (params.sortBy) {
       case VendorSortField.PRICE:
@@ -1219,13 +1220,14 @@ export class VendorService {
         }
         break;
       default:
-        baseQuery += ` ORDER BY v.created_at ${sortDirection}`;
+        // Mặc định sắp xếp theo priority giảm dần (cao nhất lên đầu)
+        baseQuery += ` ORDER BY v.priority DESC NULLS LAST, v.created_at DESC`;
     }
-  
+
     // Add pagination to query
     baseQuery += ` LIMIT $${paramIndex++} OFFSET 0`;
     baseParams.push(actualPageSize);
-  
+
     // Count query for total items
     let countQuery = `
       WITH vendor_stats AS (
@@ -1254,10 +1256,10 @@ export class VendorService {
       LEFT JOIN category c ON c.id = v.category_id
       WHERE v.status = 'hoạt động'
     `;
-  
+
     const countParams: any[] = [];
     let countParamIndex = 1;
-  
+
     // Add filters to count query
     if (params.name) {
       countQuery += ` AND unaccent(v.name) ILIKE unaccent($${countParamIndex++})`;
@@ -1307,13 +1309,13 @@ export class VendorService {
       countQuery += ` AND vs.avg_rating <= $${countParamIndex++}`;
       countParams.push(params.maxRating);
     }
-  
+
     // Execute queries
     const [vendorData, totalItem] = await Promise.all([
       this.dataSource.query(baseQuery, baseParams),
       this.dataSource.query(countQuery, countParams),
     ]);
-  
+
     if (vendorData.length === 0) {
       return {
         data: [],
@@ -1325,7 +1327,7 @@ export class VendorService {
         },
       };
     }
-  
+
     // Fetch service packages and reviews for the filtered vendors
     const vendorIds = vendorData.map((v: any) => v.id);
     const [servicePackages, reviews] = await Promise.all([
@@ -1358,7 +1360,7 @@ export class VendorService {
         [vendorIds],
       ),
     ]);
-  
+
     // Convert origin prices to final prices for service concepts
     const servicePackagesWithFinalPrices = await Promise.all(
       servicePackages.map(async (row: any) => {
@@ -1377,17 +1379,17 @@ export class VendorService {
         return row;
       }),
     );
-  
+
     // Group service packages and reviews by vendor
     const servicePackagesByVendor = new Map();
     const reviewsByVendor = new Map();
-  
+
     servicePackagesWithFinalPrices.forEach((row: any) => {
       if (!servicePackagesByVendor.has(row.vendor_id)) {
         servicePackagesByVendor.set(row.vendor_id, new Map());
       }
       const vendorPackages = servicePackagesByVendor.get(row.vendor_id);
-  
+
       if (!vendorPackages.has(row.id)) {
         vendorPackages.set(row.id, {
           id: row.id,
@@ -1397,7 +1399,7 @@ export class VendorService {
           serviceConcepts: [],
         });
       }
-  
+
       if (row.service_concept_id) {
         const pkg = vendorPackages.get(row.id);
         pkg.serviceConcepts.push({
@@ -1410,7 +1412,7 @@ export class VendorService {
         });
       }
     });
-  
+
     reviews.forEach((review: any) => {
       if (!reviewsByVendor.has(review.vendor_id)) {
         reviewsByVendor.set(review.vendor_id, []);
@@ -1422,10 +1424,10 @@ export class VendorService {
         created_at: review.created_at,
       });
     });
-  
+
     // Group locations and vendors
     const vendorMap = new Map();
-  
+
     vendorData.forEach((row: any) => {
       const isRemarkable = row.is_remarkable === true;
       // this.logger.log(`[filterVendors][isRemarkable] vendorId=${row.id} | row.is_remarkable=${row.is_remarkable} | isRemarkable=${isRemarkable}`);
@@ -1455,14 +1457,14 @@ export class VendorService {
           servicePackages: Array.from(servicePackagesByVendor.get(row.id)?.values() || []),
           category: row.category_id
             ? {
-                id: row.category_id,
-                name: row.category_name,
-              }
+              id: row.category_id,
+              name: row.category_name,
+            }
             : null,
           reviews: reviewsByVendor.get(row.id) || [],
         });
       }
-  
+
       // Push location if exists
       if (row.location_id) {
         vendorMap.get(row.id).locations.push({
@@ -1477,12 +1479,12 @@ export class VendorService {
         });
       }
     });
-  
+
     const vendors = Array.from(vendorMap.values());
-  
+
     // Apply pagination to return only the requested pageSize
     const pagedVendors = vendors.slice(start, start + pageSize);
-  
+
     // Sau khi lấy vendorData và group thành vendorMap
     // --- Tính priority cho từng vendor ---
     // Lấy dữ liệu priority cho tất cả vendorIds
@@ -1569,7 +1571,7 @@ export class VendorService {
     });
     // Cập nhật priority vào DB cho tất cả vendor
     await Promise.all(priorityDatas.map(p => this.vendorRepository.update(p.vendorId, { priority: p.priority })));
-  
+
     // Sau khi đã map vendorMap xong, cần xử lý giới hạn isRemarkable tối đa 3 vendor/tháng
     // Lọc ra các vendor có isRemarkable=true
     const now = new Date();
@@ -1619,7 +1621,7 @@ export class VendorService {
         }
       });
     }
-  
+
     return {
       data: pagedVendors,
       pagination: {
