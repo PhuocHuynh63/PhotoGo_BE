@@ -1,3 +1,9 @@
+````markdown
+# Sơ đồ kiến trúc hệ thống PhotoGo Backend
+
+Đây là sơ đồ tổng quan về các module và sự phụ thuộc trong hệ thống backend của PhotoGo.
+
+```mermaid
 graph TB
     subgraph "PhotoGo Backend System"
         subgraph "Core Application Layer"
