@@ -1,70 +1,50 @@
-name: Deploy to VPS
+name: CI/CD Deploy Backend to VPS
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
-      - name: Checkout source code
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Cache node modules
-        uses: actions/cache@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          node-version: 20
 
-      - name: Install dependencies & Build NestJS
-        run: |
-          npm install
-          npm run build
+      - name: Install pnpm
+        run: npm install -g pnpm
 
-      - name: Prepare Code folder to send
+      - name: Install dependencies and build
         run: |
-          mkdir -p .github/temp_build/Code
-          cp -r dist package-lock.json package.json Dockerfile .github/temp_build/Code/
-          cp docker-compose.yml .github/temp_build/
+          pnpm install --frozen-lockfile
+          pnpm build
 
-      - name: Copy Code to VPS
-        run: |
-          echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-          tar -czf code.tar.gz -C .github/temp_build/Code .
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            mkdir -p /home/root/backend/Code &&
-            rm -rf /home/root/backend/Code/dist
-          "
-          scp -o StrictHostKeyChecking=no -i private_key.pem code.tar.gz ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/Code/
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            cd /home/root/backend/Code &&
-            tar -xzf code.tar.gz &&
-            rm code.tar.gz
-          "
-          scp -o StrictHostKeyChecking=no -i private_key.pem .github/temp_build/docker-compose.yml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/root/backend/
-          rm -f private_key.pem
+      - name: Upload dist folder to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "dist/*"
+          target: "/home/root/BE/dist"
 
-      - name: SSH and restart backend
-        run: |
-          echo "${{ secrets.VPS_PRIVATE_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            cd /home/root/backend &&
-            docker-compose down &&
-            timeout 300 docker-compose up -d --build || echo 'Build timed out after 5 minutes'
-          "
-          rm -f private_key.pem
-        env:
-          VPS_PRIVATE_KEY: ${{ secrets.VPS_PRIVATE_KEY }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+      - name: Restart backend container
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "=== Restarting backend container ==="
+            cd /home/root/BE
+            docker stop pokenihongo-backend || true
+            docker rm pokenihongo-backend || true
+            docker compose up -d --build
+            echo "✅ Deployment completed!"
